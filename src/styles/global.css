@@ -1,0 +1,27 @@
+@import "./ds/styles.css";
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: var(--surface-page);
+}
+
+a {
+  color: var(--text-link);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--text-link-hover);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--sand-300);
+  border: 3px solid var(--sand-50);
+  border-radius: 6px;
+}

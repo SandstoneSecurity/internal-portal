@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sandstone-internal-portal",
+  "compatibility_date": "2025-01-01",
+  "main": "worker/index.ts",
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sandstone-internal-portal",
+      "database_id": "34e5a577-2099-4a83-a3b7-bc14e1097684",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

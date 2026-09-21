@@ -1,0 +1,21 @@
+/* Minimal element defaults. Components carry their own styling; this only sets
+   the page ground, type defaults, links and focus so nothing renders unbranded. */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--surface-page);color:var(--text-primary);font:var(--type-body);text-wrap:pretty;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{margin:0;font-family:var(--font-display);font-weight:var(--weight-regular);letter-spacing:var(--track-display);line-height:var(--leading-snug)}
+h1{font-size:var(--text-4xl);line-height:var(--leading-tight)}
+h2{font-size:var(--text-2xl)}
+h3{font-size:var(--text-xl)}
+h4{font-family:var(--font-text);font-size:var(--text-md);font-weight:var(--weight-semibold);letter-spacing:0}
+p{margin:0 0 var(--space-5)}
+a{color:var(--text-link);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;text-decoration-color:var(--sand-400);transition:color var(--dur-fast) var(--ease-standard),text-decoration-color var(--dur-fast) var(--ease-standard)}
+a:hover{color:var(--text-link-hover);text-decoration-color:var(--brass-500)}
+small{font-size:var(--text-sm)}
+code,kbd,pre{font-family:var(--font-mono);font-size:.92em}
+hr{border:0;border-top:var(--border-rule) solid var(--border-subtle);margin:var(--space-8) 0}
+:focus-visible{outline:none;box-shadow:var(--focus-ring)}
+::selection{background:var(--sand-300);color:var(--bark-900)}
+.sandstone-wordmark{font-family:var(--font-wordmark);text-transform:uppercase;letter-spacing:var(--track-wordmark);font-weight:var(--weight-regular)}
+.sandstone-eyebrow{font:var(--type-eyebrow);text-transform:uppercase;letter-spacing:var(--track-eyebrow);color:var(--text-secondary)}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}

@@ -1,0 +1,80 @@
+:root{
+  /* Surfaces — light is the default; night surfaces are for operations views. */
+  --surface-page:var(--sand-50);
+  --surface-raised:#FFFFFF;
+  --surface-card:#FFFFFF;
+  --surface-sunken:var(--sand-100);
+  --surface-inverse:var(--bark-800);
+  --surface-inverse-raised:var(--bark-700);
+  --surface-accent:var(--sand-200);
+  --surface-overlay:rgba(18,19,17,.56);
+  --surface-glass:rgba(246,244,240,.84);
+
+  /* Text */
+  --text-primary:var(--bark-800);
+  --text-secondary:var(--bark-500);
+  --text-tertiary:var(--bark-400);
+  --text-disabled:var(--bark-300);
+  --text-on-inverse:var(--sand-100);
+  --text-on-inverse-secondary:var(--bark-200);
+  --text-on-accent:var(--bark-800);
+  --text-brand:var(--brass-700);
+  --text-link:var(--bark-800);
+  --text-link-hover:var(--brass-700);
+
+  /* Borders */
+  --border-subtle:var(--sand-200);
+  --border-default:var(--sand-300);
+  --border-strong:var(--bark-300);
+  --border-inverse:rgba(246,244,240,.16);
+  --border-brand:var(--brass-500);
+
+  /* Actions */
+  --action-primary-bg:var(--bark-800);
+  --action-primary-bg-hover:var(--bark-700);
+  --action-primary-bg-active:var(--bark-900);
+  --action-primary-fg:var(--sand-50);
+  --action-secondary-bg:transparent;
+  --action-secondary-bg-hover:var(--sand-100);
+  --action-secondary-border:var(--bark-800);
+  --action-secondary-fg:var(--bark-800);
+  --action-ghost-bg-hover:var(--sand-100);
+  --action-brass-bg:var(--brass-500);
+  --action-brass-bg-hover:var(--brass-700);
+  --action-brass-fg:#FFFFFF;
+  --action-danger-bg:var(--clay-400);
+  --action-danger-bg-hover:var(--clay-600);
+  --action-disabled-bg:var(--sand-200);
+  --action-disabled-fg:var(--bark-300);
+
+  /* Fields */
+  --field-bg:#FFFFFF;
+  --field-bg-disabled:var(--sand-100);
+  --field-border:var(--sand-300);
+  --field-border-hover:var(--bark-300);
+  --field-border-focus:var(--brass-600);
+  --field-placeholder:var(--bark-300);
+
+  /* Status — operational vocabulary */
+  --status-secure-fg:var(--euc-700);
+  --status-secure-bg:var(--euc-100);
+  --status-secure-dot:var(--euc-500);
+  --status-advisory-fg:var(--ochre-600);
+  --status-advisory-bg:var(--ochre-100);
+  --status-advisory-dot:var(--ochre-400);
+  --status-breach-fg:var(--clay-600);
+  --status-breach-bg:var(--clay-100);
+  --status-breach-dot:var(--clay-400);
+  --status-info-fg:var(--slate-600);
+  --status-info-bg:var(--slate-100);
+  --status-info-dot:var(--slate-400);
+  --status-neutral-fg:var(--bark-500);
+  --status-neutral-bg:var(--sand-100);
+  --status-neutral-dot:var(--bark-300);
+
+  --z-base:0; /* @kind other */
+  --z-sticky:100; /* @kind other */
+  --z-overlay:400; /* @kind other */
+  --z-modal:500; /* @kind other */
+  --z-toast:600; /* @kind other */
+}

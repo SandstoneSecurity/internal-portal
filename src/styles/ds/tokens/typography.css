@@ -1,0 +1,48 @@
+:root{
+  --font-wordmark:"Jost","Futura","Century Gothic",sans-serif;
+  --font-display:"Newsreader",Georgia,"Times New Roman",serif;
+  --font-text:"Sandstone Text","Archivo","Helvetica Neue",Arial,sans-serif;
+  --font-mono:"Sandstone Mono","IBM Plex Mono",ui-monospace,monospace;
+
+  /* Sizes — 1.25 ratio above 18px, 2px steps below. */
+  --text-2xs:11px;
+  --text-xs:12px;
+  --text-sm:13px;
+  --text-base:15px;
+  --text-md:17px;
+  --text-lg:20px;
+  --text-xl:25px;
+  --text-2xl:32px;
+  --text-3xl:40px;
+  --text-4xl:52px;
+  --text-5xl:68px;
+  --text-6xl:88px;
+
+  --leading-tight:1.04;
+  --leading-snug:1.18;
+  --leading-normal:1.5;
+  --leading-relaxed:1.65;
+
+  --weight-regular:400;
+  --weight-medium:500;
+  --weight-semibold:600;
+  --weight-bold:700;
+
+  /* Tracking — wide caps are the brand's signature. */
+  --track-wordmark:0.18em;
+  --track-eyebrow:0.22em;
+  --track-caps:0.1em;
+  --track-tight:-0.02em;
+  --track-display:-0.01em;
+  --track-normal:0; /* @kind other */
+
+  /* Composed roles */
+  --type-wordmark:var(--weight-medium) var(--text-lg)/1 var(--font-wordmark);
+  --type-display:var(--weight-regular) var(--text-4xl)/var(--leading-tight) var(--font-display);
+  --type-heading:var(--weight-regular) var(--text-2xl)/var(--leading-snug) var(--font-display);
+  --type-subheading:var(--weight-semibold) var(--text-md)/var(--leading-snug) var(--font-text);
+  --type-body:var(--weight-regular) var(--text-base)/var(--leading-relaxed) var(--font-text);
+  --type-small:var(--weight-regular) var(--text-sm)/var(--leading-normal) var(--font-text);
+  --type-eyebrow:var(--weight-semibold) var(--text-2xs)/1.2 var(--font-text);
+  --type-data:var(--weight-regular) var(--text-sm)/var(--leading-normal) var(--font-mono);
+}

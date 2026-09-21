@@ -1,0 +1,32 @@
+:root{
+  /* 4px base, with a 6px half-step for control padding. */
+  --space-0:0px;
+  --space-1:4px;
+  --space-2:6px;
+  --space-3:8px;
+  --space-4:12px;
+  --space-5:16px;
+  --space-6:20px;
+  --space-7:24px;
+  --space-8:32px;
+  --space-9:40px;
+  --space-10:56px;
+  --space-11:72px;
+  --space-12:96px;
+  --space-13:128px;
+  --space-14:160px;
+
+  /* Layout */
+  --page-max:1260px;
+  --page-gutter:32px;
+  --page-gutter-sm:20px;
+  --section-y:112px;
+  --grid-columns:12; /* @kind other */
+  --grid-gap:24px;
+
+  /* Controls */
+  --control-h-sm:30px;
+  --control-h-md:38px;
+  --control-h-lg:48px;
+  --hit-min:44px;
+}

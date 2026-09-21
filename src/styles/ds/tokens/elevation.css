@@ -1,0 +1,21 @@
+:root{
+  /* Shadows are cool, low and wide — light raking across honed stone, never a glow. */
+  --shadow-none:none;
+  --shadow-hair:0 1px 0 0 rgba(18,19,17,.06);
+  --shadow-sm:0 1px 2px rgba(18,19,17,.07),0 1px 1px rgba(18,19,17,.04);
+  --shadow-md:0 4px 10px -2px rgba(18,19,17,.10),0 2px 4px -2px rgba(18,19,17,.06);
+  --shadow-lg:0 14px 32px -8px rgba(18,19,17,.16),0 4px 10px -6px rgba(18,19,17,.10);
+  --shadow-overlay:0 32px 64px -16px rgba(18,19,17,.32);
+  --shadow-inset-hair:inset 0 -1px 0 rgba(18,19,17,.08);
+  --shadow-inset-press:inset 0 1px 2px rgba(18,19,17,.18);
+
+  --focus-ring:0 0 0 2px var(--sand-50),0 0 0 4px var(--brass-600);
+  --focus-ring-dark:0 0 0 2px var(--bark-800),0 0 0 4px var(--brass-400);
+
+  /* Protection gradients for type over imagery. */
+  --scrim-bottom:linear-gradient(to top,rgba(18,19,17,.78) 0%,rgba(18,19,17,.45) 38%,rgba(18,19,17,0) 78%); /* @kind other */
+  --scrim-left:linear-gradient(to right,rgba(18,19,17,.72) 0%,rgba(18,19,17,0) 62%); /* @kind other */
+  --scrim-flat:rgba(18,19,17,.42); /* @kind other */
+
+  --blur-glass:saturate(120%) blur(14px); /* @kind other */
+}

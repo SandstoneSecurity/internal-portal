@@ -1,0 +1,13 @@
+:root{
+  /* Sandstone is cut, not moulded. 1px is the house value — a cut edge, not a curve. */
+  --radius-none:0px;
+  --radius-xs:0px;
+  --radius-sm:1px;
+  --radius-md:1px;
+  --radius-lg:2px;
+  --radius-pill:999px;
+
+  --border-hair:1px;
+  --border-thick:2px;
+  --border-rule:1px;
+}

@@ -1,0 +1,54 @@
+:root{
+  /* Sandstone — honed limestone. Cooler and greyer than a raw quarry face: the palette is
+     specified like a material schedule, not chosen like a brand colour. */
+  --sand-50:#F6F4F0;
+  --sand-100:#EFECE5;
+  --sand-200:#E3DED3;
+  --sand-300:#CFC8BA;
+  --sand-400:#AFA695;
+  --sand-500:#948B79;
+  --sand-600:#786F5E;
+  --sand-700:#5D5648;
+  --sand-800:#453F35;
+  --sand-900:#2E2A23;
+
+  /* Ironbark — graphite through ink. Structure, type, night surfaces. */
+  --bark-50:#F2F1EF;
+  --bark-100:#DCDAD5;
+  --bark-200:#B7B5AE;
+  --bark-300:#8C8B84;
+  --bark-400:#66655F;
+  --bark-500:#4A4B46;
+  --bark-600:#34352F;
+  --bark-700:#262724;
+  --bark-800:#1A1B19;
+  --bark-900:#121311;
+
+  /* Brass — drawn down to oiled bronze. Hardware, not gilt. Rules, marks, focus. */
+  --brass-300:#CBAF83;
+  --brass-400:#B0925F;
+  --brass-500:#96774C;
+  --brass-600:#7C603A;
+  --brass-700:#6C5433;
+
+  /* Eucalypt — cool counterweight; "secure", "verified", "on shift". */
+  --euc-100:#E3E8E3;
+  --euc-300:#9BAE9E;
+  --euc-500:#4B6650;
+  --euc-700:#314437;
+
+  /* Ochre — advisory / attention. Muted to sit beside bronze. */
+  --ochre-100:#F7EBD8;
+  --ochre-400:#C99738;
+  --ochre-600:#8E661A;
+
+  /* Clay — alarm / breach. */
+  --clay-100:#F2E1DB;
+  --clay-400:#A94D3A;
+  --clay-600:#813527;
+
+  /* Slate — informational, cool grey-blue used only in data views. */
+  --slate-100:#E1E4E6;
+  --slate-400:#68767E;
+  --slate-600:#445056;
+}
