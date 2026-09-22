@@ -1,0 +1,1276 @@
+{
+  "metrics": [
+    {
+      "label": "Officers on shift",
+      "value": "38",
+      "unit": "of 84 rostered",
+      "note": "NIGHT COVER FROM 18:00",
+      "noteKind": "neutral"
+    },
+    {
+      "label": "Sites under order",
+      "value": "27",
+      "unit": "order books current",
+      "note": "2 REVIEWS DUE SEP",
+      "noteKind": "neutral"
+    },
+    {
+      "label": "Open work items",
+      "value": "13",
+      "unit": "2 past due",
+      "note": "OP-221 · OP-233",
+      "noteKind": "breach"
+    },
+    {
+      "label": "Licences expiring",
+      "value": "6",
+      "unit": "next 90 days",
+      "note": "SLED AUDIT OCT",
+      "noteKind": "advisory"
+    }
+  ],
+  "employees": [
+    {
+      "id": 1,
+      "name": "Tereza Aldana",
+      "role": "Supervisor, CBD portfolio",
+      "cls": "1A 1C",
+      "exp": "14 OCT 26",
+      "expirySoon": true,
+      "site": "Kent Street tower",
+      "status": "On shift",
+      "kind": "secure",
+      "since": "2019",
+      "firstAid": "HLTAID011 · MAY 27",
+      "mobile": "0400 000 001",
+      "employmentType": "FULL TIME",
+      "shifts": [
+        {
+          "date": "29 AUG",
+          "span": "1800–0600",
+          "site": "KENT ST"
+        },
+        {
+          "date": "27 AUG",
+          "span": "1800–0600",
+          "site": "KENT ST"
+        },
+        {
+          "date": "25 AUG",
+          "span": "1800–0600",
+          "site": "KENT ST"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Daniel Mercer",
+      "role": "Senior security officer",
+      "cls": "1A 1C",
+      "exp": "02 MAR 27",
+      "expirySoon": false,
+      "site": "Crown Street residence",
+      "status": "On shift",
+      "kind": "secure",
+      "since": "2020",
+      "firstAid": "HLTAID011 · MAY 27",
+      "mobile": "0400 000 002",
+      "employmentType": "FULL TIME",
+      "shifts": [
+        {
+          "date": "29 AUG",
+          "span": "0600–1800",
+          "site": "CROWN ST"
+        },
+        {
+          "date": "28 AUG",
+          "span": "0600–1800",
+          "site": "CROWN ST"
+        },
+        {
+          "date": "26 AUG",
+          "span": "0600–1800",
+          "site": "CROWN ST"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Mira Kessler",
+      "role": "Close protection officer",
+      "cls": "1A 1B",
+      "exp": "22 SEP 26",
+      "expirySoon": true,
+      "site": "Meridian Family Office",
+      "status": "Rostered",
+      "kind": "info",
+      "since": "2021",
+      "firstAid": "HLTAID011 · MAY 27",
+      "mobile": "0400 000 003",
+      "employmentType": "FULL TIME",
+      "shifts": [
+        {
+          "date": "28 AUG",
+          "span": "0800–2000",
+          "site": "MERIDIAN"
+        },
+        {
+          "date": "27 AUG",
+          "span": "0800–2000",
+          "site": "MERIDIAN"
+        },
+        {
+          "date": "24 AUG",
+          "span": "TRAVEL",
+          "site": "MERIDIAN"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Sione Kata",
+      "role": "Technology officer",
+      "cls": "1A 2C",
+      "exp": "30 JUN 27",
+      "expirySoon": false,
+      "site": "Mobile — CBD sites",
+      "status": "On shift",
+      "kind": "secure",
+      "since": "2022",
+      "firstAid": "HLTAID011 · MAY 27",
+      "mobile": "0400 000 004",
+      "employmentType": "FULL TIME",
+      "shifts": [
+        {
+          "date": "29 AUG",
+          "span": "0800–1600",
+          "site": "PYRMONT"
+        },
+        {
+          "date": "28 AUG",
+          "span": "0800–1600",
+          "site": "KENT ST"
+        },
+        {
+          "date": "27 AUG",
+          "span": "0800–1600",
+          "site": "NORTEC"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Joanna Reeve",
+      "role": "Control room operator",
+      "cls": "1A",
+      "exp": "08 NOV 26",
+      "expirySoon": true,
+      "site": "Control room, Surry Hills",
+      "status": "On shift",
+      "kind": "secure",
+      "since": "2018",
+      "firstAid": "HLTAID011 · MAY 27",
+      "mobile": "0400 000 005",
+      "employmentType": "FULL TIME",
+      "shifts": [
+        {
+          "date": "29 AUG",
+          "span": "2200–0600",
+          "site": "CONTROL"
+        },
+        {
+          "date": "28 AUG",
+          "span": "2200–0600",
+          "site": "CONTROL"
+        },
+        {
+          "date": "26 AUG",
+          "span": "2200–0600",
+          "site": "CONTROL"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Harry Nguyen",
+      "role": "Security officer",
+      "cls": "1A 1C",
+      "exp": "17 JAN 28",
+      "expirySoon": false,
+      "site": "Castlereagh Hotels",
+      "status": "Rostered",
+      "kind": "info",
+      "since": "2023",
+      "firstAid": "HLTAID011 · MAY 27",
+      "mobile": "0400 000 006",
+      "employmentType": "FULL TIME",
+      "shifts": [
+        {
+          "date": "28 AUG",
+          "span": "1400–2200",
+          "site": "CASTLEREAGH"
+        },
+        {
+          "date": "27 AUG",
+          "span": "1400–2200",
+          "site": "CASTLEREAGH"
+        },
+        {
+          "date": "25 AUG",
+          "span": "1400–2200",
+          "site": "CASTLEREAGH"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Beth Calloway",
+      "role": "Security officer",
+      "cls": "1A",
+      "exp": "25 SEP 26",
+      "expirySoon": true,
+      "site": "Port Kembla Logistics",
+      "status": "Leave",
+      "kind": "neutral",
+      "since": "2021",
+      "firstAid": "HLTAID011 · MAY 27",
+      "mobile": "0400 000 007",
+      "employmentType": "FULL TIME",
+      "shifts": [
+        {
+          "date": "22 AUG",
+          "span": "0600–1800",
+          "site": "PT KEMBLA"
+        },
+        {
+          "date": "21 AUG",
+          "span": "0600–1800",
+          "site": "PT KEMBLA"
+        },
+        {
+          "date": "19 AUG",
+          "span": "0600–1800",
+          "site": "PT KEMBLA"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "Owen Fitzgerald",
+      "role": "Mobile patrol officer",
+      "cls": "1A 1C",
+      "exp": "11 DEC 26",
+      "expirySoon": false,
+      "site": "Mobile — north shore",
+      "status": "On shift",
+      "kind": "secure",
+      "since": "2020",
+      "firstAid": "HLTAID011 · MAY 27",
+      "mobile": "0400 000 008",
+      "employmentType": "FULL TIME",
+      "shifts": [
+        {
+          "date": "29 AUG",
+          "span": "1800–0600",
+          "site": "MOBILE N"
+        },
+        {
+          "date": "28 AUG",
+          "span": "1800–0600",
+          "site": "MOBILE N"
+        },
+        {
+          "date": "26 AUG",
+          "span": "1800–0600",
+          "site": "MOBILE N"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "Anika Rahman",
+      "role": "Security officer",
+      "cls": "1A 1C",
+      "exp": "03 OCT 26",
+      "expirySoon": true,
+      "site": "Whitmore Galleries",
+      "status": "Rostered",
+      "kind": "info",
+      "since": "2022",
+      "firstAid": "HLTAID011 · MAY 27",
+      "mobile": "0400 000 009",
+      "employmentType": "FULL TIME",
+      "shifts": [
+        {
+          "date": "28 AUG",
+          "span": "0900–1700",
+          "site": "WHITMORE"
+        },
+        {
+          "date": "26 AUG",
+          "span": "0900–1700",
+          "site": "WHITMORE"
+        },
+        {
+          "date": "25 AUG",
+          "span": "0900–1700",
+          "site": "WHITMORE"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "name": "Callum Price",
+      "role": "Security officer",
+      "cls": "1A",
+      "exp": "19 NOV 26",
+      "expirySoon": true,
+      "site": "Nortec Data Centres",
+      "status": "On shift",
+      "kind": "secure",
+      "since": "2024",
+      "firstAid": "HLTAID011 · MAY 27",
+      "mobile": "0400 000 010",
+      "employmentType": "FULL TIME",
+      "shifts": [
+        {
+          "date": "29 AUG",
+          "span": "1800–0600",
+          "site": "NORTEC"
+        },
+        {
+          "date": "27 AUG",
+          "span": "1800–0600",
+          "site": "NORTEC"
+        },
+        {
+          "date": "25 AUG",
+          "span": "1800–0600",
+          "site": "NORTEC"
+        }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "id": 1,
+      "org": "Harbourline Property Group",
+      "sector": "Commercial property",
+      "sites": 6,
+      "value": "$840,000",
+      "owner": "JR",
+      "status": "Active",
+      "kind": "secure",
+      "meta": "Client since 2021 · six CBD towers under standing orders",
+      "contacts": [
+        {
+          "name": "Fiona Standish",
+          "role": "Head of assets"
+        },
+        {
+          "name": "Greg Malouf",
+          "role": "Facilities, Kent St"
+        }
+      ],
+      "deal": {
+        "name": "Concierge coverage extension — two towers",
+        "value": "$120,000 P.A.",
+        "stage": "PRICING",
+        "review": "12 SEP 26"
+      },
+      "activity": [
+        {
+          "date": "28 AUG 26",
+          "text": "Quarterly order book review held on site, Kent Street. Two variances actioned."
+        },
+        {
+          "date": "14 AUG 26",
+          "text": "Pricing for concierge extension issued to F. Standish."
+        },
+        {
+          "date": "30 JUL 26",
+          "text": "CCTV upgrade scope agreed; works begin 24 August."
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "org": "Meridian Family Office",
+      "sector": "Private clients",
+      "sites": 2,
+      "value": "$460,000",
+      "owner": "MK",
+      "status": "Active",
+      "kind": "secure",
+      "meta": "Client since 2019 · residence and office, protective detail",
+      "contacts": [
+        {
+          "name": "Principal — withheld",
+          "role": "See file note"
+        },
+        {
+          "name": "Alexandra Roy",
+          "role": "Chief of staff"
+        }
+      ],
+      "deal": null,
+      "activity": [
+        {
+          "date": "27 AUG 26",
+          "text": "Counter-surveillance sweep scheduled for 11 September."
+        },
+        {
+          "date": "18 AUG 26",
+          "text": "Travel security brief delivered for Singapore itinerary."
+        },
+        {
+          "date": "02 AUG 26",
+          "text": "Quarterly review; detail staffing unchanged."
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "org": "Castlereagh Hotels",
+      "sector": "Hospitality",
+      "sites": 4,
+      "value": "$520,000",
+      "owner": "JR",
+      "status": "Proposal",
+      "kind": "advisory",
+      "meta": "Client since 2023 · four venues, night coverage",
+      "contacts": [
+        {
+          "name": "Marco Delfino",
+          "role": "Group operations"
+        }
+      ],
+      "deal": {
+        "name": "Crowd control uplift — summer season",
+        "value": "$95,000",
+        "stage": "AWAITING SIGNATURE",
+        "review": "05 SEP 26"
+      },
+      "activity": [
+        {
+          "date": "26 AUG 26",
+          "text": "Revised proposal issued; licensing schedule attached."
+        },
+        {
+          "date": "12 AUG 26",
+          "text": "Venue walk-through, George Street site."
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "org": "Port Kembla Logistics",
+      "sector": "Industrial",
+      "sites": 3,
+      "value": "$310,000",
+      "owner": "TA",
+      "status": "Active",
+      "kind": "secure",
+      "meta": "Client since 2020 · wharf and yard perimeter",
+      "contacts": [
+        {
+          "name": "Sue Hartigan",
+          "role": "Site director"
+        }
+      ],
+      "deal": null,
+      "activity": [
+        {
+          "date": "29 AUG 26",
+          "text": "Trespass incident debrief booked for 1 September."
+        },
+        {
+          "date": "27 AUG 26",
+          "text": "Patrol route change signed off."
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "org": "Aster Constructions",
+      "sector": "Construction",
+      "sites": 5,
+      "value": "$290,000",
+      "owner": "DM",
+      "status": "Prospect",
+      "kind": "info",
+      "meta": "Prospect · Barangaroo project mobilising September",
+      "contacts": [
+        {
+          "name": "Ray Okonkwo",
+          "role": "Project director"
+        }
+      ],
+      "deal": {
+        "name": "Site security — Barangaroo stage 2",
+        "value": "$290,000 P.A.",
+        "stage": "ORDER BOOK DRAFT",
+        "review": "08 SEP 26"
+      },
+      "activity": [
+        {
+          "date": "25 AUG 26",
+          "text": "Induction pack in preparation; order book draft issue 1 sent."
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "org": "Whitmore Galleries",
+      "sector": "Cultural",
+      "sites": 1,
+      "value": "$120,000",
+      "owner": "MK",
+      "status": "Active",
+      "kind": "secure",
+      "meta": "Client since 2022 · daytime gallery posting",
+      "contacts": [
+        {
+          "name": "Elena Whitmore",
+          "role": "Director"
+        }
+      ],
+      "deal": null,
+      "activity": [
+        {
+          "date": "20 AUG 26",
+          "text": "Exhibition changeover coverage confirmed for 5–7 September."
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "org": "Nortec Data Centres",
+      "sector": "Technology",
+      "sites": 2,
+      "value": "$380,000",
+      "owner": "SK",
+      "status": "Proposal",
+      "kind": "advisory",
+      "meta": "Client since 2024 · access control and after-hours response",
+      "contacts": [
+        {
+          "name": "Priya Raman",
+          "role": "Security manager"
+        }
+      ],
+      "deal": {
+        "name": "Second facility — Eastern Creek",
+        "value": "$210,000 P.A.",
+        "stage": "SCOPING",
+        "review": "19 SEP 26"
+      },
+      "activity": [
+        {
+          "date": "28 AUG 26",
+          "text": "Escalation matrix update with client for sign-off."
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "org": "Pyrmont Retail Trust",
+      "sector": "Retail",
+      "sites": 8,
+      "value": "$610,000",
+      "owner": "JR",
+      "status": "Dormant",
+      "kind": "neutral",
+      "meta": "Contract lapsed June 2026 · renewal conversation open",
+      "contacts": [
+        {
+          "name": "Colin Bray",
+          "role": "Portfolio manager"
+        }
+      ],
+      "deal": null,
+      "activity": [
+        {
+          "date": "15 AUG 26",
+          "text": "Renewal meeting requested by client for mid-September."
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "org": "Elling & Co",
+      "sector": "Legal",
+      "sites": 1,
+      "value": "$95,000",
+      "owner": "TA",
+      "status": "Prospect",
+      "kind": "info",
+      "meta": "Prospect · chambers reception and after-hours",
+      "contacts": [
+        {
+          "name": "Judith Elling",
+          "role": "Managing partner"
+        }
+      ],
+      "deal": {
+        "name": "Reception posting — business hours",
+        "value": "$95,000 P.A.",
+        "stage": "CAPABILITY SENT",
+        "review": "02 SEP 26"
+      },
+      "activity": [
+        {
+          "date": "21 AUG 26",
+          "text": "Capability statement sent following referral."
+        }
+      ]
+    }
+  ],
+  "opsColumns": [
+    {
+      "label": "Raised",
+      "done": false,
+      "cards": [
+        {
+          "ref": "OP-231",
+          "title": "Night patrol variance — loading dock",
+          "site": "Harbourline · Kent Street tower",
+          "line": "Ops",
+          "due": "DUE 02 SEP",
+          "late": false,
+          "who": "DM"
+        },
+        {
+          "ref": "OP-232",
+          "title": "Key register audit",
+          "site": "Castlereagh Hotels · four sites",
+          "line": "Ops",
+          "due": "DUE 04 SEP",
+          "late": false,
+          "who": "TA"
+        },
+        {
+          "ref": "OP-233",
+          "title": "Incident debrief — trespass 28 Aug",
+          "site": "Port Kembla Logistics",
+          "line": "Advisory",
+          "due": "DUE 01 SEP",
+          "late": true,
+          "who": "JR"
+        },
+        {
+          "ref": "OP-234",
+          "title": "CCTV fault — camera 14, dock entry",
+          "site": "Pyrmont Retail Trust",
+          "line": "Tech",
+          "due": "DUE 03 SEP",
+          "late": false,
+          "who": "SK"
+        }
+      ]
+    },
+    {
+      "label": "In preparation",
+      "done": false,
+      "cards": [
+        {
+          "ref": "OP-227",
+          "title": "Order book revision, issue 4",
+          "site": "Crown Street residence",
+          "line": "Protective",
+          "due": "DUE 09 SEP",
+          "late": false,
+          "who": "MK"
+        },
+        {
+          "ref": "OP-228",
+          "title": "Counter-surveillance sweep",
+          "site": "Meridian Family Office",
+          "line": "Protective",
+          "due": "DUE 11 SEP",
+          "late": false,
+          "who": "MK"
+        },
+        {
+          "ref": "OP-229",
+          "title": "Roster uplift — October long weekend",
+          "site": "All CBD sites",
+          "line": "Ops",
+          "due": "DUE 18 SEP",
+          "late": false,
+          "who": "TA"
+        }
+      ]
+    },
+    {
+      "label": "Awaiting sign-off",
+      "done": false,
+      "cards": [
+        {
+          "ref": "OP-221",
+          "title": "Q3 order book review — north shore",
+          "site": "Six sites",
+          "line": "Ops",
+          "due": "DUE 31 AUG",
+          "late": true,
+          "who": "JR"
+        },
+        {
+          "ref": "OP-224",
+          "title": "Induction pack — Barangaroo mobilisation",
+          "site": "Aster Constructions",
+          "line": "Ops",
+          "due": "DUE 05 SEP",
+          "late": false,
+          "who": "DM"
+        },
+        {
+          "ref": "OP-225",
+          "title": "Escalation matrix update",
+          "site": "Nortec Data Centres",
+          "line": "Tech",
+          "due": "DUE 08 SEP",
+          "late": false,
+          "who": "SK"
+        }
+      ]
+    },
+    {
+      "label": "Complete — week 35",
+      "done": true,
+      "cards": [
+        {
+          "ref": "OP-218",
+          "title": "Licence renewals batch — August",
+          "site": "Fourteen officers",
+          "line": "Ops",
+          "due": "26 AUG",
+          "late": false,
+          "who": "TA"
+        },
+        {
+          "ref": "OP-219",
+          "title": "Patrol route change",
+          "site": "Port Kembla Logistics",
+          "line": "Ops",
+          "due": "27 AUG",
+          "late": false,
+          "who": "DM"
+        },
+        {
+          "ref": "OP-220",
+          "title": "Alarm response test",
+          "site": "Kent Street tower",
+          "line": "Tech",
+          "due": "28 AUG",
+          "late": false,
+          "who": "SK"
+        }
+      ]
+    }
+  ],
+  "gantt": [
+    {
+      "num": "01",
+      "name": "Mobilisation — Crown Street residence",
+      "tasks": [
+        {
+          "name": "Order book drafting",
+          "s": 0,
+          "e": 11,
+          "k": "done"
+        },
+        {
+          "name": "Licensing and vetting",
+          "s": 7,
+          "e": 25,
+          "k": "done"
+        },
+        {
+          "name": "Site induction",
+          "s": 21,
+          "e": 32,
+          "k": "active"
+        },
+        {
+          "name": "Go-live, night cover",
+          "s": 35,
+          "e": 39,
+          "k": "plan"
+        }
+      ]
+    },
+    {
+      "num": "02",
+      "name": "CCTV upgrade — Kent Street tower",
+      "tasks": [
+        {
+          "name": "Scope and vendor selection",
+          "s": 0,
+          "e": 18,
+          "k": "done"
+        },
+        {
+          "name": "Cabling and camera heads",
+          "s": 21,
+          "e": 46,
+          "k": "active"
+        },
+        {
+          "name": "Commissioning and handover",
+          "s": 49,
+          "e": 60,
+          "k": "plan"
+        }
+      ]
+    },
+    {
+      "num": "03",
+      "name": "Q3 order book reviews",
+      "tasks": [
+        {
+          "name": "North shore sites",
+          "s": 14,
+          "e": 25,
+          "k": "done"
+        },
+        {
+          "name": "CBD sites",
+          "s": 28,
+          "e": 39,
+          "k": "plan"
+        },
+        {
+          "name": "Client sign-off",
+          "s": 42,
+          "e": 53,
+          "k": "plan"
+        }
+      ]
+    }
+  ],
+  "roles": [
+    {
+      "id": 1,
+      "title": "Security officer — night, CBD portfolio",
+      "meta": "Class 1A 1C · full time · 4 positions",
+      "status": "Open",
+      "kind": "secure",
+      "counts": [
+        4,
+        3,
+        2,
+        2,
+        1
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Control room operator",
+      "meta": "Class 1A · rotating shift · 2 positions",
+      "status": "Open",
+      "kind": "secure",
+      "counts": [
+        2,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Close protection officer",
+      "meta": "Class 1B · casual panel",
+      "status": "Shortlisting",
+      "kind": "advisory",
+      "counts": [
+        1,
+        1,
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Rostering coordinator",
+      "meta": "Head office, Surry Hills",
+      "status": "New",
+      "kind": "info",
+      "counts": [
+        1,
+        1,
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "roleId": 1,
+      "stage": 0,
+      "name": "Daniel Okafor",
+      "lic": "1A 1C CURRENT",
+      "ok": true,
+      "source": "Seek",
+      "days": 2
+    },
+    {
+      "roleId": 1,
+      "stage": 0,
+      "name": "Priya Nair",
+      "lic": "1A CURRENT",
+      "ok": true,
+      "source": "Referral — T. Aldana",
+      "days": 3
+    },
+    {
+      "roleId": 1,
+      "stage": 0,
+      "name": "Marcus Bell",
+      "lic": "1A EXPIRED MAR 26",
+      "ok": false,
+      "source": "Seek",
+      "days": 5
+    },
+    {
+      "roleId": 1,
+      "stage": 0,
+      "name": "Jae-won Park",
+      "lic": "1A 1C CURRENT",
+      "ok": true,
+      "source": "Direct",
+      "days": 6
+    },
+    {
+      "roleId": 1,
+      "stage": 1,
+      "name": "Sofia Ricci",
+      "lic": "1A 1C CURRENT",
+      "ok": true,
+      "source": "Seek",
+      "days": 4
+    },
+    {
+      "roleId": 1,
+      "stage": 1,
+      "name": "Ahmed Haddad",
+      "lic": "1A CURRENT",
+      "ok": true,
+      "source": "Referral — D. Mercer",
+      "days": 7
+    },
+    {
+      "roleId": 1,
+      "stage": 1,
+      "name": "Grace Tuivasa",
+      "lic": "1A 1C 1D CURRENT",
+      "ok": true,
+      "source": "Seek",
+      "days": 2
+    },
+    {
+      "roleId": 1,
+      "stage": 2,
+      "name": "Liam Doherty",
+      "lic": "1A 1C CURRENT",
+      "ok": true,
+      "source": "Direct",
+      "days": 9
+    },
+    {
+      "roleId": 1,
+      "stage": 2,
+      "name": "Renee Calloway",
+      "lic": "1A CURRENT",
+      "ok": true,
+      "source": "Seek",
+      "days": 3
+    },
+    {
+      "roleId": 1,
+      "stage": 3,
+      "name": "Victor Osei",
+      "lic": "SLED CHECK LODGED",
+      "ok": false,
+      "source": "Referral — M. Kessler",
+      "days": 11
+    },
+    {
+      "roleId": 1,
+      "stage": 3,
+      "name": "Hannah Vo",
+      "lic": "SLED CHECK LODGED",
+      "ok": false,
+      "source": "Seek",
+      "days": 8
+    },
+    {
+      "roleId": 1,
+      "stage": 4,
+      "name": "Stefan Molnar",
+      "lic": "1A 1C CURRENT",
+      "ok": true,
+      "source": "Direct",
+      "days": 4
+    },
+    {
+      "roleId": 2,
+      "stage": 0,
+      "name": "Isla McKenzie",
+      "lic": "1A CURRENT",
+      "ok": true,
+      "source": "Seek",
+      "days": 1
+    },
+    {
+      "roleId": 2,
+      "stage": 0,
+      "name": "Tom Brandt",
+      "lic": "1A CURRENT",
+      "ok": true,
+      "source": "Seek",
+      "days": 4
+    },
+    {
+      "roleId": 2,
+      "stage": 1,
+      "name": "Yuki Tanaka",
+      "lic": "1A CURRENT",
+      "ok": true,
+      "source": "Referral — J. Reeve",
+      "days": 5
+    },
+    {
+      "roleId": 2,
+      "stage": 2,
+      "name": "Sam Whitfield",
+      "lic": "1A CURRENT",
+      "ok": true,
+      "source": "Direct",
+      "days": 6
+    },
+    {
+      "roleId": 2,
+      "stage": 3,
+      "name": "Aline Fournier",
+      "lic": "SLED CHECK LODGED",
+      "ok": false,
+      "source": "Seek",
+      "days": 9
+    },
+    {
+      "roleId": 3,
+      "stage": 0,
+      "name": "Reuben Marsh",
+      "lic": "1B CURRENT",
+      "ok": true,
+      "source": "Direct",
+      "days": 3
+    },
+    {
+      "roleId": 3,
+      "stage": 1,
+      "name": "Karla Jensen",
+      "lic": "1B 1A CURRENT",
+      "ok": true,
+      "source": "Referral — M. Kessler",
+      "days": 6
+    },
+    {
+      "roleId": 3,
+      "stage": 2,
+      "name": "Owen Blackwood",
+      "lic": "1B CURRENT",
+      "ok": true,
+      "source": "Direct",
+      "days": 12
+    },
+    {
+      "roleId": 4,
+      "stage": 0,
+      "name": "Mei Lin Chow",
+      "lic": "N/A — HEAD OFFICE",
+      "ok": true,
+      "source": "Seek",
+      "days": 2
+    },
+    {
+      "roleId": 4,
+      "stage": 1,
+      "name": "Patrick Doyle",
+      "lic": "N/A — HEAD OFFICE",
+      "ok": true,
+      "source": "Seek",
+      "days": 5
+    }
+  ],
+  "regions": [
+    {
+      "key": "syd",
+      "label": "Sydney",
+      "x": 598,
+      "y": 370,
+      "anchor": "start",
+      "dx": 10,
+      "dy": 4
+    },
+    {
+      "key": "new",
+      "label": "Newcastle",
+      "x": 631,
+      "y": 311,
+      "anchor": "start",
+      "dx": 10,
+      "dy": 4
+    },
+    {
+      "key": "wol",
+      "label": "Wollongong",
+      "x": 579,
+      "y": 405,
+      "anchor": "start",
+      "dx": 10,
+      "dy": 12
+    },
+    {
+      "key": "cof",
+      "label": "Coffs Harbour",
+      "x": 708,
+      "y": 145,
+      "anchor": "end",
+      "dx": -10,
+      "dy": 4
+    },
+    {
+      "key": "dub",
+      "label": "Dubbo",
+      "x": 447,
+      "y": 268,
+      "anchor": "start",
+      "dx": 10,
+      "dy": 4
+    },
+    {
+      "key": "wag",
+      "label": "Wagga Wagga",
+      "x": 375,
+      "y": 448,
+      "anchor": "start",
+      "dx": 10,
+      "dy": 4
+    },
+    {
+      "key": "bhq",
+      "label": "Broken Hill",
+      "x": 33,
+      "y": 250,
+      "anchor": "start",
+      "dx": 10,
+      "dy": 4
+    },
+    {
+      "key": "tam",
+      "label": "Tamworth",
+      "x": 582,
+      "y": 195,
+      "anchor": "end",
+      "dx": -10,
+      "dy": 4
+    }
+  ],
+  "feed": [
+    {
+      "id": 1,
+      "time": "05:40",
+      "sev": "Breach",
+      "kind": "breach",
+      "region": "SYDNEY",
+      "regionKey": "syd",
+      "headline": "Attempted forced entry at commercial tower loading dock, Kent Street. Officer on scene 05:44; police attended 05:58.",
+      "source": "Patrol report · OP-231 raised"
+    },
+    {
+      "id": 2,
+      "time": "04:15",
+      "sev": "Advisory",
+      "kind": "advisory",
+      "region": "NEWCASTLE",
+      "regionKey": "new",
+      "headline": "Copper theft on rail corridor near Hamilton — third incident this month. Adjacent industrial sites advised.",
+      "source": "NSW Police media"
+    },
+    {
+      "id": 3,
+      "time": "YEST 22:10",
+      "sev": "Advisory",
+      "kind": "advisory",
+      "region": "WOLLONGONG",
+      "regionKey": "wol",
+      "headline": "Aggravated trespass at Port Kembla industrial estate. Client site perimeter held; debrief 1 September.",
+      "source": "Patrol report · OP-233"
+    },
+    {
+      "id": 4,
+      "time": "YEST 18:00",
+      "sev": "Info",
+      "kind": "info",
+      "region": "SYDNEY",
+      "regionKey": "syd",
+      "headline": "Authorised assembly Saturday, Hyde Park to Town Hall. Road closures 10:00–14:00; two client sites on route.",
+      "source": "City of Sydney notice"
+    },
+    {
+      "id": 5,
+      "time": "YEST 16:45",
+      "sev": "Advisory",
+      "kind": "advisory",
+      "region": "COFFS HARBOUR",
+      "regionKey": "cof",
+      "headline": "Severe weather warning, damaging winds on the northern rivers. Perimeter and signage checks advised.",
+      "source": "Bureau of Meteorology"
+    },
+    {
+      "id": 6,
+      "time": "YEST 11:20",
+      "sev": "Info",
+      "kind": "info",
+      "region": "DUBBO",
+      "regionKey": "dub",
+      "headline": "SLED announces regional licensing audit round for October. Fourteen officer renewals fall in window.",
+      "source": "SLED circular"
+    },
+    {
+      "id": 7,
+      "time": "28 AUG",
+      "sev": "Advisory",
+      "kind": "advisory",
+      "region": "WAGGA WAGGA",
+      "regionKey": "wag",
+      "headline": "Cluster of vehicle break-ins, Bomen industrial precinct. Mobile patrol frequency increased.",
+      "source": "NSW Police media"
+    },
+    {
+      "id": 8,
+      "time": "27 AUG",
+      "sev": "Info",
+      "kind": "info",
+      "region": "BROKEN HILL",
+      "regionKey": "bhq",
+      "headline": "Mine site contractor inductions resume 7 September; two officers to re-induct.",
+      "source": "Client notice"
+    },
+    {
+      "id": 9,
+      "time": "26 AUG",
+      "sev": "Info",
+      "kind": "info",
+      "region": "TAMWORTH",
+      "regionKey": "tam",
+      "headline": "Regional saleyards precinct upgrade — expression of interest window opens for site security tender.",
+      "source": "Tender watch"
+    }
+  ]
+}
