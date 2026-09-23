@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { requireAccess, type AccessEnv, type AuthVariables } from "./auth";
 import {
   getCandidates,
   getClients,
@@ -11,12 +12,17 @@ import {
   getRoles,
 } from "./db";
 
-interface Env {
+interface Env extends AccessEnv {
   DB: D1Database;
   ASSETS: Fetcher;
 }
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
+
+// Every request, including the static app shell, must pass Cloudflare Access.
+app.use("*", requireAccess);
+
+app.get("/api/me", (c) => c.json({ email: c.get("userEmail") }));
 
 app.get("/api/metrics", async (c) => c.json(await getMetrics(c.env.DB)));
 app.get("/api/employees", async (c) => c.json(await getEmployees(c.env.DB)));

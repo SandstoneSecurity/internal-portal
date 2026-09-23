@@ -1,4 +1,4 @@
-import { Building2, LayoutDashboard, MapPin, Phone, Route, UserPlus, Users, type LucideIcon } from "lucide-react";
+import { Building2, LayoutDashboard, LogOut, MapPin, Phone, Route, UserPlus, Users, type LucideIcon } from "lucide-react";
 
 const ICONS: Record<string, LucideIcon> = {
   "layout-dashboard": LayoutDashboard,
@@ -8,6 +8,7 @@ const ICONS: Record<string, LucideIcon> = {
   "building-2": Building2,
   "map-pin": MapPin,
   phone: Phone,
+  "log-out": LogOut,
 };
 
 export function Icon({ name, size = 16 }: { name: string; size?: number }) {

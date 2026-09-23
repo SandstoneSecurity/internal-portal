@@ -44,6 +44,33 @@ npm run db:seed:remote
 npm run deploy
 ```
 
+## Access control
+
+The portal sits behind **Cloudflare Access**. Access hosts the sign-in page
+and emails a one-time code to confirm the address, and only
+`william@sandstonesecurity.com` is allowed in. As a second layer, the Worker
+(`worker/auth.ts`) checks the Access-signed JWT on **every** request,
+including the app shell (`run_worker_first` in `wrangler.jsonc`). It checks
+the signature, issuer, audience, expiry and email, and refuses anything else.
+If Access is switched off, misconfigured, or the settings below are empty, the
+portal returns "Access denied" rather than serving data.
+
+Settings live in `wrangler.jsonc` → `vars`:
+
+| Var | What |
+| --- | --- |
+| `ACCESS_TEAM_DOMAIN` | Zero Trust team domain, e.g. `sandstone.cloudflareaccess.com` |
+| `ACCESS_AUD` | Application Audience (AUD) tag of the Access application |
+| `ALLOWED_EMAILS` | Comma-separated allow-list |
+
+To add someone, add their email both to the Access policy (Zero Trust → Access
+→ Applications) and to `ALLOWED_EMAILS`. "Sign out" in the header ends the
+Access session (`/cdn-cgi/access/logout`).
+
+Local `npm run dev` / `wrangler dev` has no Access in front of it, so every
+request is refused there too. There's deliberately no bypass switch that
+could be left on in production.
+
 ## Project layout
 
 ```
