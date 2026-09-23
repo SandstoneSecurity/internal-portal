@@ -12,11 +12,11 @@
     "run_worker_first": true
   },
   // Cloudflare Access settings, read by worker/auth.ts. The team domain and
-  // AUD tag come from the Access application protecting this Worker; while
-  // either is empty, the Worker refuses every request.
+  // AUD tag identify the Access application protecting this Worker's
+  // workers.dev route; if either is emptied, the Worker refuses every request.
   "vars": {
-    "ACCESS_TEAM_DOMAIN": "",
-    "ACCESS_AUD": "",
+    "ACCESS_TEAM_DOMAIN": "ancient-lab-a32a.cloudflareaccess.com",
+    "ACCESS_AUD": "5d96eb61a7ebae9d9a0289e7dc900bb166b8b8e97eec150722ab909708a1da03",
     "ALLOWED_EMAILS": "william@sandstonesecurity.com"
   },
   "d1_databases": [
