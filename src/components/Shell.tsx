@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { Icon } from "./Icon";
 import { Wordmark } from "./Wordmark";
@@ -9,6 +9,36 @@ interface NavItem {
   icon: string;
   count?: string;
   alert?: boolean;
+}
+
+// Ends the Cloudflare Access session; handled at the edge, not by the Worker.
+const SIGN_OUT_URL = "/cdn-cgi/access/logout";
+
+function initialsOf(email: string): string {
+  const local = email.split("@")[0] ?? "";
+  return local
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]!.toUpperCase())
+    .join("");
+}
+
+function useSignedInEmail(): string | null {
+  const [email, setEmail] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/me")
+      .then((res) => (res.ok ? (res.json() as Promise<{ email: string }>) : null))
+      .then((me) => {
+        if (!cancelled && me) setEmail(me.email);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return email;
 }
 
 const NAV: NavItem[] = [
@@ -33,6 +63,7 @@ export function Shell({
   navCounts?: Partial<Record<string, string>>;
   children: ReactNode;
 }) {
+  const email = useSignedInEmail();
   return (
     <div style={{ display: "flex", height: "100vh", overflow: "hidden", fontFamily: "var(--font-text)", color: "var(--text-primary)" }}>
       <aside
@@ -174,6 +205,7 @@ export function Shell({
           />
           <button className="sds-btn sds-btn--md sds-btn--primary">{pageAction}</button>
           <div
+            title={email ?? undefined}
             style={{
               width: 30,
               height: 30,
@@ -187,8 +219,23 @@ export function Shell({
               color: "var(--bark-700)",
             }}
           >
-            JR
+            {email ? initialsOf(email) : "—"}
           </div>
+          <a
+            href={SIGN_OUT_URL}
+            title="Sign out"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              color: "var(--text-secondary)",
+              fontSize: 13,
+              textDecoration: "none",
+            }}
+          >
+            <Icon name="log-out" size={14} />
+            Sign out
+          </a>
         </header>
 
         <main style={{ flex: 1, overflow: "auto", padding: "28px 32px" }}>{children}</main>
