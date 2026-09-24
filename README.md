@@ -60,11 +60,22 @@ Settings live in `wrangler.jsonc` → `vars`:
 | Var | What |
 | --- | --- |
 | `ACCESS_TEAM_DOMAIN` | Zero Trust team domain, e.g. `sandstone.cloudflareaccess.com` |
-| `ACCESS_AUD` | Application Audience (AUD) tag of the Access application |
+| `ACCESS_AUD` | Application Audience (AUD) tag(s) of the Access application(s), comma-separated |
 | `ALLOWED_EMAILS` | Comma-separated allow-list |
 
-To add someone, add their email both to the Access policy (Zero Trust → Access
-→ Applications) and to `ALLOWED_EMAILS`. "Sign out" in the header ends the
+The Access side is configured from code: run **Actions → Configure Cloudflare
+Access → Run workflow**. It uses `.github/scripts/cloudflare-access-setup.sh`
+to create or update the self-hosted "Sandstone internal portal" application for
+the portal's hostnames, with One-time PIN (emailed code) as the only login
+method and a policy allowing exactly the emails in `ALLOWED_EMAILS`. It prints
+the application's AUD tag, which belongs in `ACCESS_AUD`; that var takes a
+comma-separated list if more than one Access app fronts the Worker. The workflow
+uses the `CLOUDFLARE_ACCESS_API` secret, falling back to `CLOUDFLARE_API`. The
+token needs "Access: Apps and Policies Edit" and "Access: Organizations,
+Identity Providers, and Groups Edit".
+
+To add someone, add their email to `ALLOWED_EMAILS`, merge, then re-run the
+Configure Cloudflare Access workflow. "Sign out" in the header ends the
 Access session (`/cdn-cgi/access/logout`).
 
 Local `npm run dev` / `wrangler dev` has no Access in front of it, so every
