@@ -1,16 +1,7 @@
 import { Hono } from "hono";
 import { requireAccess, type AccessEnv, type AuthVariables } from "./auth";
-import {
-  getCandidates,
-  getClients,
-  getEmployees,
-  getFeed,
-  getGantt,
-  getMetrics,
-  getOpsBoard,
-  getRegions,
-  getRoles,
-} from "./db";
+import { getPortal } from "./db";
+import { handleApiError, writes } from "./writes";
 
 interface Env extends AccessEnv {
   DB: D1Database;
@@ -18,21 +9,28 @@ interface Env extends AccessEnv {
 }
 
 const app = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
+app.onError(handleApiError);
 
 // Every request, including the static app shell, must pass Cloudflare Access.
 app.use("*", requireAccess);
 
-app.get("/api/me", (c) => c.json({ email: c.get("userEmail") }));
+// Writes only from the portal itself. Browsers won't send a custom header
+// cross-site without a CORS preflight (which this Worker never answers), and a
+// present Origin must be this host, so a signed-in user's Access cookie can't be
+// ridden by another site to change records.
+app.use("/api/*", async (c, next) => {
+  if (c.req.method === "GET" || c.req.method === "HEAD") return next();
+  const origin = c.req.header("Origin");
+  if (c.req.header("X-Sandstone-Portal") !== "1" || (origin && origin !== new URL(c.req.url).origin)) {
+    return c.json({ error: "Cross-site request refused." }, 403);
+  }
+  return next();
+});
 
-app.get("/api/metrics", async (c) => c.json(await getMetrics(c.env.DB)));
-app.get("/api/employees", async (c) => c.json(await getEmployees(c.env.DB)));
-app.get("/api/clients", async (c) => c.json(await getClients(c.env.DB)));
-app.get("/api/ops/board", async (c) => c.json(await getOpsBoard(c.env.DB)));
-app.get("/api/ops/gantt", async (c) => c.json(await getGantt(c.env.DB)));
-app.get("/api/recruitment/roles", async (c) => c.json(await getRoles(c.env.DB)));
-app.get("/api/recruitment/candidates", async (c) => c.json(await getCandidates(c.env.DB)));
-app.get("/api/intel/feed", async (c) => c.json(await getFeed(c.env.DB)));
-app.get("/api/intel/regions", async (c) => c.json(await getRegions(c.env.DB)));
+app.get("/api/me", (c) => c.json({ email: c.get("userEmail") }));
+app.get("/api/portal", async (c) => c.json(await getPortal(c.env.DB, c.get("userEmail"))));
+app.route("/api", writes);
+app.all("/api/*", (c) => c.json({ error: "Not found." }, 404));
 
 app.get("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 

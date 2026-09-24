@@ -1,245 +1,198 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { NavLink } from "react-router-dom";
-import { Icon } from "./Icon";
-import { Wordmark } from "./Wordmark";
+import { AnimatePresence, motion } from "motion/react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { NavLink, useLocation } from "react-router-dom";
+import { Building2, History, LayoutDashboard, LogOut, MapPin, Moon, Plus, Route, Search, Sun, UserPlus, Users } from "lucide-react";
+import { useActions } from "../actions/ActionHost";
+import { usePortal } from "../lib/DataProvider";
+import { initialsOf, isoWeek, longDate } from "../lib/format";
+import { useHotkey } from "../lib/hotkeys";
+import { DUR, tween } from "../lib/motion";
+import { useTheme } from "../lib/theme";
+import { ActivityLog } from "./ActivityLog";
+import { CommandPalette } from "./CommandPalette";
+import { Kbd, ModKey } from "./ui/Bits";
 
-interface NavItem {
-  to: string;
-  label: string;
-  icon: string;
-  count?: string;
-  alert?: boolean;
+const NAV = [
+  { to: "/", label: "Control", icon: LayoutDashboard },
+  { to: "/operations", label: "Operations", icon: Route },
+  { to: "/recruitment", label: "Recruitment", icon: UserPlus },
+  { to: "/employees", label: "Employees", icon: Users },
+  { to: "/clients", label: "Clients", icon: Building2 },
+  { to: "/intelligence", label: "Intelligence", icon: MapPin },
+] as const;
+
+const SEEN_KEY = "sandstone.audit.seen";
+
+function useHeading(pathname: string): { title: string; meta: string } {
+  const d = usePortal();
+  const open = d.opsColumns.filter((c) => !c.done).reduce((n, c) => n + c.cards.length, 0);
+  const late = d.opsColumns.flatMap((c) => c.cards).filter((c) => c.late).length;
+  const onShift = d.employees.filter((e) => e.status === "On shift").length;
+  const expiring = d.employees.filter((e) => e.expirySoon).length;
+  const candidates = d.candidates.length;
+  const breaches = d.feed.filter((f) => f.kind === "breach").length;
+  const active = d.clients.filter((c) => c.status === "Active").length;
+  const map: Record<string, { title: string; meta: string }> = {
+    "/": { title: "Control", meta: `${longDate(d.today)} · week ${isoWeek(d.today)}` },
+    "/operations": { title: "Operations", meta: `Order book · ${open} open · ${late} past due` },
+    "/recruitment": { title: "Recruitment", meta: `${d.roles.length} roles · ${candidates} candidates · SLED licence checks tracked` },
+    "/employees": { title: "Employees", meta: `Licensed personnel register · ${d.employees.length} on file · ${onShift} on shift · ${expiring} licences due` },
+    "/clients": { title: "Clients", meta: `${d.clients.length} accounts · ${active} active` },
+    "/intelligence": { title: "Intelligence", meta: `Monitored activity across New South Wales · ${d.feed.length} items · ${breaches} breach` },
+  };
+  return map[pathname] ?? map["/"]!;
 }
 
-// Ends the Cloudflare Access session; handled at the edge, not by the Worker.
-const SIGN_OUT_URL = "/cdn-cgi/access/logout";
+export function Shell({ children }: { children: ReactNode }) {
+  const d = usePortal();
+  const { pathname } = useLocation();
+  const actions = useActions();
+  const { theme, toggle } = useTheme();
+  const [palette, setPalette] = useState(false);
+  const [log, setLog] = useState(false);
+  const [seen, setSeen] = useState<number>(() => {
+    try {
+      return Number(localStorage.getItem(SEEN_KEY) ?? 0);
+    } catch {
+      return 0;
+    }
+  });
+  const scroller = useRef<HTMLDivElement>(null);
+  const heading = useHeading(pathname);
+  const primary = actions.primaryFor(pathname);
 
-function initialsOf(email: string): string {
-  const local = email.split("@")[0] ?? "";
-  return local
-    .split(/[._-]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]!.toUpperCase())
-    .join("");
-}
+  useHotkey("mod+k", () => setPalette((p) => !p));
+  useHotkey("/", () => setPalette(true));
+  useHotkey("n", () => primary?.run(), !!primary);
 
-function useSignedInEmail(): string | null {
-  const [email, setEmail] = useState<string | null>(null);
   useEffect(() => {
-    let cancelled = false;
-    fetch("/api/me")
-      .then((res) => (res.ok ? (res.json() as Promise<{ email: string }>) : null))
-      .then((me) => {
-        if (!cancelled && me) setEmail(me.email);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return email;
-}
+    scroller.current?.scrollTo({ top: 0 });
+  }, [pathname]);
 
-const NAV: NavItem[] = [
-  { to: "/", label: "Control", icon: "layout-dashboard" },
-  { to: "/operations", label: "Operations", icon: "route" },
-  { to: "/recruitment", label: "Recruitment", icon: "user-plus" },
-  { to: "/employees", label: "Employees", icon: "users" },
-  { to: "/clients", label: "Clients", icon: "building-2" },
-  { to: "/intelligence", label: "Intelligence", icon: "map-pin" },
-];
+  const latestAudit = d.audit[0]?.id ?? 0;
+  const openLog = () => {
+    setLog(true);
+    setSeen(latestAudit);
+    try {
+      localStorage.setItem(SEEN_KEY, String(latestAudit));
+    } catch {
+      // Unseen dot just won't persist.
+    }
+  };
 
-export function Shell({
-  pageTitle,
-  pageMeta,
-  pageAction,
-  navCounts,
-  children,
-}: {
-  pageTitle: string;
-  pageMeta: string;
-  pageAction: string;
-  navCounts?: Partial<Record<string, string>>;
-  children: ReactNode;
-}) {
-  const email = useSignedInEmail();
+  const open = d.opsColumns.filter((c) => !c.done).reduce((n, c) => n + c.cards.length, 0);
+  const late = d.opsColumns.flatMap((c) => c.cards).filter((c) => c.late).length;
+  const breaches = d.feed.filter((f) => f.kind === "breach").length;
+  const counts: Record<string, { n: number; alert?: boolean } | undefined> = {
+    "/operations": open ? { n: open, alert: late > 0 } : undefined,
+    "/recruitment": d.candidates.length ? { n: d.candidates.length } : undefined,
+    "/employees": d.employees.length ? { n: d.employees.length } : undefined,
+    "/clients": d.clients.length ? { n: d.clients.length } : undefined,
+    "/intelligence": breaches ? { n: breaches, alert: true } : undefined,
+  };
+  const onShift = d.employees.filter((e) => e.status === "On shift").length;
+
   return (
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden", fontFamily: "var(--font-text)", color: "var(--text-primary)" }}>
-      <aside
-        style={{
-          width: 232,
-          flex: "none",
-          background: "var(--bark-800)",
-          borderRight: "1px solid var(--border-inverse)",
-          display: "flex",
-          flexDirection: "column",
-          padding: "28px 0 0",
-        }}
-      >
-        <div style={{ padding: "0 24px 28px" }}>
-          <Wordmark size="sm" inverse />
-          <div
-            style={{
-              font: "var(--type-eyebrow)",
-              textTransform: "uppercase",
-              letterSpacing: "var(--track-eyebrow)",
-              color: "var(--brass-300)",
-              marginTop: 10,
-            }}
-          >
-            Admin
+    <div className="pt-app">
+      <aside className="pt-side">
+        <div className="pt-side__brand">
+          <div className="pt-side__lockup">
+            <span className="sds-wordmark sds-wordmark--md">Sandstone</span>
+            <motion.div className="pt-side__rule" initial={{ scaleX: 0 }} animate={{ scaleX: 1, transition: tween(DUR.reveal, 0.1) }} />
+            <span className="pt-side__descriptor">Admin portal</span>
           </div>
         </div>
-        <nav style={{ display: "flex", flexDirection: "column" }}>
-          {NAV.map((n) => (
-            <NavLink
-              key={n.to}
-              to={n.to}
-              end={n.to === "/"}
-              style={({ isActive }) => ({
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: "11px 24px",
-                background: isActive ? "var(--bark-700)" : "transparent",
-                borderLeft: `2px solid ${isActive ? "var(--brass-500)" : "transparent"}`,
-                color: isActive ? "var(--sand-50)" : "var(--bark-200)",
-                fontFamily: "var(--font-text)",
-                fontSize: 13,
-                textAlign: "left",
-                width: "100%",
-                textDecoration: "none",
-              })}
-            >
-              <Icon name={n.icon} size={16} />
-              <span style={{ flex: 1 }}>{n.label}</span>
-              {navCounts?.[n.to] ? (
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--bark-300)" }}>
-                  {navCounts[n.to]}
-                </span>
-              ) : null}
-            </NavLink>
-          ))}
+        <div className="pt-side__label">Modules</div>
+        <nav className="pt-nav" aria-label="Modules">
+          {NAV.map(({ to, label, icon: Icon }) => {
+            const c = counts[to];
+            const isActive = to === "/" ? pathname === "/" : pathname.startsWith(to);
+            return (
+              <NavLink key={to} to={to} end={to === "/"} className="pt-nav__item" title={label}>
+                {isActive && <motion.span layoutId="nav-active" className="pt-nav__active" transition={tween(DUR.slow)} />}
+                <Icon size={16} strokeWidth={1.75} />
+                <span className="pt-nav__label">{label}</span>
+                {c && <span className={`pt-nav__count${c.alert ? " pt-nav__count--alert" : ""}`}>{c.n}</span>}
+              </NavLink>
+            );
+          })}
         </nav>
-        <div style={{ marginTop: "auto", padding: 24, borderTop: "1px solid var(--border-inverse)" }}>
-          <div
-            style={{
-              font: "var(--type-eyebrow)",
-              textTransform: "uppercase",
-              letterSpacing: "var(--track-eyebrow)",
-              color: "var(--bark-300)",
-            }}
-          >
-            Control room
+        <div className="pt-side__foot">
+          <div className="pt-side__status">
+            <span>ON SHIFT</span>
+            <b>
+              {onShift}/{d.employees.length}
+            </b>
+            <span>PAST DUE</span>
+            <b style={late ? { color: "var(--clay-100)" } : undefined}>{late}</b>
           </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              marginTop: 10,
-              color: "var(--sand-100)",
-              fontFamily: "var(--font-mono)",
-              fontSize: 13,
-            }}
-          >
-            <Icon name="phone" size={14} />
-            02 8000 0000
-          </div>
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              marginTop: 12,
-              padding: "2px 8px",
-              background: "var(--status-secure-bg)",
-              color: "var(--status-secure-fg)",
-              fontSize: 10,
-              fontWeight: 600,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              borderRadius: 2,
-            }}
-          >
-            <span style={{ width: 6, height: 6, borderRadius: 999, background: "var(--status-secure-dot)" }} />
-            Staffed
+          <div className="pt-side__user">
+            <span className="pt-side__avatar" title={d.me.email}>
+              {initialsOf(d.me.email)}
+            </span>
+            <span className="pt-side__email">{d.me.email}</span>
+            <a className="pt-iconbtn pt-iconbtn--inverse pt-iconbtn--sm" href="/cdn-cgi/access/logout" title="Sign out" aria-label="Sign out">
+              <LogOut size={14} />
+            </a>
           </div>
         </div>
       </aside>
 
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <header
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 24,
-            padding: "20px 32px",
-            borderBottom: "1px solid var(--border-subtle)",
-            background: "var(--surface-raised)",
-            flex: "none",
-          }}
-        >
-          <div>
-            <h1 style={{ margin: 0, fontFamily: "var(--font-display)", fontWeight: 400, fontSize: "var(--text-xl)" }}>
-              {pageTitle}
-            </h1>
-            <div style={{ font: "var(--type-small)", color: "var(--text-tertiary)", marginTop: 2 }}>{pageMeta}</div>
+      <div className="pt-main">
+        <header className="pt-head">
+          <div className="pt-head__titles">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div key={pathname} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0, transition: tween(DUR.base) }} exit={{ opacity: 0, transition: tween(DUR.fast) }}>
+                <h1 className="pt-head__title">{heading.title}</h1>
+                <div className="pt-head__meta">{heading.meta}</div>
+              </motion.div>
+            </AnimatePresence>
           </div>
-          <input
-            placeholder="Search sites, people, clients"
-            style={{
-              marginLeft: "auto",
-              width: 280,
-              height: 34,
-              padding: "0 12px",
-              border: "1px solid var(--field-border)",
-              borderRadius: "var(--radius-sm)",
-              background: "#fff",
-              fontFamily: "var(--font-text)",
-              fontSize: 13,
-              color: "var(--text-primary)",
-              outline: "none",
-            }}
-          />
-          <button className="sds-btn sds-btn--md sds-btn--primary">{pageAction}</button>
-          <div
-            title={email ?? undefined}
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: "var(--radius-sm)",
-              background: "var(--sand-300)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontFamily: "var(--font-mono)",
-              fontSize: 10,
-              color: "var(--bark-700)",
-            }}
-          >
-            {email ? initialsOf(email) : "—"}
+          <div className="pt-head__tools">
+            <button className="pt-search" onClick={() => setPalette(true)} aria-label="Search or jump to (command palette)">
+              <Search size={14} />
+              <span>Search or jump to…</span>
+              <ModKey />
+              <Kbd>K</Kbd>
+            </button>
+            {primary && (
+              <button className="sds-btn sds-btn--md sds-btn--primary pt-head__primary" onClick={primary.run} title={`${primary.label} (N)`} aria-label={primary.label}>
+                <Plus size={16} className="pt-head__primary-icon" aria-hidden />
+                <span className="pt-head__primary-label">{primary.label}</span>
+              </button>
+            )}
+            <span className="pt-head__sep" />
+            <button className="pt-iconbtn" onClick={openLog} aria-label="Activity log" title="Activity log">
+              <History size={17} strokeWidth={1.75} />
+              {latestAudit > seen && <span className="pt-iconbtn__dot" />}
+            </button>
+            <button
+              className="pt-iconbtn"
+              onClick={toggle}
+              aria-label={theme === "light" ? "Switch to operations mode" : "Switch to limestone mode"}
+              title={theme === "light" ? "Operations mode (night)" : "Limestone mode (day)"}
+            >
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.span
+                  key={theme}
+                  style={{ display: "inline-flex" }}
+                  initial={{ opacity: 0, rotate: -45 }}
+                  animate={{ opacity: 1, rotate: 0, transition: tween(DUR.base) }}
+                  exit={{ opacity: 0, rotate: 45, transition: tween(DUR.fast) }}
+                >
+                  {theme === "light" ? <Moon size={17} strokeWidth={1.75} /> : <Sun size={17} strokeWidth={1.75} />}
+                </motion.span>
+              </AnimatePresence>
+            </button>
           </div>
-          <a
-            href={SIGN_OUT_URL}
-            title="Sign out"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              color: "var(--text-secondary)",
-              fontSize: 13,
-              textDecoration: "none",
-            }}
-          >
-            <Icon name="log-out" size={14} />
-            Sign out
-          </a>
         </header>
-
-        <main style={{ flex: 1, overflow: "auto", padding: "28px 32px" }}>{children}</main>
+        <div className="pt-scroll" ref={scroller}>
+          {children}
+        </div>
       </div>
+
+      <CommandPalette open={palette} onClose={() => setPalette(false)} onActivity={openLog} />
+      <ActivityLog open={log} onClose={() => setLog(false)} />
     </div>
   );
 }

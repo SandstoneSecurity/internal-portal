@@ -1,20 +1,15 @@
-/* Sandstone webfonts. All faces are self-hosted from jsDelivr (@fontsource).
-   SUBSTITUTION NOTICE: no brand font files were supplied — Jost carries the wordmark (Product Sans-adjacent geometric), Newsreader the display face, Archivo for text, IBM Plex Mono for data. Replace the src urls (binaries into assets/fonts/) when real licensed
-   faces arrive. See readme.md → Typography. */
+/* Sandstone webfonts, self-hosted from ../fonts (bundled and hashed by Vite).
+   Served by the Worker behind Cloudflare Access, so the portal makes no
+   third-party requests. Jost carries the wordmark only; Newsreader the display
+   face; Sandstone Text for body and UI; Sandstone Mono for anything countable. */
+@font-face{font-family:"Jost";font-style:normal;font-weight:100 900;font-display:swap;src:url("../fonts/Jost-Variable.woff2") format("woff2-variations")}
 
+@font-face{font-family:"Newsreader";font-style:normal;font-weight:400;font-display:swap;src:url("../fonts/Newsreader-Regular.woff2") format("woff2")}
+@font-face{font-family:"Newsreader";font-style:normal;font-weight:500;font-display:swap;src:url("../fonts/Newsreader-Medium.woff2") format("woff2")}
+@font-face{font-family:"Newsreader";font-style:italic;font-weight:400;font-display:swap;src:url("../fonts/Newsreader-Italic.woff2") format("woff2")}
 
-/* Wordmark — Jost (indestructible type, open source). Geometric grotesque; carries the SANDSTONE wordmark only. */
-@font-face{font-family:"Jost";font-style:normal;font-weight:100 900;font-display:swap;src:url("https://cdn.jsdelivr.net/npm/@fontsource-variable/jost/files/jost-latin-wght-normal.woff2") format("woff2-variations")}
+@font-face{font-family:"Sandstone Text";font-style:normal;font-weight:100 900;font-display:swap;src:url("../fonts/SandstoneText-Variable.woff2") format("woff2-variations")}
+@font-face{font-family:"Sandstone Text";font-style:italic;font-weight:100 900;font-display:swap;src:url("../fonts/SandstoneText-VariableItalic.woff2") format("woff2-variations")}
 
-/* Display — Newsreader (Production Type, open source). Headlines; Archivo carries UI and body. */
-@font-face{font-family:"Newsreader";font-style:normal;font-weight:400;font-display:swap;src:url("https://cdn.jsdelivr.net/npm/@fontsource/newsreader/files/newsreader-latin-400-normal.woff2") format("woff2")}
-@font-face{font-family:"Newsreader";font-style:normal;font-weight:500;font-display:swap;src:url("https://cdn.jsdelivr.net/npm/@fontsource/newsreader/files/newsreader-latin-500-normal.woff2") format("woff2")}
-@font-face{font-family:"Newsreader";font-style:italic;font-weight:400;font-display:swap;src:url("https://cdn.jsdelivr.net/npm/@fontsource/newsreader/files/newsreader-latin-400-italic.woff2") format("woff2")}
-
-/* Text / UI — Archivo (variable), self-hosted from jsDelivr. */
-@font-face{font-family:"Sandstone Text";font-style:normal;font-weight:100 900;font-display:swap;src:url("https://cdn.jsdelivr.net/npm/@fontsource-variable/archivo/files/archivo-latin-wght-normal.woff2") format("woff2-variations")}
-@font-face{font-family:"Sandstone Text";font-style:italic;font-weight:100 900;font-display:swap;src:url("https://cdn.jsdelivr.net/npm/@fontsource-variable/archivo/files/archivo-latin-wght-italic.woff2") format("woff2-variations")}
-
-/* Data / mono — IBM Plex Mono, self-hosted from jsDelivr. */
-@font-face{font-family:"Sandstone Mono";font-style:normal;font-weight:400;font-display:swap;src:url("https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2") format("woff2")}
-@font-face{font-family:"Sandstone Mono";font-style:normal;font-weight:600;font-display:swap;src:url("https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2") format("woff2")}
+@font-face{font-family:"Sandstone Mono";font-style:normal;font-weight:400;font-display:swap;src:url("../fonts/SandstoneMono-Regular.woff2") format("woff2")}
+@font-face{font-family:"Sandstone Mono";font-style:normal;font-weight:600;font-display:swap;src:url("../fonts/SandstoneMono-SemiBold.woff2") format("woff2")}

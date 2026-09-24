@@ -1,42 +1,33 @@
 import type {
+  AuditEntry,
   Candidate,
   Client,
   Employee,
-  GanttSection,
   IntelItem,
   Metric,
   OpsColumn,
+  PortalData,
   Region,
   Role,
   StatusKind,
 } from "../shared/types";
+import { addDays, dayMonth, daysBetween, shortDate, todaySydney } from "./dates";
 
-function asKind(v: string): StatusKind {
+export function asKind(v: string): StatusKind {
   return (["secure", "advisory", "breach", "info", "neutral"] as const).includes(v as StatusKind)
     ? (v as StatusKind)
     : "neutral";
 }
 
-export async function getMetrics(db: D1Database): Promise<Metric[]> {
-  const { results } = await db
-    .prepare(`SELECT label, value, unit, note, note_kind FROM metrics ORDER BY sort_order`)
-    .all<{ label: string; value: string; unit: string; note: string; note_kind: string }>();
-  return results.map((r) => ({
-    label: r.label,
-    value: r.value,
-    unit: r.unit,
-    note: r.note,
-    noteKind: asKind(r.note_kind),
-  }));
-}
+const EXPIRY_WINDOW_DAYS = 90;
 
-export async function getEmployees(db: D1Database): Promise<Employee[]> {
+export async function getEmployees(db: D1Database, today: string): Promise<Employee[]> {
   const [{ results: rows }, { results: shiftRows }] = await Promise.all([
     db
       .prepare(
-        `SELECT id, name, role, licence_class, licence_expiry, expiry_soon, site, status,
+        `SELECT id, name, role, licence_class, licence_expiry, licence_expiry_date, expiry_soon, site, status,
                 status_kind, employed_since, first_aid, mobile, employment_type
-         FROM employees ORDER BY id`
+         FROM employees ORDER BY name COLLATE NOCASE`
       )
       .all<{
         id: number;
@@ -44,6 +35,7 @@ export async function getEmployees(db: D1Database): Promise<Employee[]> {
         role: string;
         licence_class: string;
         licence_expiry: string;
+        licence_expiry_date: string | null;
         expiry_soon: number;
         site: string;
         status: string;
@@ -54,9 +46,7 @@ export async function getEmployees(db: D1Database): Promise<Employee[]> {
         employment_type: string;
       }>(),
     db
-      .prepare(
-        `SELECT employee_id, shift_date, span, site FROM employee_shifts ORDER BY employee_id, sort_order`
-      )
+      .prepare(`SELECT employee_id, shift_date, span, site FROM employee_shifts ORDER BY employee_id, sort_order, id DESC`)
       .all<{ employee_id: number; shift_date: string; span: string; site: string }>(),
   ]);
 
@@ -67,22 +57,30 @@ export async function getEmployees(db: D1Database): Promise<Employee[]> {
     shiftsByEmployee.set(s.employee_id, list);
   }
 
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    role: r.role,
-    cls: r.licence_class,
-    exp: r.licence_expiry,
-    expirySoon: r.expiry_soon === 1,
-    site: r.site,
-    status: r.status,
-    kind: asKind(r.status_kind),
-    since: r.employed_since,
-    firstAid: r.first_aid,
-    mobile: r.mobile,
-    employmentType: r.employment_type,
-    shifts: shiftsByEmployee.get(r.id) ?? [],
-  }));
+  const horizon = addDays(today, EXPIRY_WINDOW_DAYS);
+  return rows.map((r) => {
+    const expDate = r.licence_expiry_date;
+    const expired = expDate ? expDate < today : false;
+    const soon = expDate ? expDate <= horizon : r.expiry_soon === 1;
+    return {
+      id: r.id,
+      name: r.name,
+      role: r.role,
+      cls: r.licence_class,
+      exp: expDate ? shortDate(expDate) : r.licence_expiry,
+      expDate,
+      expirySoon: soon,
+      expired,
+      site: r.site,
+      status: r.status,
+      kind: asKind(r.status_kind),
+      since: r.employed_since,
+      firstAid: r.first_aid,
+      mobile: r.mobile,
+      employmentType: r.employment_type,
+      shifts: (shiftsByEmployee.get(r.id) ?? []).slice(0, 8),
+    };
+  });
 }
 
 export async function getClients(db: D1Database): Promise<Client[]> {
@@ -91,7 +89,7 @@ export async function getClients(db: D1Database): Promise<Client[]> {
       db
         .prepare(
           `SELECT id, org, sector, sites, value_pa, owner_initials, status, status_kind, meta
-           FROM clients ORDER BY id`
+           FROM clients ORDER BY org COLLATE NOCASE`
         )
         .all<{
           id: number;
@@ -105,13 +103,13 @@ export async function getClients(db: D1Database): Promise<Client[]> {
           meta: string;
         }>(),
       db
-        .prepare(`SELECT client_id, name, role FROM client_contacts ORDER BY client_id, sort_order`)
+        .prepare(`SELECT client_id, name, role FROM client_contacts ORDER BY client_id, sort_order, id`)
         .all<{ client_id: number; name: string; role: string }>(),
       db
         .prepare(`SELECT client_id, name, value, stage, review_date FROM client_deals`)
         .all<{ client_id: number; name: string; value: string; stage: string; review_date: string }>(),
       db
-        .prepare(`SELECT client_id, activity_date, body FROM client_activity ORDER BY client_id, sort_order`)
+        .prepare(`SELECT client_id, activity_date, body FROM client_activity ORDER BY client_id, sort_order, id DESC`)
         .all<{ client_id: number; activity_date: string; body: string }>(),
     ]);
 
@@ -148,7 +146,7 @@ export async function getClients(db: D1Database): Promise<Client[]> {
   }));
 }
 
-export async function getOpsBoard(db: D1Database): Promise<OpsColumn[]> {
+export async function getOpsBoard(db: D1Database, today: string): Promise<OpsColumn[]> {
   const [{ results: cols }, { results: cards }] = await Promise.all([
     db.prepare(`SELECT id, label, is_done FROM ops_columns ORDER BY sort_order`).all<{
       id: number;
@@ -157,72 +155,57 @@ export async function getOpsBoard(db: D1Database): Promise<OpsColumn[]> {
     }>(),
     db
       .prepare(
-        `SELECT column_id, ref, title, site, line, due_label, is_late, owner_initials
-         FROM ops_cards ORDER BY column_id, sort_order`
+        `SELECT id, column_id, ref, title, site, line, due_label, due_date, created_at, is_late, owner_initials
+         FROM ops_cards ORDER BY column_id, sort_order, id`
       )
       .all<{
+        id: number;
         column_id: number;
         ref: string;
         title: string;
         site: string;
         line: string;
         due_label: string;
+        due_date: string | null;
+        created_at: string | null;
         is_late: number;
         owner_initials: string;
       }>(),
   ]);
 
+  const doneColumns = new Set(cols.filter((c) => c.is_done === 1).map((c) => c.id));
   const cardsByColumn = new Map<number, OpsColumn["cards"]>();
   for (const c of cards) {
+    const done = doneColumns.has(c.column_id);
+    const late = done ? false : c.due_date ? c.due_date < today : c.is_late === 1;
     const list = cardsByColumn.get(c.column_id) ?? [];
     list.push({
+      id: c.id,
+      columnId: c.column_id,
       ref: c.ref,
       title: c.title,
       site: c.site,
       line: c.line,
-      due: c.due_label,
-      late: c.is_late === 1,
+      due: c.due_date ? `DUE ${dayMonth(c.due_date)}` : c.due_label,
+      dueDate: c.due_date,
+      createdAt: c.created_at,
+      late,
       who: c.owner_initials,
     });
     cardsByColumn.set(c.column_id, list);
   }
 
   return cols.map((c) => ({
+    id: c.id,
     label: c.label,
     done: c.is_done === 1,
     cards: cardsByColumn.get(c.id) ?? [],
   }));
 }
 
-export async function getGantt(db: D1Database): Promise<GanttSection[]> {
-  const [{ results: sections }, { results: tasks }] = await Promise.all([
-    db.prepare(`SELECT id, num, name FROM gantt_sections ORDER BY sort_order`).all<{
-      id: number;
-      num: string;
-      name: string;
-    }>(),
-    db
-      .prepare(`SELECT section_id, name, start_day, end_day, kind FROM gantt_tasks ORDER BY section_id, sort_order`)
-      .all<{ section_id: number; name: string; start_day: number; end_day: number; kind: string }>(),
-  ]);
-
-  const tasksBySection = new Map<number, GanttSection["tasks"]>();
-  for (const t of tasks) {
-    const list = tasksBySection.get(t.section_id) ?? [];
-    list.push({ name: t.name, s: t.start_day, e: t.end_day, k: t.kind as "done" | "active" | "plan" });
-    tasksBySection.set(t.section_id, list);
-  }
-
-  return sections.map((s) => ({
-    num: s.num,
-    name: s.name,
-    tasks: tasksBySection.get(s.id) ?? [],
-  }));
-}
-
 export async function getRoles(db: D1Database): Promise<Role[]> {
   const [{ results: roles }, { results: stageCounts }] = await Promise.all([
-    db.prepare(`SELECT id, title, meta, status, status_kind FROM roles ORDER BY sort_order`).all<{
+    db.prepare(`SELECT id, title, meta, status, status_kind FROM roles ORDER BY sort_order, id`).all<{
       id: number;
       title: string;
       meta: string;
@@ -251,10 +234,14 @@ export async function getRoles(db: D1Database): Promise<Role[]> {
   }));
 }
 
-export async function getCandidates(db: D1Database): Promise<Candidate[]> {
+export async function getCandidates(db: D1Database, today: string): Promise<Candidate[]> {
   const { results } = await db
-    .prepare(`SELECT role_id, stage, name, licence, licence_ok, source, days_in_stage FROM candidates ORDER BY role_id, stage, sort_order`)
+    .prepare(
+      `SELECT id, role_id, stage, name, licence, licence_ok, source, days_in_stage, stage_since
+       FROM candidates ORDER BY role_id, stage, sort_order, id`
+    )
     .all<{
+      id: number;
       role_id: number;
       stage: number;
       name: string;
@@ -262,21 +249,23 @@ export async function getCandidates(db: D1Database): Promise<Candidate[]> {
       licence_ok: number;
       source: string;
       days_in_stage: number;
+      stage_since: string | null;
     }>();
   return results.map((r) => ({
+    id: r.id,
     roleId: r.role_id,
     stage: r.stage,
     name: r.name,
     lic: r.licence,
     ok: r.licence_ok === 1,
     source: r.source,
-    days: r.days_in_stage,
+    days: r.stage_since ? Math.max(0, daysBetween(r.stage_since.slice(0, 10), today)) : r.days_in_stage,
   }));
 }
 
 export async function getRegions(db: D1Database): Promise<Region[]> {
   const { results } = await db
-    .prepare(`SELECT key, label, map_x, map_y, label_anchor, label_dx, label_dy FROM regions`)
+    .prepare(`SELECT key, label, map_x, map_y, label_anchor, label_dx, label_dy FROM regions ORDER BY label`)
     .all<{
       key: string;
       label: string;
@@ -297,17 +286,38 @@ export async function getRegions(db: D1Database): Promise<Region[]> {
   }));
 }
 
-export async function getFeed(db: D1Database): Promise<IntelItem[]> {
+const sydneyDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Sydney" });
+const sydneyTime = new Intl.DateTimeFormat("en-AU", {
+  timeZone: "Australia/Sydney",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+/** "14:05" today, "YEST 22:10" yesterday, "21 SEP" before that — as the prototype's feed read. */
+function feedTime(createdAt: string | null, fallback: string, today: string): string {
+  if (!createdAt) return fallback;
+  const at = new Date(createdAt);
+  if (Number.isNaN(at.getTime())) return fallback;
+  const day = sydneyDate.format(at);
+  const time = sydneyTime.format(at);
+  if (day === today) return time;
+  if (day === addDays(today, -1)) return `YEST ${time}`;
+  return dayMonth(day);
+}
+
+export async function getFeed(db: D1Database, today: string): Promise<IntelItem[]> {
   const { results } = await db
     .prepare(
-      `SELECT f.id, f.time_label, f.severity, f.severity_kind, f.region_key, r.label as region_label,
+      `SELECT f.id, f.time_label, f.created_at, f.severity, f.severity_kind, f.region_key, r.label as region_label,
               f.headline, f.source
        FROM intel_feed f JOIN regions r ON r.key = f.region_key
-       ORDER BY f.sort_order`
+       ORDER BY COALESCE(f.created_at, '') DESC, f.sort_order, f.id DESC`
     )
     .all<{
       id: number;
       time_label: string;
+      created_at: string | null;
       severity: string;
       severity_kind: string;
       region_key: string;
@@ -317,7 +327,7 @@ export async function getFeed(db: D1Database): Promise<IntelItem[]> {
     }>();
   return results.map((r) => ({
     id: r.id,
-    time: r.time_label,
+    time: feedTime(r.created_at, r.time_label, today),
     sev: r.severity,
     kind: asKind(r.severity_kind),
     region: r.region_label.toUpperCase(),
@@ -325,4 +335,116 @@ export async function getFeed(db: D1Database): Promise<IntelItem[]> {
     headline: r.headline,
     source: r.source,
   }));
+}
+
+export async function getAudit(db: D1Database, limit = 60): Promise<AuditEntry[]> {
+  const { results } = await db
+    .prepare(`SELECT id, at, actor, action, entity, entity_id, summary FROM audit_log ORDER BY id DESC LIMIT ?`)
+    .bind(limit)
+    .all<{ id: number; at: string; actor: string; action: string; entity: string; entity_id: string | null; summary: string }>();
+  return results.map((r) => ({
+    id: r.id,
+    at: r.at,
+    actor: r.actor,
+    action: r.action as AuditEntry["action"],
+    entity: r.entity,
+    entityId: r.entity_id,
+    summary: r.summary,
+  }));
+}
+
+function money(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `$${Math.round(n / 1_000)}K`;
+  return `$${n}`;
+}
+
+/** Headline figures, computed live from the records rather than stored. */
+export function computeMetrics(
+  employees: Employee[],
+  clients: Client[],
+  opsColumns: OpsColumn[]
+): Metric[] {
+  const onShift = employees.filter((e) => e.status === "On shift").length;
+  const rostered = employees.filter((e) => e.status === "Rostered").length;
+  const onLeave = employees.filter((e) => e.status === "Leave").length;
+
+  const active = clients.filter((c) => c.status === "Active");
+  const sites = active.reduce((n, c) => n + c.sites, 0);
+  const value = active.reduce((n, c) => n + Number(c.value.replace(/[^0-9.]/g, "") || 0), 0);
+
+  const open = opsColumns.filter((c) => !c.done).flatMap((c) => c.cards);
+  const late = open.filter((c) => c.late);
+
+  const expiring = employees.filter((e) => e.expirySoon);
+  const expired = expiring.filter((e) => e.expired);
+  const nextUp = [...expiring]
+    .filter((e) => e.expDate && !e.expired)
+    .sort((a, b) => (a.expDate ?? "").localeCompare(b.expDate ?? ""))[0];
+
+  return [
+    {
+      key: "shift",
+      label: "Officers on shift",
+      value: onShift,
+      unit: `of ${employees.length} on register`,
+      note: `${rostered} ROSTERED · ${onLeave} ON LEAVE`,
+      noteKind: "neutral",
+    },
+    {
+      key: "sites",
+      label: "Sites under order",
+      value: sites,
+      unit: `${active.length} active ${active.length === 1 ? "account" : "accounts"}`,
+      note: `CONTRACT VALUE ${money(value)} P.A.`,
+      noteKind: "neutral",
+    },
+    {
+      key: "work",
+      label: "Open work items",
+      value: open.length,
+      unit: `${late.length} past due`,
+      note: late.length ? late.slice(0, 3).map((c) => c.ref).join(" · ") : "NONE PAST DUE",
+      noteKind: late.length ? "breach" : "secure",
+    },
+    {
+      key: "licences",
+      label: "Licences expiring",
+      value: expiring.length,
+      unit: `next ${EXPIRY_WINDOW_DAYS} days`,
+      note: expired.length
+        ? `${expired.length} ALREADY EXPIRED`
+        : nextUp
+          ? `NEXT · ${nextUp.name.toUpperCase()} ${nextUp.exp}`
+          : "NONE DUE",
+      noteKind: expired.length ? "breach" : expiring.length ? "advisory" : "secure",
+    },
+  ];
+}
+
+export async function getPortal(db: D1Database, email: string, now = new Date()): Promise<PortalData> {
+  const today = todaySydney(now);
+  const [employees, clients, opsColumns, roles, candidates, regions, feed, audit] = await Promise.all([
+    getEmployees(db, today),
+    getClients(db),
+    getOpsBoard(db, today),
+    getRoles(db),
+    getCandidates(db, today),
+    getRegions(db),
+    getFeed(db, today),
+    getAudit(db),
+  ]);
+  return {
+    me: { email },
+    today,
+    metrics: computeMetrics(employees, clients, opsColumns),
+    employees,
+    clients,
+    opsColumns,
+    roles,
+    candidates,
+    regions,
+    feed,
+    audit,
+  };
 }

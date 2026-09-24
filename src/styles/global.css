@@ -1,11 +1,11 @@
 @import "./ds/styles.css";
+@import "./portal.css";
 
 html,
 body,
 #root {
   margin: 0;
   height: 100%;
-  background: var(--surface-page);
 }
 
 a {
@@ -21,7 +21,10 @@ a:hover {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--sand-300);
-  border: 3px solid var(--sand-50);
+  background: var(--border-default);
+  border: 3px solid var(--surface-page);
   border-radius: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
 }

@@ -1,196 +1,277 @@
-import { useState } from "react";
-import { usePortalData } from "../lib/DataProvider";
+import { LayoutGroup, motion } from "motion/react";
+import { useEffect, useMemo, useState } from "react";
+import { Plus } from "lucide-react";
+import type { OpsCard, OpsColumn } from "../../shared/types";
+import { useActions } from "../actions/ActionHost";
+import { DragCard } from "../components/DragCard";
+import { Badge, Tag } from "../components/ui/Badge";
+import { Empty, Tabs } from "../components/ui/Bits";
+import { usePortal } from "../lib/DataProvider";
+import { addDays, dayMonth, daysBetween, pad2 } from "../lib/format";
+import { DUR, tween } from "../lib/motion";
+import { useSelection } from "../lib/selection";
 
-const WEEKS = ["03 AUG", "10 AUG", "17 AUG", "24 AUG", "31 AUG", "07 SEP", "14 SEP", "21 SEP", "28 SEP"];
-const BAR_STYLE: Record<string, [string, string]> = {
-  done: ["var(--sand-300)", "var(--sand-300)"],
-  active: ["var(--bark-700)", "var(--bark-700)"],
-  plan: ["#ffffff", "var(--bark-300)"],
-};
-const TIMELINE_BG =
-  "linear-gradient(to right,transparent calc(42.86% - 1px),var(--brass-600) calc(42.86% - 1px),var(--brass-600) calc(42.86% + 1px),transparent calc(42.86% + 1px)),repeating-linear-gradient(to right,var(--sand-200),var(--sand-200) 1px,transparent 1px,transparent 11.111%)";
+const VIEWS = ["Board", "Timeline"] as const;
 
-export function OperationsPage() {
-  const { data } = usePortalData();
-  const [tab, setTab] = useState<"board" | "timeline">("board");
-  if (!data) return null;
-  const { opsColumns, gantt } = data;
-  const totalOpen = opsColumns.filter((c) => !c.done).reduce((n, c) => n + c.cards.length, 0);
+function Card({ card, done, flash }: { card: OpsCard; done: boolean; flash: boolean }) {
+  return (
+    <>
+      <div className="pt-card__top">
+        <span className="pt-mono pt-dim">{card.ref}</span>
+        <Tag>{card.line}</Tag>
+      </div>
+      <div className="pt-card__title">{card.title}</div>
+      <div className="pt-card__site">{card.site}</div>
+      <div className="pt-card__foot">
+        <span className={`pt-card__due${card.late ? " pt-card__due--late" : ""}`}>{done ? "COMPLETE" : card.due}</span>
+        {card.late && <Badge kind="breach" label="Past due" />}
+        <span className="pt-owner" style={{ marginLeft: "auto" }} title={`Owner ${card.who}`}>
+          {card.who}
+        </span>
+      </div>
+      {flash && (
+        <motion.span
+          aria-hidden
+          style={{ position: "absolute", inset: -1, border: "1px solid var(--brass-500)", pointerEvents: "none" }}
+          initial={{ opacity: 1 }}
+          animate={{ opacity: 0, transition: tween(2.2, 0.6) }}
+        />
+      )}
+    </>
+  );
+}
+
+function Board({ columns, flashId }: { columns: OpsColumn[]; flashId: number | null }) {
+  const actions = useActions();
+  const [over, setOver] = useState<string | null>(null);
+  return (
+    <LayoutGroup>
+      <div className="pt-board">
+        {columns.map((col) => (
+          <section
+            key={col.id}
+            className={`pt-col${col.done ? " pt-col--done" : ""}${over === String(col.id) ? " pt-col--over" : ""}`}
+            data-drop={col.id}
+            aria-label={`${col.label}, ${col.cards.length} items`}
+          >
+            <div className="pt-col__head">
+              <span className="pt-eyebrow" style={{ gap: 0 }}>
+                {col.label}
+              </span>
+              <span className="pt-meta">{pad2(col.cards.length)}</span>
+              <button className="pt-iconbtn pt-iconbtn--sm" aria-label={`Raise work in ${col.label}`} onClick={() => actions.raiseWork({ columnId: col.id })}>
+                <Plus size={14} />
+              </button>
+            </div>
+            <div className="pt-col__cards">
+              {col.cards.map((card) => (
+                <DragCard
+                  key={card.id}
+                  id={`op-${card.id}`}
+                  label={`${card.ref} ${card.title}. Drag to move, or press Enter to edit.`}
+                  className={`pt-card${card.late ? " pt-card--late" : ""}`}
+                  onHover={setOver}
+                  onDrop={(target) => void actions.moveWork(card, Number(target))}
+                  onOpen={() => actions.editWork(card)}
+                >
+                  <Card card={card} done={col.done} flash={flashId === card.id} />
+                </DragCard>
+              ))}
+              {col.cards.length === 0 && <div className="pt-col__drop">{col.done ? "Completed items land here" : "Drop work here"}</div>}
+            </div>
+          </section>
+        ))}
+      </div>
+    </LayoutGroup>
+  );
+}
+
+function Timeline({ columns, today }: { columns: OpsColumn[]; today: string }) {
+  const actions = useActions();
+  const dated = columns.flatMap((c, i) =>
+    c.cards
+      .filter((k) => k.dueDate)
+      .map((k) => {
+        const created = k.createdAt ? k.createdAt.slice(0, 10) : addDays(k.dueDate!, -7);
+        const start = created < k.dueDate! ? created : addDays(k.dueDate!, -1);
+        return { card: k, column: c, start, end: k.dueDate!, kind: c.done ? "done" : k.late ? "late" : i === 0 ? "plan" : "active" };
+      })
+  );
+  const undated = columns.reduce((n, c) => n + c.cards.filter((k) => !k.dueDate).length, 0);
+
+  const range = useMemo(() => {
+    const lo = [today, ...dated.map((x) => x.start)].sort()[0]!;
+    const hi = [addDays(today, 21), ...dated.map((x) => x.end)].sort().reverse()[0]!;
+    // Start on the Monday on/before `lo`.
+    const dow = new Date(`${lo}T00:00:00Z`).getUTCDay() || 7;
+    const from = addDays(lo, 1 - dow);
+    const weeks = Math.min(16, Math.max(6, Math.ceil((daysBetween(from, hi) + 1) / 7)));
+    return { from, weeks, days: weeks * 7 };
+  }, [dated, today]);
+
+  const pos = (iso: string) => (Math.max(0, Math.min(range.days, daysBetween(range.from, iso))) / range.days) * 100;
+
+  if (dated.length === 0)
+    return (
+      <Empty
+        index="00"
+        title="Nothing on the programme yet."
+        body="Work items appear here as bars from the day they were raised to the day they fall due."
+        action={
+          <button className="sds-btn sds-btn--md sds-btn--primary" onClick={() => actions.raiseWork()}>
+            Raise work
+          </button>
+        }
+      />
+    );
 
   return (
     <>
-      <div style={{ display: "flex", gap: 2, borderBottom: "1px solid var(--border-subtle)", marginBottom: 24 }}>
-        {(["board", "timeline"] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            style={{
-              padding: "8px 18px 10px",
-              background: "none",
-              border: 0,
-              borderBottom: `2px solid ${tab === t ? "var(--brass-600)" : "transparent"}`,
-              marginBottom: -1,
-              fontFamily: "var(--font-text)",
-              fontSize: 11,
-              fontWeight: 600,
-              letterSpacing: "0.1em",
-              textTransform: "uppercase",
-              color: tab === t ? "var(--text-primary)" : "var(--text-tertiary)",
-              cursor: "pointer",
-            }}
-          >
-            {t === "board" ? "Board" : "Timeline"}
-          </button>
-        ))}
-        <span style={{ marginLeft: "auto", alignSelf: "center", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-tertiary)" }}>
-          ORDER BOOK · WK 35 · {totalOpen} ITEMS OPEN
-        </span>
-      </div>
-
-      {tab === "board" && (
-        <div style={{ display: "flex", gap: 20, alignItems: "flex-start", overflowX: "auto", paddingBottom: 16 }}>
-          {opsColumns.map((c) => (
-            <div key={c.label} style={{ width: 284, flex: "none" }}>
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", borderTop: "2px solid var(--bark-800)", padding: "10px 2px 12px" }}>
-                <span style={{ font: "var(--type-eyebrow)", textTransform: "uppercase", letterSpacing: "var(--track-eyebrow)", color: "var(--text-secondary)" }}>
-                  {c.label}
-                </span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-tertiary)" }}>
-                  {String(c.cards.length).padStart(2, "0")}
-                </span>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {c.cards.map((k) => (
-                  <div
-                    key={k.ref}
-                    style={{
-                      background: "var(--surface-raised)",
-                      border: "1px solid var(--border-subtle)",
-                      borderRadius: "var(--radius-sm)",
-                      padding: "14px 16px",
-                      boxShadow: "var(--shadow-hair)",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-tertiary)" }}>{k.ref}</span>
-                      <span
-                        style={{
-                          fontSize: 9.5,
-                          fontWeight: 600,
-                          letterSpacing: "0.1em",
-                          textTransform: "uppercase",
-                          color: "var(--text-secondary)",
-                          border: "1px solid var(--border-default)",
-                          padding: "1px 6px",
-                          borderRadius: 2,
-                        }}
-                      >
-                        {k.line}
-                      </span>
-                    </div>
-                    <div style={{ marginTop: 8, fontSize: 13.5, lineHeight: 1.45 }}>{k.title}</div>
-                    <div style={{ marginTop: 4, font: "var(--type-small)", color: "var(--text-tertiary)" }}>{k.site}</div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: k.late ? "var(--clay-600)" : "var(--text-tertiary)" }}>{k.due}</span>
-                      <span
-                        style={{
-                          marginLeft: "auto",
-                          width: 22,
-                          height: 22,
-                          borderRadius: "var(--radius-sm)",
-                          background: "var(--sand-200)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontFamily: "var(--font-mono)",
-                          fontSize: 9,
-                          color: "var(--bark-600)",
-                        }}
-                      >
-                        {k.who}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {tab === "timeline" && (
-        <div style={{ background: "var(--surface-raised)", border: "1px solid var(--border-subtle)" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", borderBottom: "2px solid var(--bark-800)" }}>
-            <div style={{ padding: "12px 18px", font: "var(--type-eyebrow)", textTransform: "uppercase", letterSpacing: "var(--track-eyebrow)", color: "var(--text-secondary)" }}>
+      <div className="pt-tl">
+        <div className="pt-tl__row pt-tl__row--head">
+          <div className="pt-tl__label">
+            <span className="pt-eyebrow" style={{ gap: 0 }}>
               Programme
-            </div>
-            <div style={{ position: "relative" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(9,1fr)", height: "100%" }}>
-                {WEEKS.map((w) => (
-                  <div key={w} style={{ padding: "12px 0 12px 8px", borderLeft: "1px solid var(--border-subtle)", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-tertiary)" }}>
-                    {w}
-                  </div>
-                ))}
-              </div>
-            </div>
+            </span>
           </div>
-
-          {gantt.map((s) => (
-            <div key={s.num}>
-              <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", background: "var(--surface-sunken)", borderBottom: "1px solid var(--border-subtle)" }}>
-                <div style={{ padding: "9px 18px", display: "flex", gap: 12, alignItems: "baseline" }}>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--brass-700)" }}>{s.num}</span>
-                  <span style={{ fontSize: 12.5, fontWeight: 600 }}>{s.name}</span>
+          <div className="pt-tl__track">
+            <div className="pt-tl__weeks" style={{ gridTemplateColumns: `repeat(${range.weeks}, 1fr)` }}>
+              {Array.from({ length: range.weeks }, (_, i) => (
+                <div key={i} className="pt-tl__week">
+                  {dayMonth(addDays(range.from, i * 7))}
                 </div>
-                <div style={{ backgroundImage: TIMELINE_BG }} />
-              </div>
-              {s.tasks.map((t) => {
-                const [bg, border] = BAR_STYLE[t.k];
-                return (
-                  <div key={t.name} style={{ display: "grid", gridTemplateColumns: "260px 1fr", borderBottom: "1px solid var(--border-subtle)" }}>
-                    <div style={{ padding: "10px 18px 10px 41px", fontSize: 13, color: "var(--text-secondary)" }}>{t.name}</div>
-                    <div style={{ position: "relative", backgroundImage: TIMELINE_BG }}>
-                      <div
-                        title={t.name}
-                        style={{
-                          position: "absolute",
-                          top: "50%",
-                          transform: "translateY(-50%)",
-                          height: 16,
-                          left: `${((t.s / 63) * 100).toFixed(2)}%`,
-                          width: `${(((t.e - t.s + 1) / 63) * 100).toFixed(2)}%`,
-                          background: bg,
-                          border: `1px solid ${border}`,
-                          borderRadius: 1,
-                        }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-
-          <div style={{ position: "relative", display: "grid", gridTemplateColumns: "260px 1fr" }}>
-            <div style={{ padding: "10px 18px", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-tertiary)" }}>03 AUG — 04 OCT 2026</div>
-            <div style={{ display: "flex", gap: 20, alignItems: "center", padding: "10px 0" }}>
-              <span style={{ display: "flex", gap: 7, alignItems: "center", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-tertiary)" }}>
-                <span style={{ width: 14, height: 8, background: "var(--sand-300)", border: "1px solid var(--sand-300)" }} />COMPLETE
-              </span>
-              <span style={{ display: "flex", gap: 7, alignItems: "center", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-tertiary)" }}>
-                <span style={{ width: 14, height: 8, background: "var(--bark-700)" }} />IN PROGRESS
-              </span>
-              <span style={{ display: "flex", gap: 7, alignItems: "center", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-tertiary)" }}>
-                <span style={{ width: 14, height: 8, background: "#fff", border: "1px solid var(--bark-300)" }} />SCHEDULED
-              </span>
-              <span style={{ display: "flex", gap: 7, alignItems: "center", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--brass-700)" }}>
-                <span style={{ width: 2, height: 12, background: "var(--brass-600)" }} />TODAY 30 AUG
-              </span>
+              ))}
             </div>
           </div>
         </div>
-      )}
+        {columns.map((col) => {
+          const rows = dated.filter((x) => x.column.id === col.id).sort((a, b) => a.end.localeCompare(b.end));
+          if (!rows.length) return null;
+          return (
+            <div key={col.id}>
+              <div className="pt-tl__row pt-tl__row--group">
+                <div className="pt-tl__label">
+                  <span className="pt-mono" style={{ color: "var(--text-brand)" }}>
+                    {pad2(rows.length)}
+                  </span>
+                  <span style={{ fontWeight: 600, color: "var(--text-primary)", fontSize: 12.5 }}>{col.label}</span>
+                </div>
+                <div className="pt-tl__track" style={{ minHeight: 0 }}>
+                  <div className="pt-tl__today" style={{ left: `${pos(today)}%` }} />
+                </div>
+              </div>
+              {rows.map(({ card, start, end, kind }, i) => (
+                <div key={card.id} className="pt-tl__row" style={{ cursor: "pointer" }} onClick={() => actions.editWork(card)}>
+                  <div className="pt-tl__label" style={{ paddingLeft: 38 }}>
+                    <span className="pt-mono pt-dim">{card.ref}</span>
+                    <span>{card.title}</span>
+                  </div>
+                  <div className="pt-tl__track">
+                    <div className="pt-tl__weeks" style={{ gridTemplateColumns: `repeat(${range.weeks}, 1fr)`, position: "absolute", inset: 0 }}>
+                      {Array.from({ length: range.weeks }, (_, w) => (
+                        <div key={w} className="pt-tl__week" style={{ padding: 0 }} />
+                      ))}
+                    </div>
+                    <div className="pt-tl__today" style={{ left: `${pos(today)}%` }} />
+                    <motion.div
+                      className={`pt-tl__bar pt-tl__bar--${kind}`}
+                      title={`${card.ref} · ${dayMonth(start)} → ${dayMonth(end)}`}
+                      style={{ left: `${pos(start)}%`, width: `${Math.max(0.8, pos(addDays(end, 1)) - pos(start))}%` }}
+                      initial={{ scaleX: 0 }}
+                      animate={{ scaleX: 1, transition: tween(DUR.reveal, 0.05 + i * 0.03) }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+      <div className="pt-legend" style={{ marginTop: 14 }}>
+        <span>
+          <i style={{ background: "var(--sand-300)" }} />
+          COMPLETE
+        </span>
+        <span>
+          <i style={{ background: "var(--rule-strong)" }} />
+          IN PROGRESS
+        </span>
+        <span>
+          <i style={{ border: "1px solid var(--border-strong)" }} />
+          RAISED
+        </span>
+        <span>
+          <i style={{ background: "var(--status-breach-dot)" }} />
+          PAST DUE
+        </span>
+        <span style={{ color: "var(--text-brand)" }}>
+          <i style={{ width: 2, height: 12, background: "var(--brass-500)" }} />
+          TODAY {dayMonth(today)}
+        </span>
+        {undated > 0 && <span style={{ marginLeft: "auto" }}>{undated} UNDATED ITEMS NOT SHOWN</span>}
+      </div>
+    </>
+  );
+}
+
+export function OperationsPage() {
+  const d = usePortal();
+  const actions = useActions();
+  const [view, setView] = useState<(typeof VIEWS)[number]>("Board");
+  const [cardId] = useSelection("card");
+  const [flash, setFlash] = useState<number | null>(null);
+  const total = d.opsColumns.reduce((n, c) => n + c.cards.length, 0);
+  const open = d.opsColumns.filter((c) => !c.done).reduce((n, c) => n + c.cards.length, 0);
+  const late = d.opsColumns.flatMap((c) => c.cards).filter((c) => c.late).length;
+
+  useEffect(() => {
+    if (cardId === null) return;
+    setView("Board");
+    setFlash(cardId);
+    const t = window.setTimeout(() => {
+      const el = document.querySelector<HTMLElement>(`[data-record="op-${cardId}"]`);
+      el?.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
+      el?.focus({ preventScroll: true });
+    }, 120);
+    return () => window.clearTimeout(t);
+  }, [cardId]);
+
+  return (
+    <>
+      <Tabs
+        id="ops"
+        tabs={VIEWS}
+        value={view}
+        onChange={setView}
+        trailing={
+          <span className="pt-meta">
+            {open} open · {late} past due · drag cards between columns
+          </span>
+        }
+      />
+      <div style={{ marginTop: 20 }}>
+        {total === 0 && view === "Board" ? (
+          <>
+            <Empty
+              index="00"
+              title="The order book is clear."
+              body="Raise a work item for anything that needs doing at a client site — patrol variances, audits, faults, debriefs. Drag it across the board as it progresses."
+              action={
+                <button className="sds-btn sds-btn--md sds-btn--primary" onClick={() => actions.raiseWork()}>
+                  Raise work
+                </button>
+              }
+            />
+            <div style={{ marginTop: 28 }}>
+              <Board columns={d.opsColumns} flashId={flash} />
+            </div>
+          </>
+        ) : view === "Board" ? (
+          <Board columns={d.opsColumns} flashId={flash} />
+        ) : (
+          <Timeline columns={d.opsColumns} today={d.today} />
+        )}
+      </div>
     </>
   );
 }
