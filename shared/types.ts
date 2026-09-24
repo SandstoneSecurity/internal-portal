@@ -1,8 +1,9 @@
 export type StatusKind = "secure" | "advisory" | "breach" | "info" | "neutral";
 
 export interface Metric {
+  key: string;
   label: string;
-  value: string;
+  value: number;
   unit: string;
   note: string;
   noteKind: StatusKind;
@@ -19,8 +20,13 @@ export interface Employee {
   name: string;
   role: string;
   cls: string;
+  /** Display label, e.g. "14 OCT 26". */
   exp: string;
+  /** ISO date when known (rows written through the API); null for legacy rows. */
+  expDate: string | null;
+  /** Licence expires within 90 days (or already has). */
   expirySoon: boolean;
+  expired: boolean;
   site: string;
   status: string;
   kind: StatusKind;
@@ -64,32 +70,25 @@ export interface Client {
 }
 
 export interface OpsCard {
+  id: number;
+  columnId: number;
   ref: string;
   title: string;
   site: string;
   line: string;
+  /** Display label, e.g. "DUE 04 SEP". */
   due: string;
+  dueDate: string | null;
+  createdAt: string | null;
   late: boolean;
   who: string;
 }
 
 export interface OpsColumn {
+  id: number;
   label: string;
   done: boolean;
   cards: OpsCard[];
-}
-
-export interface GanttTask {
-  name: string;
-  s: number;
-  e: number;
-  k: "done" | "active" | "plan";
-}
-
-export interface GanttSection {
-  num: string;
-  name: string;
-  tasks: GanttTask[];
 }
 
 export interface Role {
@@ -102,6 +101,7 @@ export interface Role {
 }
 
 export interface Candidate {
+  id: number;
   roleId: number;
   stage: number;
   name: string;
@@ -132,14 +132,64 @@ export interface IntelItem {
   source: string;
 }
 
+export interface AuditEntry {
+  id: number;
+  at: string;
+  actor: string;
+  action: "create" | "update" | "delete" | "move";
+  entity: string;
+  entityId: string | null;
+  summary: string;
+}
+
 export interface PortalData {
+  me: { email: string };
+  /** Today's date in Sydney, ISO YYYY-MM-DD — the portal's reference "now". */
+  today: string;
   metrics: Metric[];
   employees: Employee[];
   clients: Client[];
   opsColumns: OpsColumn[];
-  gantt: GanttSection[];
   roles: Role[];
   candidates: Candidate[];
   regions: Region[];
   feed: IntelItem[];
+  audit: AuditEntry[];
+}
+
+/** Recruitment pipeline stages, in order; Candidate.stage indexes this list. */
+export const STAGES = ["Applied", "Screened", "Interview", "Licence check", "Offer"] as const;
+
+export const EMPLOYEE_STATUSES = [
+  ["On shift", "secure"],
+  ["Rostered", "info"],
+  ["Leave", "neutral"],
+  ["Stood down", "breach"],
+] as const satisfies readonly (readonly [string, StatusKind])[];
+
+export const CLIENT_STATUSES = [
+  ["Prospect", "info"],
+  ["Proposal", "advisory"],
+  ["Active", "secure"],
+  ["Dormant", "neutral"],
+] as const satisfies readonly (readonly [string, StatusKind])[];
+
+export const ROLE_STATUSES = [
+  ["New", "info"],
+  ["Open", "secure"],
+  ["Shortlisting", "advisory"],
+  ["On hold", "neutral"],
+  ["Filled", "neutral"],
+] as const satisfies readonly (readonly [string, StatusKind])[];
+
+export const INTEL_SEVERITIES = [
+  ["Breach", "breach"],
+  ["Advisory", "advisory"],
+  ["Information", "info"],
+] as const satisfies readonly (readonly [string, StatusKind])[];
+
+export const SERVICE_LINES = ["Ops", "Protective", "Advisory", "Tech", "Training"] as const;
+
+export function kindFor(table: readonly (readonly [string, StatusKind])[], label: string): StatusKind {
+  return table.find(([l]) => l === label)?.[1] ?? "neutral";
 }

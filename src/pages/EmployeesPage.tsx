@@ -1,116 +1,223 @@
-import { useState } from "react";
-import { usePortalData } from "../lib/DataProvider";
-import { statusColors } from "../lib/status";
+import { AnimatePresence, motion } from "motion/react";
+import { useMemo, useState } from "react";
+import { Search } from "lucide-react";
+import type { Employee } from "../../shared/types";
+import { useActions } from "../actions/ActionHost";
+import { Badge } from "../components/ui/Badge";
+import { Empty, Measure, RowMenu, SectionHead, Tabs } from "../components/ui/Bits";
+import { usePortal } from "../lib/DataProvider";
+import { daysBetween, matches } from "../lib/format";
+import { list, row, swap } from "../lib/motion";
+import { registerKeys, useSelection } from "../lib/selection";
 
-export function EmployeesPage() {
-  const { data } = usePortalData();
-  const [empId, setEmpId] = useState<number | null>(null);
-  if (!data) return null;
-  const { employees } = data;
-  const selId = empId ?? employees[0]?.id;
-  const sel = employees.find((e) => e.id === selId);
+const FILTERS = ["All", "On shift", "Rostered", "Leave", "Licences due"] as const;
+const COLS = "minmax(0,1.4fr) minmax(0,1.3fr) 70px 92px minmax(0,1.2fr) 112px 34px";
 
-  const facts = sel
-    ? [
-        { k: "Licence", v: "CLASS " + sel.cls, color: "var(--text-primary)" },
-        { k: "Licence expiry", v: sel.exp, color: sel.expirySoon ? "var(--ochre-600)" : "var(--text-primary)" },
-        { k: "First aid", v: sel.firstAid, color: "var(--text-primary)" },
-        { k: "Assignment", v: sel.site.toUpperCase().slice(0, 22), color: "var(--text-primary)" },
-        { k: "Employment", v: sel.employmentType, color: "var(--text-primary)" },
-        { k: "Mobile", v: sel.mobile, color: "var(--text-primary)" },
-      ]
-    : [];
-
+function File({ e, today }: { e: Employee; today: string }) {
+  const actions = useActions();
+  const left = e.expDate ? daysBetween(today, e.expDate) : null;
+  const expColor = e.expired ? "var(--status-breach-fg)" : e.expirySoon ? "var(--status-advisory-fg)" : "var(--text-primary)";
+  const facts = [
+    { k: "Licence", v: `CLASS ${e.cls}` },
+    { k: "Licence expiry", v: e.exp, color: expColor },
+    { k: "First aid", v: e.firstAid },
+    { k: "Assignment", v: e.site.toUpperCase() },
+    { k: "Employment", v: e.employmentType },
+    { k: "Mobile", v: e.mobile },
+  ];
   return (
-    <div style={{ display: "flex", gap: 28, alignItems: "flex-start" }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ borderBottom: "2px solid var(--bark-800)", paddingBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-          <span className="sds-eyebrow">Employee register</span>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-tertiary)" }}>
-            {employees.length} LICENSED · SHOWING {employees.length}
+    <div className="pt-file__pad">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span className="pt-eyebrow">Personnel file</span>
+        <Badge kind={e.kind} label={e.status} />
+      </div>
+      <div className="pt-file__title">{e.name}</div>
+      <div className="pt-file__sub">
+        {e.role} · since {e.since}
+      </div>
+
+      <div className="pt-file__block">
+        <div className="pt-file__blockhead">
+          <span className="pt-meta">Licence validity</span>
+          <span className="pt-meta" style={{ color: expColor }}>
+            {left === null ? e.exp : e.expired ? `EXPIRED ${-left} DAYS AGO` : `${left} DAYS REMAINING`}
           </span>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1.3fr 0.7fr 0.9fr 1.2fr 0.9fr", gap: 14, padding: "10px 0 8px", borderBottom: "1px solid var(--border-subtle)" }}>
-          {["NAME", "ROLE", "LICENCE", "EXPIRY", "ASSIGNMENT", "STATUS"].map((h) => (
-            <span key={h} style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.08em", color: "var(--text-tertiary)" }}>
-              {h}
+        <Measure
+          ratio={left === null ? 0 : e.expired ? 1 : 1 - Math.min(1, left / 365)}
+          tone={e.expired ? "breach" : e.expirySoon ? "advisory" : "secure"}
+        />
+      </div>
+
+      <div className="pt-facts">
+        {facts.map((f) => (
+          <div key={f.k} className="pt-fact">
+            <span className="pt-fact__k">{f.k}</span>
+            <span className="pt-fact__v" style={{ color: f.color }}>
+              {f.v}
             </span>
-          ))}
+          </div>
+        ))}
+      </div>
+
+      <div className="pt-file__block">
+        <div className="pt-file__blockhead">
+          <span className="pt-meta">Recent shifts</span>
+          <button className="pt-addlink" onClick={() => actions.rosterShift(e)}>
+            + Roster
+          </button>
         </div>
-        {employees.map((e) => {
-          const { bg, fg, dot } = statusColors(e.kind);
-          return (
-            <div
-              key={e.id}
-              onClick={() => setEmpId(e.id)}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1.4fr 1.3fr 0.7fr 0.9fr 1.2fr 0.9fr",
-                gap: 14,
-                alignItems: "center",
-                padding: "12px 0",
-                borderBottom: "1px solid var(--border-subtle)",
-                cursor: "pointer",
-                background: e.id === selId ? "var(--sand-100)" : "transparent",
-              }}
-            >
-              <span style={{ fontSize: 13.5, fontWeight: 600 }}>{e.name}</span>
-              <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{e.role}</span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{e.cls}</span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: e.expirySoon ? "var(--ochre-600)" : "var(--text-secondary)" }}>{e.exp}</span>
-              <span style={{ font: "var(--type-small)", color: "var(--text-tertiary)" }}>{e.site}</span>
-              <span
-                style={{
-                  justifySelf: "start",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "2px 8px",
-                  background: bg,
-                  color: fg,
-                  fontSize: 10,
-                  fontWeight: 600,
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                  borderRadius: 2,
-                }}
-              >
-                <span style={{ width: 6, height: 6, borderRadius: 999, background: dot }} />
-                {e.status}
+        {e.shifts.length === 0 ? (
+          <div style={{ font: "var(--type-small)", color: "var(--text-tertiary)", padding: "6px 0" }}>No shifts rostered yet.</div>
+        ) : (
+          e.shifts.slice(0, 5).map((s, i) => (
+            <div key={i} className="pt-line pt-mono" style={{ fontSize: 11 }}>
+              <span className="pt-dim" style={{ width: 48 }}>
+                {s.date}
+              </span>
+              <span>{s.span}</span>
+              <span className="pt-dim" style={{ marginLeft: "auto" }}>
+                {s.site}
               </span>
             </div>
-          );
-        })}
+          ))
+        )}
+      </div>
+
+      <div className="pt-file__actions">
+        <button className="sds-btn sds-btn--sm sds-btn--secondary" onClick={() => actions.editEmployee(e)}>
+          Edit file
+        </button>
+        <button className="sds-btn sds-btn--sm sds-btn--ghost" onClick={() => actions.rosterShift(e)}>
+          Roster shift
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function EmployeesPage() {
+  const d = usePortal();
+  const actions = useActions();
+  const [filter, setFilter] = useState<(typeof FILTERS)[number]>("All");
+  const [q, setQ] = useState("");
+  const [idParam, setId] = useSelection("id");
+
+  const counts = useMemo(
+    () => ({
+      All: d.employees.length,
+      "On shift": d.employees.filter((e) => e.status === "On shift").length,
+      Rostered: d.employees.filter((e) => e.status === "Rostered").length,
+      Leave: d.employees.filter((e) => e.status === "Leave").length,
+      "Licences due": d.employees.filter((e) => e.expirySoon).length,
+    }),
+    [d.employees]
+  );
+  const shown = d.employees.filter(
+    (e) =>
+      (filter === "All" || (filter === "Licences due" ? e.expirySoon : e.status === filter)) &&
+      matches(q, e.name, e.role, e.site, e.cls, e.status)
+  );
+  const selId = d.employees.some((e) => e.id === idParam) ? idParam : shown[0]?.id ?? null;
+  const sel = d.employees.find((e) => e.id === selId);
+
+  if (d.employees.length === 0)
+    return (
+      <Empty
+        index="00"
+        title="The personnel register is empty."
+        body="Add your licensed officers and head-office staff. Licence expiries are tracked automatically — anyone due within 90 days is flagged on Control."
+        action={
+          <button className="sds-btn sds-btn--md sds-btn--primary" onClick={actions.addEmployee}>
+            Add employee
+          </button>
+        }
+      />
+    );
+
+  return (
+    <div className="pt-split">
+      <div style={{ minWidth: 0 }}>
+        <Tabs
+          id="emp"
+          tabs={FILTERS}
+          value={filter}
+          onChange={setFilter}
+          counts={counts}
+          trailing={
+            <label className="pt-search" style={{ width: 200, height: 30, cursor: "text" }}>
+              <Search size={13} />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Filter register"
+                aria-label="Filter the employee register"
+                style={{ border: 0, outline: 0, background: "transparent", width: "100%", color: "var(--text-primary)", font: "inherit" }}
+              />
+            </label>
+          }
+        />
+        <SectionHead title="Employee register" meta={`Showing ${shown.length} of ${d.employees.length}`} />
+        <div className="pt-reg">
+          <div className="pt-reg__head" style={{ gridTemplateColumns: COLS }}>
+            <span>Name</span>
+            <span>Role</span>
+            <span>Licence</span>
+            <span>Expiry</span>
+            <span className="pt-hide-sm">Assignment</span>
+            <span>Status</span>
+            <span />
+          </div>
+          {shown.length === 0 ? (
+            <div style={{ padding: "16px 12px", font: "var(--type-small)", color: "var(--text-tertiary)" }}>No one matches this filter.</div>
+          ) : (
+            <motion.div variants={list} initial="initial" animate="animate" key={filter}>
+              {shown.map((e) => (
+                <motion.div
+                  key={e.id}
+                  variants={row}
+                  className="pt-reg__row"
+                  style={{ gridTemplateColumns: COLS }}
+                  aria-selected={e.id === selId}
+                  tabIndex={0}
+                  onClick={() => setId(e.id)}
+                  onKeyDown={(ev) => registerKeys(ev, () => setId(e.id))}
+                >
+                  <span className="pt-reg__name">{e.name}</span>
+                  <span className="pt-reg__text">{e.role}</span>
+                  <span className="pt-reg__mono">{e.cls}</span>
+                  <span
+                    className="pt-reg__mono"
+                    style={{ color: e.expired ? "var(--status-breach-fg)" : e.expirySoon ? "var(--status-advisory-fg)" : undefined }}
+                  >
+                    {e.exp}
+                  </span>
+                  <span className="pt-reg__sub pt-hide-sm">{e.site}</span>
+                  <span>
+                    <Badge kind={e.kind} label={e.status} />
+                  </span>
+                  <RowMenu
+                    items={[
+                      { label: "Edit file", onSelect: () => actions.editEmployee(e) },
+                      { label: "Roster shift", onSelect: () => actions.rosterShift(e) },
+                      { label: "Remove from register", onSelect: () => void actions.removeEmployee(e), danger: true },
+                    ]}
+                  />
+                </motion.div>
+              ))}
+            </motion.div>
+          )}
+        </div>
       </div>
 
       {sel && (
-        <div style={{ width: 320, flex: "none", background: "var(--surface-raised)", border: "1px solid var(--border-subtle)", borderTop: "2px solid var(--brass-500)", padding: "22px 24px" }}>
-          <div style={{ font: "var(--type-eyebrow)", textTransform: "uppercase", letterSpacing: "var(--track-eyebrow)", color: "var(--text-tertiary)" }}>Personnel file</div>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-xl)", marginTop: 10 }}>{sel.name}</div>
-          <div style={{ font: "var(--type-small)", color: "var(--text-secondary)", marginTop: 3 }}>
-            {sel.role} · since {sel.since}
-          </div>
-          <div style={{ marginTop: 18, borderTop: "1px solid var(--border-subtle)" }}>
-            {facts.map((f) => (
-              <div key={f.k} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderBottom: "1px solid var(--border-subtle)" }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.08em", color: "var(--text-tertiary)", textTransform: "uppercase" }}>{f.k}</span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: f.color, textAlign: "right" }}>{f.v}</span>
-              </div>
-            ))}
-          </div>
-          <div style={{ marginTop: 16, font: "var(--type-eyebrow)", textTransform: "uppercase", letterSpacing: "var(--track-eyebrow)", color: "var(--text-tertiary)" }}>Recent shifts</div>
-          {sel.shifts.map((s, i) => (
-            <div key={i} style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border-subtle)", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-secondary)" }}>
-              <span style={{ color: "var(--text-tertiary)" }}>{s.date}</span>
-              <span>{s.span}</span>
-              <span style={{ marginLeft: "auto", color: "var(--text-tertiary)" }}>{s.site}</span>
-            </div>
-          ))}
-          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-            <button className="sds-btn sds-btn--sm sds-btn--secondary">Open file</button>
-            <button className="sds-btn sds-btn--sm sds-btn--ghost">Roster</button>
-          </div>
-        </div>
+        <aside className="pt-file">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div key={sel.id} variants={swap} initial="initial" animate="animate" exit="exit">
+              <File e={sel} today={d.today} />
+            </motion.div>
+          </AnimatePresence>
+        </aside>
       )}
     </div>
   );

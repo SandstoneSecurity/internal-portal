@@ -5,15 +5,41 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
 (`Sandstone Admin Portal.dc.html`) as a real application:
 
 - **Frontend:** React + TypeScript (Vite), routed with `react-router`, styled
-  with Sandstone's own design system tokens and `.sds-` component CSS
-  (ported verbatim from the design bundle — see `src/styles/ds/`).
-- **Backend:** a Cloudflare Worker (Hono) serving a small JSON API.
-- **Data:** Cloudflare D1. There's no real business data yet, so the six
-  domains (metrics, employees, clients, ops board/gantt, recruitment,
-  intelligence feed) are seeded with the same fictional placeholder data the
-  design prototype used — see `seed/seed.sql`. Swap that file for real
-  records; the schema (`migrations/0001_init.sql`) doesn't need to change to
-  do that.
+  with Sandstone's design system tokens and `.sds-` component CSS
+  (`src/styles/ds/`) plus the portal layer in `src/styles/portal.css`.
+  Motion uses [`motion`](https://motion.dev) (Framer Motion) with the house
+  easing only: tweens, no springs or bounce. The survey-plate contour
+  background is a three.js shader (`src/components/SurveyField.tsx`). It is
+  lazy-loaded, capped at 30fps, pauses off-screen and stops for
+  reduced-motion users.
+- **Backend:** a Cloudflare Worker (Hono) serving a JSON API: reads plus
+  validated writes (zod), each recorded in an audit log.
+- **Data:** Cloudflare D1. Production starts empty; every figure on Control is
+  computed from the records you keep (officers on shift, sites, open and
+  past-due work, licences expiring in 90 days). `seed/seed.sql` holds the
+  fictional demo data for local use only.
+
+## Using the portal
+
+- **Every button does something.** Raise work, Post a role, Add candidate,
+  Add employee, Roster shift, New account, Add contact, Log activity, Record
+  proposal and Log an item open a form drawer and save straight to D1. Records
+  can be edited and deleted from their row menu or file panel.
+- **Drag and drop.** Drag work cards between Operations columns and
+  candidates between Recruitment stages. Moves update the screen immediately
+  and roll back if the save fails.
+- **Command palette:** press `Ctrl K` / `⌘K` or `/`. From there you can jump
+  to any page, person, account, work item, role or intelligence item, run any
+  action, switch theme, open the activity log or sign out. `N` starts the
+  page's primary action.
+- **Activity log.** The clock icon in the header shows every change: who made
+  it, what it was, and when.
+- **Themes.** The default is limestone (day). Operations mode is the night
+  theme for the control room; toggle it from the header or the palette. The
+  choice is remembered per browser.
+- **Fonts** (Jost, Newsreader, Sandstone Text, Sandstone Mono) are
+  self-hosted from `src/styles/ds/fonts/`, so there are no third-party font
+  requests.
 
 ## Local development
 
@@ -33,16 +59,30 @@ npx wrangler dev
 
 ## Deploying
 
-The D1 database (`sandstone-internal-portal`, see `wrangler.jsonc` for the
-id) already exists in the Cloudflare account. This session had no
-`wrangler login` credentials available, so deployment wasn't run — from a
-machine with account access:
+Pushing to `main` runs **Deploy to Cloudflare** (`.github/workflows/deploy.yml`).
+It applies any new D1 migrations to the remote database, then builds and
+deploys the Worker, using the `CLOUDFLARE_API` secret. The demo seed is never
+loaded remotely.
 
-```bash
-npm run db:migrate:remote
-npm run db:seed:remote
-npm run deploy
-```
+## API
+
+All routes need a valid Access JWT. Writes also need the header
+`X-Sandstone-Portal: 1` and a same-origin `Origin` (the CSRF guard). Invalid
+input returns `400 {error, fields}`.
+
+| Method | Route | |
+| --- | --- | --- |
+| GET | `/api/portal` | Everything the app renders, with computed metrics |
+| POST · PATCH · DELETE | `/api/work[/:id]` | Work items (`columnId` moves a card) |
+| POST · PATCH · DELETE | `/api/employees[/:id]` | Personnel register |
+| POST | `/api/employees/:id/shifts` | Roster a shift |
+| POST · PATCH · DELETE | `/api/clients[/:id]` | Accounts |
+| POST | `/api/clients/:id/contacts`, `/api/clients/:id/activity` | Contacts, activity |
+| PUT · DELETE | `/api/clients/:id/deal` | Open proposal |
+| POST · PATCH · DELETE | `/api/roles[/:id]`, `/api/candidates[/:id]` | Recruitment |
+| POST · DELETE | `/api/intel[/:id]` | Intelligence feed |
+
+Each write runs as one D1 batch together with its `audit_log` row.
 
 ## Access control
 
@@ -85,18 +125,10 @@ could be left on in production.
 ## Project layout
 
 ```
-worker/         Cloudflare Worker (Hono) — GET /api/* routes over D1
+worker/         Cloudflare Worker (Hono): auth, reads (db.ts), writes (writes.ts)
 shared/types.ts Types shared between the Worker and the React app
-src/            React app (pages/, components/, lib/)
+src/            React app (pages/, components/, actions/, lib/)
 src/styles/ds/  Sandstone design system tokens + component CSS (ported as-is)
-migrations/     D1 schema
-seed/           Fictional placeholder data for the six data domains
+migrations/     D1 schema (0002 adds dates, the audit log, board columns, regions)
+seed/           Fictional demo data for local development
 ```
-
-## What's intentionally not wired up yet
-
-The header action buttons (Raise work / Post a role / Add employee / New
-account / Log an item) and the two personnel-file / client-record buttons
-are static, matching the original prototype — it didn't wire them to any
-action either. Building those out (forms + `POST`/`PATCH` endpoints) is a
-follow-up once there's a real workflow to support, not a gap in this pass.

@@ -1,152 +1,249 @@
+import { AnimatePresence, motion } from "motion/react";
 import { useMemo, useState } from "react";
-import { usePortalData } from "../lib/DataProvider";
-import { statusColors } from "../lib/status";
+import type { Client } from "../../shared/types";
+import { useActions } from "../actions/ActionHost";
+import { Badge } from "../components/ui/Badge";
+import { Empty, RowMenu, SectionHead, Tabs } from "../components/ui/Bits";
+import { usePortal } from "../lib/DataProvider";
+import { longDate, money, moneyValue } from "../lib/format";
+import { list, row, swap } from "../lib/motion";
+import { registerKeys, useSelection } from "../lib/selection";
 
 const TABS = ["All", "Prospect", "Proposal", "Active", "Dormant"] as const;
+const COLS = "minmax(0,1.6fr) minmax(0,1fr) 54px 96px 54px 110px 34px";
 
-function totalValuePA(values: string[]): string {
-  const total = values.reduce((sum, v) => sum + Number(v.replace(/[^0-9.]/g, "")), 0);
-  return `$${(total / 1_000_000).toFixed(2)}M P.A.`;
+/** Opens the user's mail client with a one-page account brief, ready to address and send. */
+function briefHref(c: Client, today: string, from: string): string {
+  const lines = [
+    `${c.org} — account brief`,
+    `Prepared ${longDate(today)} by ${from}`,
+    "",
+    `Status: ${c.status}`,
+    `Sector: ${c.sector}`,
+    `Sites under order: ${c.sites}`,
+    `Value per annum: ${c.value}`,
+    `Account owner: ${c.owner}`,
+    c.meta ? `Summary: ${c.meta}` : "",
+    "",
+    c.contacts.length ? "Contacts:" : "",
+    ...c.contacts.map((p) => `  • ${p.name} — ${p.role}`),
+    c.deal ? "" : "",
+    c.deal ? `Open proposal: ${c.deal.name} · ${c.deal.value} · ${c.deal.stage.toLowerCase()} · review ${c.deal.review}` : "",
+    "",
+    c.activity.length ? "Recent activity:" : "",
+    ...c.activity.slice(0, 5).map((a) => `  ${a.date} — ${a.text}`),
+    "",
+    "— Sandstone Security & Risk",
+  ].filter((l, i, all) => !(l === "" && all[i - 1] === ""));
+  return `mailto:?subject=${encodeURIComponent(`Sandstone brief — ${c.org}`)}&body=${encodeURIComponent(lines.join("\n"))}`;
+}
+
+function Record({ c, today, me }: { c: Client; today: string; me: string }) {
+  const actions = useActions();
+  return (
+    <div className="pt-file__pad">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span className="pt-eyebrow">Client record</span>
+        <Badge kind={c.kind} label={c.status} />
+      </div>
+      <div className="pt-file__title">{c.org}</div>
+      <div className="pt-file__sub">{c.meta}</div>
+
+      <div className="pt-facts">
+        {[
+          ["Sector", c.sector.toUpperCase()],
+          ["Sites", String(c.sites)],
+          ["Value p.a.", c.value],
+          ["Owner", c.owner],
+        ].map(([k, v]) => (
+          <div key={k} className="pt-fact">
+            <span className="pt-fact__k">{k}</span>
+            <span className="pt-fact__v">{v}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="pt-file__block">
+        <div className="pt-file__blockhead">
+          <span className="pt-meta">Contacts</span>
+          <button className="pt-addlink" onClick={() => actions.addContact(c)}>
+            + Add
+          </button>
+        </div>
+        {c.contacts.length === 0 ? (
+          <div style={{ font: "var(--type-small)", color: "var(--text-tertiary)", padding: "6px 0" }}>No contacts recorded.</div>
+        ) : (
+          c.contacts.map((p, i) => (
+            <div key={i} className="pt-line">
+              <span style={{ flex: 1 }}>{p.name}</span>
+              <span style={{ font: "var(--type-small)", color: "var(--text-tertiary)" }}>{p.role}</span>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="pt-file__block">
+        {c.deal ? (
+          <button
+            onClick={() => actions.recordProposal(c)}
+            style={{ width: "100%", textAlign: "left", border: "1px solid var(--border-subtle)", background: "var(--surface-sunken)", padding: "14px 16px", cursor: "pointer", color: "inherit" }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <span className="pt-meta" style={{ color: "var(--text-secondary)" }}>
+                Open proposal
+              </span>
+              <span className="pt-mono" style={{ color: "var(--text-brand)", fontSize: 11 }}>
+                {c.deal.stage}
+              </span>
+            </div>
+            <div style={{ marginTop: 8, fontSize: 13.5 }}>{c.deal.name}</div>
+            <div className="pt-mono" style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11, color: "var(--text-secondary)" }}>
+              <span>{c.deal.value}</span>
+              <span>REVIEW {c.deal.review}</span>
+            </div>
+          </button>
+        ) : (
+          <button className="pt-addlink" onClick={() => actions.recordProposal(c)}>
+            + Record a proposal
+          </button>
+        )}
+      </div>
+
+      <div className="pt-file__block">
+        <div className="pt-file__blockhead">
+          <span className="pt-meta">Activity</span>
+          <button className="pt-addlink" onClick={() => actions.logActivity(c)}>
+            + Log
+          </button>
+        </div>
+        {c.activity.length === 0 ? (
+          <div style={{ font: "var(--type-small)", color: "var(--text-tertiary)", padding: "6px 0" }}>No activity logged.</div>
+        ) : (
+          c.activity.slice(0, 6).map((a, i) => (
+            <div key={i} style={{ padding: "9px 0", borderBottom: "1px solid var(--border-subtle)" }}>
+              <div className="pt-mono pt-dim" style={{ fontSize: 10 }}>
+                {a.date}
+              </div>
+              <div style={{ fontSize: 13, marginTop: 3, lineHeight: 1.45 }}>{a.text}</div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="pt-file__actions">
+        <a className="sds-btn sds-btn--sm sds-btn--secondary" href={briefHref(c, today, me)}>
+          Send brief
+        </a>
+        <button className="sds-btn sds-btn--sm sds-btn--ghost" onClick={() => actions.logActivity(c)}>
+          Log activity
+        </button>
+        <button className="sds-btn sds-btn--sm sds-btn--ghost" onClick={() => actions.editClient(c)}>
+          Edit
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export function ClientsPage() {
-  const { data } = usePortalData();
+  const d = usePortal();
+  const actions = useActions();
   const [tab, setTab] = useState<(typeof TABS)[number]>("All");
-  const [clientId, setClientId] = useState<number | null>(null);
-  if (!data) return null;
-  const { clients } = data;
+  const [idParam, setId] = useSelection("id");
 
-  const filtered = clients.filter((c) => tab === "All" || c.status === tab);
-  const selId = clientId ?? filtered[0]?.id ?? clients[0]?.id;
-  const sel = clients.find((c) => c.id === selId) ?? filtered[0] ?? clients[0];
-  const contractValue = useMemo(() => totalValuePA(clients.map((c) => c.value)), [clients]);
+  const counts = useMemo(() => {
+    const out: Record<string, number> = { All: d.clients.length };
+    for (const t of TABS.slice(1)) out[t] = d.clients.filter((c) => c.status === t).length;
+    return out;
+  }, [d.clients]);
+  const shown = d.clients.filter((c) => tab === "All" || c.status === tab);
+  const selId = d.clients.some((c) => c.id === idParam) ? idParam : shown[0]?.id ?? null;
+  const sel = d.clients.find((c) => c.id === selId);
+  const value = money(d.clients.filter((c) => c.status === "Active").reduce((n, c) => n + moneyValue(c.value), 0));
+
+  if (d.clients.length === 0)
+    return (
+      <Empty
+        index="00"
+        title="No client accounts yet."
+        body="Open an account for each client — prospects included. Record contacts, proposals and activity against it, and send a one-page brief from the record."
+        action={
+          <button className="sds-btn sds-btn--md sds-btn--primary" onClick={actions.newClient}>
+            New account
+          </button>
+        }
+      />
+    );
 
   return (
-    <div style={{ display: "flex", gap: 28, alignItems: "flex-start" }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", gap: 2, borderBottom: "1px solid var(--border-subtle)", marginBottom: 4 }}>
-          {TABS.map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              style={{
-                padding: "8px 16px 10px",
-                background: "none",
-                border: 0,
-                borderBottom: `2px solid ${tab === t ? "var(--brass-600)" : "transparent"}`,
-                marginBottom: -1,
-                fontFamily: "var(--font-text)",
-                fontSize: 11,
-                fontWeight: 600,
-                letterSpacing: "0.1em",
-                textTransform: "uppercase",
-                color: tab === t ? "var(--text-primary)" : "var(--text-tertiary)",
-                cursor: "pointer",
-              }}
-            >
-              {t}
-            </button>
-          ))}
-          <span style={{ marginLeft: "auto", alignSelf: "center", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-tertiary)" }}>
-            CONTRACT VALUE {contractValue}
-          </span>
+    <div className="pt-split">
+      <div style={{ minWidth: 0 }}>
+        <Tabs
+          id="clients"
+          tabs={TABS}
+          value={tab}
+          onChange={setTab}
+          counts={counts}
+          trailing={<span className="pt-meta">Active contract value {value} p.a.</span>}
+        />
+        <SectionHead title="Accounts" meta={`Showing ${shown.length} of ${d.clients.length}`} />
+        <div className="pt-reg">
+          <div className="pt-reg__head" style={{ gridTemplateColumns: COLS }}>
+            <span>Organisation</span>
+            <span className="pt-hide-sm">Sector</span>
+            <span>Sites</span>
+            <span>Value p.a.</span>
+            <span>Owner</span>
+            <span>Status</span>
+            <span />
+          </div>
+          {shown.length === 0 ? (
+            <div style={{ padding: "16px 12px", font: "var(--type-small)", color: "var(--text-tertiary)" }}>No {tab.toLowerCase()} accounts.</div>
+          ) : (
+            <motion.div variants={list} initial="initial" animate="animate" key={tab}>
+              {shown.map((c) => (
+                <motion.div
+                  key={c.id}
+                  variants={row}
+                  className="pt-reg__row"
+                  style={{ gridTemplateColumns: COLS }}
+                  aria-selected={c.id === selId}
+                  tabIndex={0}
+                  onClick={() => setId(c.id)}
+                  onKeyDown={(e) => registerKeys(e, () => setId(c.id))}
+                >
+                  <span className="pt-reg__name">{c.org}</span>
+                  <span className="pt-reg__text pt-hide-sm">{c.sector}</span>
+                  <span className="pt-reg__mono">{c.sites}</span>
+                  <span className="pt-reg__mono">{c.value}</span>
+                  <span className="pt-owner">{c.owner}</span>
+                  <span>
+                    <Badge kind={c.kind} label={c.status} />
+                  </span>
+                  <RowMenu
+                    items={[
+                      { label: "Log activity", onSelect: () => actions.logActivity(c) },
+                      { label: c.deal ? "Update proposal" : "Record proposal", onSelect: () => actions.recordProposal(c) },
+                      { label: "Add contact", onSelect: () => actions.addContact(c) },
+                      { label: "Edit account", onSelect: () => actions.editClient(c) },
+                      { label: "Close account", onSelect: () => void actions.closeClient(c), danger: true },
+                    ]}
+                  />
+                </motion.div>
+              ))}
+            </motion.div>
+          )}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 0.5fr 0.9fr 0.5fr 0.95fr", gap: 14, padding: "12px 0 8px", borderBottom: "2px solid var(--bark-800)" }}>
-          {["ORGANISATION", "SECTOR", "SITES", "VALUE P.A.", "OWNER", "STATUS"].map((h) => (
-            <span key={h} style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.08em", color: "var(--text-tertiary)" }}>
-              {h}
-            </span>
-          ))}
-        </div>
-        {filtered.map((c) => {
-          const { bg, fg, dot } = statusColors(c.kind);
-          return (
-            <div
-              key={c.id}
-              onClick={() => setClientId(c.id)}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1.6fr 1fr 0.5fr 0.9fr 0.5fr 0.95fr",
-                gap: 14,
-                alignItems: "center",
-                padding: "12px 0",
-                borderBottom: "1px solid var(--border-subtle)",
-                cursor: "pointer",
-                background: c.id === sel?.id ? "var(--sand-100)" : "transparent",
-              }}
-            >
-              <span style={{ fontSize: 13.5, fontWeight: 600 }}>{c.org}</span>
-              <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{c.sector}</span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{c.sites}</span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{c.value}</span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-tertiary)" }}>{c.owner}</span>
-              <span
-                style={{
-                  justifySelf: "start",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "2px 8px",
-                  background: bg,
-                  color: fg,
-                  fontSize: 10,
-                  fontWeight: 600,
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                  borderRadius: 2,
-                }}
-              >
-                <span style={{ width: 6, height: 6, borderRadius: 999, background: dot }} />
-                {c.status}
-              </span>
-            </div>
-          );
-        })}
       </div>
 
       {sel && (
-        <div style={{ width: 330, flex: "none", background: "var(--surface-raised)", border: "1px solid var(--border-subtle)", borderTop: "2px solid var(--brass-500)", padding: "22px 24px" }}>
-          <div style={{ font: "var(--type-eyebrow)", textTransform: "uppercase", letterSpacing: "var(--track-eyebrow)", color: "var(--text-tertiary)" }}>Client record</div>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-xl)", marginTop: 10 }}>{sel.org}</div>
-          <div style={{ font: "var(--type-small)", color: "var(--text-secondary)", marginTop: 3 }}>{sel.meta}</div>
-
-          <div style={{ marginTop: 16, font: "var(--type-eyebrow)", textTransform: "uppercase", letterSpacing: "var(--track-eyebrow)", color: "var(--text-tertiary)" }}>Contacts</div>
-          {sel.contacts.map((p, i) => (
-            <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "9px 0", borderBottom: "1px solid var(--border-subtle)" }}>
-              <span style={{ fontSize: 13 }}>{p.name}</span>
-              <span style={{ font: "var(--type-small)", color: "var(--text-tertiary)" }}>{p.role}</span>
-            </div>
-          ))}
-
-          {sel.deal && (
-            <div style={{ marginTop: 18, border: "1px solid var(--border-subtle)", background: "var(--surface-sunken)", padding: "14px 16px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <span style={{ font: "var(--type-eyebrow)", textTransform: "uppercase", letterSpacing: "var(--track-eyebrow)", color: "var(--text-secondary)" }}>
-                  Open proposal
-                </span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--brass-700)" }}>{sel.deal.stage}</span>
-              </div>
-              <div style={{ marginTop: 8, fontSize: 13.5 }}>{sel.deal.name}</div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-secondary)" }}>
-                <span>{sel.deal.value}</span>
-                <span>REVIEW {sel.deal.review}</span>
-              </div>
-            </div>
-          )}
-
-          <div style={{ marginTop: 18, font: "var(--type-eyebrow)", textTransform: "uppercase", letterSpacing: "var(--track-eyebrow)", color: "var(--text-tertiary)" }}>Activity</div>
-          {sel.activity.map((a, i) => (
-            <div key={i} style={{ padding: "9px 0", borderBottom: "1px solid var(--border-subtle)" }}>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-tertiary)" }}>{a.date}</div>
-              <div style={{ fontSize: 13, marginTop: 3, lineHeight: 1.45 }}>{a.text}</div>
-            </div>
-          ))}
-
-          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-            <button className="sds-btn sds-btn--sm sds-btn--secondary">Send brief</button>
-            <button className="sds-btn sds-btn--sm sds-btn--ghost">Log activity</button>
-          </div>
-        </div>
+        <aside className="pt-file">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div key={sel.id} variants={swap} initial="initial" animate="animate" exit="exit">
+              <Record c={sel} today={d.today} me={d.me.email} />
+            </motion.div>
+          </AnimatePresence>
+        </aside>
       )}
     </div>
   );
