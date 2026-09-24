@@ -34,14 +34,18 @@ api() {
   if [ -n "$body" ]; then
     args+=(-H "Content-Type: application/json" --data "$body")
   fi
-  API_RESP="$(curl "${args[@]}")" || fail "Could not reach the Cloudflare API ($method $path)."
-  if [ "$(jq -r '.success' <<<"$API_RESP")" != "true" ]; then
-    echo "Cloudflare rejected $method $path:"
-    jq -r '.errors[]? | "  [\(.code)] \(.message)"' <<<"$API_RESP"
-    if jq -e '.errors[]? | select(.code == 10000 or .code == 9109 or (.message | test("auth"; "i")))' <<<"$API_RESP" >/dev/null; then
-      fail "The Cloudflare token isn't allowed to manage Access. Give it \"Access: Apps and Policies Edit\" and \"Access: Organizations, Identity Providers, and Groups Edit\"."
+  local raw status
+  raw="$(curl -w '\n%{http_code}' "${args[@]}")" || fail "Could not reach the Cloudflare API ($method $path)."
+  status="${raw##*$'\n'}"
+  API_RESP="${raw%$'\n'*}"
+  if [ "$(jq -r '.success' <<<"$API_RESP" 2>/dev/null)" != "true" ]; then
+    echo "Cloudflare rejected $method $path (HTTP $status):"
+    jq -r '.errors[]? | "  [\(.code)] \(.message // "(no message)")"' <<<"$API_RESP" 2>/dev/null || echo "  $API_RESP"
+    if [ "$status" = 401 ] || [ "$status" = 403 ] \
+      || jq -e '.errors[]? | select(.code == 10000 or .code == 9109 or ((.message // "") | test("auth|permission|not allowed"; "i")))' <<<"$API_RESP" >/dev/null 2>&1; then
+      fail "The Cloudflare token isn't allowed to $method $path. Give it \"Access: Apps and Policies Edit\" and \"Access: Organizations, Identity Providers, and Groups Edit\"."
     fi
-    fail "Cloudflare rejected $method $path (errors above)."
+    fail "Cloudflare rejected $method $path with HTTP $status (errors above)."
   fi
 }
 
