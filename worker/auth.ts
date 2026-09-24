@@ -10,7 +10,7 @@ import { createRemoteJWKSet, decodeJwt, errors, jwtVerify, type JWTVerifyGetKey 
 export interface AccessEnv {
   /** Zero Trust team domain, e.g. "sandstone.cloudflareaccess.com". */
   ACCESS_TEAM_DOMAIN?: string;
-  /** Application Audience (AUD) tag of the Access application. */
+  /** Application Audience (AUD) tag(s) of the Access application(s), comma-separated. */
   ACCESS_AUD?: string;
   /** Comma-separated list of emails allowed in. */
   ALLOWED_EMAILS?: string;
@@ -36,17 +36,17 @@ function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 }
 
-/** Last few characters of an AUD tag: enough to tell two apart, not worth hiding (it's in wrangler.jsonc). */
+/** Last few characters of each AUD tag: enough to tell them apart, not worth hiding (they're in wrangler.jsonc). */
 function audTail(aud: unknown): string {
-  const first = Array.isArray(aud) ? aud[0] : aud;
-  return typeof first === "string" ? `…${first.slice(-6)}` : "(none)";
+  const list = (Array.isArray(aud) ? aud : [aud]).filter((a): a is string => typeof a === "string");
+  return list.length ? list.map((a) => `…${a.slice(-6)}`).join(", ") : "(none)";
 }
 
 /**
  * Explains a rejected token without trusting it: claims are decoded, not
  * verified, and only echoed back to the person who already holds the token.
  */
-function explainRejectedToken(token: string, err: unknown, issuer: string, audience: string): string {
+function explainRejectedToken(token: string, err: unknown, issuer: string, audiences: string[]): string {
   let claims: Record<string, unknown> = {};
   try {
     claims = decodeJwt(token);
@@ -60,8 +60,8 @@ function explainRejectedToken(token: string, err: unknown, issuer: string, audie
     return `The sign-in came from a different Zero Trust team (${String(claims.iss)}; this portal expects ${issuer}).`;
   }
   const auds = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
-  if (!auds.includes(audience)) {
-    return `The sign-in came from a different Cloudflare Access application (audience ${audTail(claims.aud)}; this portal expects ${audTail(audience)}).`;
+  if (!auds.some((a) => audiences.includes(a as string))) {
+    return `The sign-in came from a different Cloudflare Access application (audience ${audTail(claims.aud)}; this portal expects ${audTail(audiences)}).`;
   }
   if (err instanceof errors.JWTExpired) return "Your sign-in has expired.";
   if (err instanceof errors.JWKSTimeout) return "Couldn't reach Cloudflare to verify the sign-in. Try again.";
@@ -116,7 +116,11 @@ export const requireAccess = createMiddleware<{ Bindings: AccessEnv; Variables: 
     .split(",")
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
-  if (!ACCESS_TEAM_DOMAIN || !ACCESS_AUD || allowed.length === 0) {
+  const audiences = (ACCESS_AUD ?? "")
+    .split(",")
+    .map((a) => a.trim())
+    .filter(Boolean);
+  if (!ACCESS_TEAM_DOMAIN || audiences.length === 0 || allowed.length === 0) {
     return deny(
       503,
       "The portal's sign-in isn't configured yet.",
@@ -136,12 +140,12 @@ export const requireAccess = createMiddleware<{ Bindings: AccessEnv; Variables: 
   const issuer = issuerFor(ACCESS_TEAM_DOMAIN);
   let email: unknown;
   try {
-    const { payload } = await jwtVerify(token, jwksFor(issuer), { issuer, audience: ACCESS_AUD });
+    const { payload } = await jwtVerify(token, jwksFor(issuer), { issuer, audience: audiences });
     email = payload.email;
   } catch (err) {
     return deny(
       403,
-      explainRejectedToken(token, err, issuer, ACCESS_AUD),
+      explainRejectedToken(token, err, issuer, audiences),
       `invalid Access token: ${(err as Error).message}`,
     );
   }
