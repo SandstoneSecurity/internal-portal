@@ -226,7 +226,7 @@ button { font: inherit; color: inherit; }
 .pt-search span:first-of-type { flex: 1; }
 .pt-head__sep { width: 1px; height: 22px; background: var(--border-default); }
 
-.pt-scroll { flex: 1; overflow: auto; overscroll-behavior: contain; scroll-behavior: smooth; }
+.pt-scroll { flex: 1; overflow: auto; overscroll-behavior: contain; scroll-behavior: smooth; container-type: inline-size; }
 .pt-page { padding: 28px 32px 64px; max-width: 1480px; }
 
 /* ── Registers (tables) ───────────────────────────────────────────────── */
@@ -425,7 +425,8 @@ input[type="date"].pt-input { font-family: var(--font-mono); font-size: 13px; }
 .pt-log__by { display: flex; gap: 8px; align-items: center; margin-top: 4px; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-tertiary); }
 
 /* ── Control ──────────────────────────────────────────────────────────── */
-.pt-hero { position: relative; overflow: hidden; margin: -28px -32px 0; padding: 40px 32px 34px; border-bottom: var(--border-hair) solid var(--border-subtle); min-height: 232px; }
+/* Full bleed: the page content keeps its max width, but the survey field spans the whole scroll area (100cqw). */
+.pt-hero { position: relative; overflow: hidden; margin: -28px -32px 0; width: 100cqw; padding: 40px 32px 34px; border-bottom: var(--border-hair) solid var(--border-subtle); min-height: 232px; }
 .pt-hero .pt-survey { position: absolute; inset: 0; }
 .pt-hero__scrim { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to right, var(--surface-page) 0%, color-mix(in srgb, var(--surface-page) 72%, transparent) 42%, transparent 78%); }
 .pt-hero__body { position: relative; max-width: 720px; }
