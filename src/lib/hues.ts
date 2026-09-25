@@ -16,9 +16,32 @@ export const LINE_HUE: Record<string, Hue> = {
 
 export const PRIORITY_HUE: Record<string, Hue> = { High: "clay", Medium: "ochre", Low: "euc" };
 
-const COLUMN_HUES: Hue[] = ["slate", "harbour", "jacaranda", "ochre"];
+/**
+ * Progress colours, shared by the board sections and the timeline bars so a
+ * task reads the same everywhere: to do jacaranda, in progress harbour,
+ * waiting on another task ochre, past due clay, complete eucalypt.
+ */
+export type ProgressState = "todo" | "doing" | "waiting" | "late" | "done";
+export const PROGRESS_HUE: Record<ProgressState, Hue> = { todo: "jacaranda", doing: "harbour", waiting: "ochre", late: "clay", done: "euc" };
+export const PROGRESS_LABEL: Record<ProgressState, string> = {
+  todo: "To do",
+  doing: "In progress",
+  waiting: "Waiting on another task",
+  late: "Past due",
+  done: "Complete",
+};
+
+const COLUMN_HUES: Hue[] = ["jacaranda", "harbour", "slate", "brass"];
 export function columnHue(index: number, done: boolean): Hue {
   return done ? "euc" : COLUMN_HUES[index % COLUMN_HUES.length]!;
+}
+
+/** Where a task stands: complete, past due, blocked by an unfinished task, or by its section. */
+export function progressOf(o: { done: boolean; late: boolean; waiting: boolean; columnIndex: number }): ProgressState {
+  if (o.done) return "done";
+  if (o.late) return "late";
+  if (o.waiting) return "waiting";
+  return o.columnIndex === 0 ? "todo" : "doing";
 }
 
 const PEOPLE: Hue[] = ["harbour", "jacaranda", "euc", "clay", "ochre", "brass", "slate"];

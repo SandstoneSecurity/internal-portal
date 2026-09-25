@@ -1,11 +1,12 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
-import { Check, Plus, Trash2, X } from "lucide-react";
-import { PRIORITIES, SERVICE_LINES, type OpsCard, type OpsSubtask } from "../../shared/types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, Diamond, Link2, Plus, Trash2, X } from "lucide-react";
+import { PRIORITIES, SERVICE_LINES, type OpsCard, type OpsColumn, type OpsSubtask } from "../../shared/types";
 import { useActions } from "../actions/ActionHost";
 import { usePortalData } from "../lib/DataProvider";
 import { dueTone, friendlyDate, initialsOf, relativeTime } from "../lib/format";
-import { LINE_HUE, PRIORITY_HUE, columnHue, hueClass } from "../lib/hues";
+import { LINE_HUE, PRIORITY_HUE, PROGRESS_HUE, PROGRESS_LABEL, columnHue, hueClass } from "../lib/hues";
+import { indexBoard, type CardInfo } from "../lib/board";
 import { DUR, tween } from "../lib/motion";
 import { EditableText } from "./ui/EditableText";
 import { Drawer } from "./ui/Overlay";
@@ -120,6 +121,91 @@ function AddSubtask({ card }: { card: OpsCard }) {
   );
 }
 
+function DepRow({ info, today, onRemove, removeLabel }: { info: CardInfo; today: string; onRemove: () => void; removeLabel: string }) {
+  const actions = useActions();
+  const k = info.card;
+  return (
+    <li className={`pt-dep ${hueClass(PROGRESS_HUE[info.progress])}`}>
+      <span className="pt-chip__dot" title={PROGRESS_LABEL[info.progress]} />
+      <span className="pt-dep__ref">{k.ref}</span>
+      <button type="button" className="pt-dep__title" onClick={() => actions.openTask(k.id)}>
+        {k.milestone && <Diamond size={11} className="pt-dep__diamond" />}
+        {k.title}
+      </button>
+      <span className="pt-due">{info.done ? "Complete" : k.dueDate ? friendlyDate(k.dueDate, today) : "No date"}</span>
+      <button type="button" className="pt-iconbtn pt-iconbtn--sm" aria-label={removeLabel} title={removeLabel} onClick={onRemove}>
+        <X size={13} />
+      </button>
+    </li>
+  );
+}
+
+/** "Waiting on" and "Blocking" lists, with a picker that never offers a task that would make a loop. */
+function Dependencies({ card, columns, today }: { card: OpsCard; columns: OpsColumn[]; today: string }) {
+  const actions = useActions();
+  const index = useMemo(() => indexBoard(columns), [columns]);
+  const info = index.get(card.id);
+  const options = useMemo(() => {
+    // Everything that already (transitively) waits on this task is off-limits.
+    const downstream = new Set<number>([card.id]);
+    const stack = [card.id];
+    while (stack.length) for (const b of index.get(stack.pop()!)?.blocking ?? []) if (!downstream.has(b.id)) (downstream.add(b.id), stack.push(b.id));
+    return [...index.values()].filter((i) => i.card.id > 0 && !downstream.has(i.card.id) && !card.blockedBy.includes(i.card.id));
+  }, [index, card]);
+  if (!info) return null;
+  const before = card.blockedBy.map((id) => index.get(id)).filter((x): x is CardInfo => !!x);
+  return (
+    <section className="pt-task__section">
+      <div className="pt-task__subhead">
+        <h3 className="pt-task__h">Dependencies</h3>
+        {info.waitingOn.length > 0 && !info.done && <span className="pt-chip pt-hue-ochre">Waiting on {info.waitingOn.length}</span>}
+      </div>
+      <div className="pt-deps">
+        <div>
+          <div className="pt-deps__label">Waiting on</div>
+          <ul className="pt-deps__list">
+            {before.map((b) => (
+              <DepRow key={b.card.id} info={b} today={today} removeLabel={`Stop waiting on ${b.card.ref}`} onRemove={() => void actions.removeDependency(card, b.card.id)} />
+            ))}
+          </ul>
+          <label className="pt-deps__add">
+            <Link2 size={14} />
+            <select
+              value=""
+              aria-label="Add a task this one waits on"
+              onChange={(e) => e.target.value && void actions.addDependency(card, Number(e.target.value))}
+            >
+              <option value="">{options.length ? "Add a task this waits on…" : "No other tasks to link"}</option>
+              {options.map((o) => (
+                <option key={o.card.id} value={o.card.id}>
+                  {o.card.ref} — {o.card.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div>
+          <div className="pt-deps__label">Blocking</div>
+          {info.blocking.length === 0 ? (
+            <p className="pt-dim" style={{ fontSize: 12.5, margin: "4px 0 0" }}>
+              Nothing waits on this {card.milestone ? "milestone" : "task"}. Link from the other task, or drag between bars on the timeline.
+            </p>
+          ) : (
+            <ul className="pt-deps__list">
+              {info.blocking.map((b) => {
+                const bi = index.get(b.id);
+                return bi ? (
+                  <DepRow key={b.id} info={bi} today={today} removeLabel={`Stop ${b.ref} waiting on ${card.ref}`} onRemove={() => void actions.removeDependency(b, card.id)} />
+                ) : null;
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function TaskPane({ id, onClose }: { id: number | null; onClose: () => void }) {
   const { data } = usePortalData();
   const actions = useActions();
@@ -209,10 +295,31 @@ export function TaskPane({ id, onClose }: { id: number | null; onClose: () => vo
               />
             </dd>
 
-            <dt>Dates</dt>
+            <dt>Type</dt>
+            <dd className="pt-seg" role="radiogroup" aria-label="Type">
+              {(["Task", "Milestone"] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  role="radio"
+                  aria-checked={card.milestone === (t === "Milestone")}
+                  className="pt-seg__btn pt-hue-slate"
+                  onClick={() => void actions.patchWork(card, { milestone: t === "Milestone", ...(t === "Milestone" ? { startDate: null } : {}) })}
+                >
+                  {t === "Milestone" && <Diamond size={12} />}
+                  {t}
+                </button>
+              ))}
+            </dd>
+
+            <dt>{card.milestone ? "Date" : "Dates"}</dt>
             <dd className="pt-task__dates">
-              <DateField label="Start date" value={card.startDate} onChange={(v) => void actions.patchWork(card, { startDate: v })} />
-              <span className="pt-dim">to</span>
+              {!card.milestone && (
+                <>
+                  <DateField label="Start date" value={card.startDate} onChange={(v) => void actions.patchWork(card, { startDate: v })} />
+                  <span className="pt-dim">to</span>
+                </>
+              )}
               <DateField
                 label="Due date"
                 value={card.dueDate}
@@ -327,6 +434,8 @@ export function TaskPane({ id, onClose }: { id: number | null; onClose: () => vo
             </ul>
             <AddSubtask card={card} />
           </section>
+
+          <Dependencies card={card} columns={columns} today={today} />
 
           <section className="pt-task__section">
             <h3 className="pt-task__h">Activity</h3>

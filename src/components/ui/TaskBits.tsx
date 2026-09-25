@@ -40,17 +40,20 @@ export function CheckCircle({
   onToggle,
   size = 18,
   label,
+  diamond = false,
 }: {
   done: boolean;
   onToggle: () => void;
   size?: number;
   label: string;
+  /** Milestones complete with a diamond rather than a circle. */
+  diamond?: boolean;
 }) {
   return (
     <button
       type="button"
       data-nodrag
-      className={`pt-check-circle${done ? " pt-check-circle--done" : ""}`}
+      className={`pt-check-circle${done ? " pt-check-circle--done" : ""}${diamond ? " pt-check-circle--diamond" : ""}`}
       style={{ width: size, height: size }}
       aria-pressed={done}
       aria-label={label}

@@ -4,17 +4,21 @@ import { ListTree, Plus, Search } from "lucide-react";
 import type { OpsCard, OpsColumn } from "../../shared/types";
 import { useActions } from "../actions/ActionHost";
 import { DragCard, type DropPoint } from "../components/DragCard";
+import { Gantt } from "../components/Gantt";
 import { Empty, Tabs } from "../components/ui/Bits";
 import { Avatar, CheckCircle, Chip, DueDate, Progress } from "../components/ui/TaskBits";
 import { usePortal } from "../lib/DataProvider";
-import { addDays, dayMonth, daysBetween, matches } from "../lib/format";
+import { matches } from "../lib/format";
 import { LINE_HUE, PRIORITY_HUE, columnHue, hueClass } from "../lib/hues";
 import { DUR, tween } from "../lib/motion";
 import { useSelection } from "../lib/selection";
+import { indexBoard, type CardInfo } from "../lib/board";
 
 const VIEWS = ["Board", "Timeline"] as const;
 
-function TaskCard({ card, done, today, flash }: { card: OpsCard; done: boolean; today: string; flash: boolean }) {
+function TaskCard({ card, info, today, flash }: { card: OpsCard; info: CardInfo | undefined; today: string; flash: boolean }) {
+  const done = !!info?.done;
+  const hue = columnHue(info?.columnIndex ?? 0, done);
   const actions = useActions();
   const [open, setOpen] = useState(false);
   const subs = card.subtasks;
@@ -24,16 +28,26 @@ function TaskCard({ card, done, today, flash }: { card: OpsCard; done: boolean; 
     <>
       <div className="pt-tcard__tags">
         <Chip hue={LINE_HUE[card.line] ?? "slate"}>{card.line}</Chip>
+        {card.milestone && <Chip hue="slate">Milestone</Chip>}
         {card.priority !== "None" && (
           <Chip hue={PRIORITY_HUE[card.priority] ?? "slate"} dot>
             {card.priority}
           </Chip>
+        )}
+        {!done && info && info.waitingOn.length > 0 && (
+          <span title={`Waiting on ${info.waitingOn.map((w) => `${w.ref} ${w.title}`).join(", ")}`}>
+            <Chip hue="ochre" dot>
+              Waiting on {info.waitingOn[0]!.ref}
+              {info.waitingOn.length > 1 ? ` +${info.waitingOn.length - 1}` : ""}
+            </Chip>
+          </span>
         )}
         <span className="pt-tcard__ref">{card.ref}</span>
       </div>
       <div className="pt-tcard__title-row">
         <CheckCircle
           done={done}
+          diamond={card.milestone}
           label={done ? `Mark ${card.ref} incomplete` : `Mark ${card.ref} complete`}
           onToggle={() => !temp && void actions.toggleComplete(card)}
         />
@@ -86,7 +100,7 @@ function TaskCard({ card, done, today, flash }: { card: OpsCard; done: boolean; 
       </AnimatePresence>
       {subs.length > 0 && (
         <div className="pt-tcard__progress">
-          <Progress done={subsDone} total={subs.length} />
+          <Progress done={subsDone} total={subs.length} hue={hue} />
         </div>
       )}
       {flash && (
@@ -151,6 +165,7 @@ function Board({ columns, flashId, today, filter }: { columns: OpsColumn[]; flas
   const [over, setOver] = useState<DropPoint | null>(null);
   const [dragId, setDragId] = useState<number | null>(null);
   const [composing, setComposing] = useState<number | null>(null);
+  const index = useMemo(() => indexBoard(columns), [columns]);
   return (
     <LayoutGroup>
       <div className="pt-kanban">
@@ -189,7 +204,7 @@ function Board({ columns, flashId, today, filter }: { columns: OpsColumn[]; flas
                       onDrop={(p) => card.id > 0 && void actions.moveWork(card, Number(p.target), p.index)}
                       onOpen={() => card.id > 0 && actions.editWork(card)}
                     >
-                      <TaskCard card={card} done={col.done} today={today} flash={flashId === card.id} />
+                      <TaskCard card={card} info={index.get(card.id)} today={today} flash={flashId === card.id} />
                     </DragCard>
                   </div>
                 ))}
@@ -209,156 +224,6 @@ function Board({ columns, flashId, today, filter }: { columns: OpsColumn[]; flas
         })}
       </div>
     </LayoutGroup>
-  );
-}
-
-function Timeline({ columns, today }: { columns: OpsColumn[]; today: string }) {
-  const actions = useActions();
-  const span = (k: { startDate: string | null; dueDate: string | null; createdAt?: string | null }) => {
-    const due = k.dueDate!;
-    const begin = k.startDate ?? (k.createdAt ? k.createdAt.slice(0, 10) : addDays(due, -3));
-    return { start: begin <= due ? begin : due, end: due };
-  };
-  const dated = columns.flatMap((c) =>
-    c.cards.filter((k) => k.dueDate).map((k) => ({ card: k, column: c, ...span(k) }))
-  );
-  const undated = columns.reduce((n, c) => n + c.cards.filter((k) => !k.dueDate).length, 0);
-
-  const range = useMemo(() => {
-    const subDates = dated.flatMap((x) => x.card.subtasks.flatMap((s) => [s.startDate, s.dueDate]).filter((v): v is string => !!v));
-    const lo = [today, ...dated.map((x) => x.start), ...subDates].sort()[0]!;
-    const hi = [addDays(today, 21), ...dated.map((x) => x.end), ...subDates].sort().reverse()[0]!;
-    // Start on the Monday on/before `lo`.
-    const dow = new Date(`${lo}T00:00:00Z`).getUTCDay() || 7;
-    const from = addDays(lo, 1 - dow);
-    const weeks = Math.min(16, Math.max(6, Math.ceil((daysBetween(from, hi) + 1) / 7)));
-    return { from, weeks, days: weeks * 7 };
-  }, [dated, today]);
-
-  const pos = (iso: string) => (Math.max(0, Math.min(range.days, daysBetween(range.from, iso))) / range.days) * 100;
-  const weeksGrid = (
-    <div className="pt-tl__weeks" style={{ gridTemplateColumns: `repeat(${range.weeks}, 1fr)`, position: "absolute", inset: 0 }}>
-      {Array.from({ length: range.weeks }, (_, w) => (
-        <div key={w} className="pt-tl__week" style={{ padding: 0 }} />
-      ))}
-    </div>
-  );
-
-  if (dated.length === 0)
-    return (
-      <Empty
-        index="00"
-        title="Nothing on the programme yet."
-        body="Tasks with a due date appear here as bars from their start date to the day they fall due, with their subtasks beneath."
-        action={
-          <button className="sds-btn sds-btn--md sds-btn--primary" onClick={() => actions.raiseWork()}>
-            Raise work
-          </button>
-        }
-      />
-    );
-
-  return (
-    <>
-      <div className="pt-tl">
-        <div className="pt-tl__row pt-tl__row--head">
-          <div className="pt-tl__label">
-            <span className="pt-tl__h">Programme</span>
-          </div>
-          <div className="pt-tl__track">
-            <div className="pt-tl__weeks" style={{ gridTemplateColumns: `repeat(${range.weeks}, 1fr)` }}>
-              {Array.from({ length: range.weeks }, (_, i) => (
-                <div key={i} className="pt-tl__week">
-                  {dayMonth(addDays(range.from, i * 7))}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-        {columns.map((col, ci) => {
-          const rows = dated.filter((x) => x.column.id === col.id).sort((a, b) => a.end.localeCompare(b.end));
-          if (!rows.length) return null;
-          return (
-            <div key={col.id}>
-              <div className={`pt-tl__row pt-tl__row--group ${hueClass(columnHue(ci, col.done))}`}>
-                <div className="pt-tl__label">
-                  <span className="pt-kcol__swatch" aria-hidden />
-                  <span style={{ fontWeight: 600, color: "var(--text-primary)", fontSize: 12.5 }}>{col.label}</span>
-                  <span className="pt-kcol__count">{rows.length}</span>
-                </div>
-                <div className="pt-tl__track" style={{ minHeight: 0 }}>
-                  <div className="pt-tl__today" style={{ left: `${pos(today)}%` }} />
-                </div>
-              </div>
-              {rows.map(({ card, start, end }, i) => {
-                const hue = LINE_HUE[card.line] ?? "slate";
-                const subs = card.subtasks.filter((s) => s.dueDate);
-                return (
-                  <div key={card.id}>
-                    <div className="pt-tl__row" style={{ cursor: "pointer" }} onClick={() => actions.editWork(card)}>
-                      <div className="pt-tl__label" style={{ paddingLeft: 24 }}>
-                        <Avatar initials={card.who} size={18} />
-                        <span className="pt-tl__name">{card.title}</span>
-                      </div>
-                      <div className="pt-tl__track">
-                        {weeksGrid}
-                        <div className="pt-tl__today" style={{ left: `${pos(today)}%` }} />
-                        <motion.div
-                          className={`pt-tl__bar ${hueClass(hue)}${col.done ? " is-done" : ""}${card.late ? " is-late" : ""}`}
-                          title={`${card.ref} · ${dayMonth(start)} to ${dayMonth(end)}`}
-                          style={{ left: `${pos(start)}%`, width: `${Math.max(0.8, pos(addDays(end, 1)) - pos(start))}%` }}
-                          initial={{ scaleX: 0 }}
-                          animate={{ scaleX: 1, transition: tween(DUR.reveal, 0.05 + i * 0.03) }}
-                        >
-                          <span className="pt-tl__barlabel">{card.ref}</span>
-                        </motion.div>
-                      </div>
-                    </div>
-                    {subs.map((s) => {
-                      const ss = span(s);
-                      return (
-                        <div key={s.id} className="pt-tl__row pt-tl__row--sub" style={{ cursor: "pointer" }} onClick={() => actions.editWork(card)}>
-                          <div className="pt-tl__label" style={{ paddingLeft: 52 }}>
-                            <span className={`pt-tl__subdot${s.done ? " is-done" : ""}`} />
-                            <span className="pt-tl__name">{s.title}</span>
-                          </div>
-                          <div className="pt-tl__track">
-                            {weeksGrid}
-                            <div className="pt-tl__today" style={{ left: `${pos(today)}%` }} />
-                            <div
-                              className={`pt-tl__bar pt-tl__bar--sub ${hueClass(hue)}${s.done ? " is-done" : ""}${s.late ? " is-late" : ""}`}
-                              title={`${s.title} · ${dayMonth(ss.start)} to ${dayMonth(ss.end)}`}
-                              style={{ left: `${pos(ss.start)}%`, width: `${Math.max(0.8, pos(addDays(ss.end, 1)) - pos(ss.start))}%` }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })}
-      </div>
-      <div className="pt-legend" style={{ marginTop: 14 }}>
-        {Object.entries(LINE_HUE).map(([line, hue]) => (
-          <span key={line} className={hueClass(hue)}>
-            <i style={{ background: "var(--hue)" }} />
-            {line.toUpperCase()}
-          </span>
-        ))}
-        <span>
-          <i style={{ border: "1.5px solid var(--status-breach-dot)" }} />
-          PAST DUE
-        </span>
-        <span style={{ color: "var(--text-brand)" }}>
-          <i style={{ width: 2, height: 12, background: "var(--brass-500)" }} />
-          TODAY {dayMonth(today)}
-        </span>
-        {undated > 0 && <span style={{ marginLeft: "auto" }}>{undated} UNDATED NOT SHOWN</span>}
-      </div>
-    </>
   );
 }
 
@@ -435,8 +300,24 @@ export function OperationsPage() {
           </>
         ) : view === "Board" ? (
           <Board columns={d.opsColumns} flashId={flash} today={d.today} filter={filter} />
+        ) : total === 0 ? (
+          <Empty
+            index="00"
+            title="Nothing on the programme yet."
+            body="Tasks and milestones with dates appear here as bars you can drag, stretch and link. Add a task or a milestone to begin."
+            action={
+              <span style={{ display: "flex", gap: 10 }}>
+                <button className="sds-btn sds-btn--md sds-btn--primary" onClick={() => actions.raiseWork()}>
+                  Raise work
+                </button>
+                <button className="sds-btn sds-btn--md sds-btn--secondary" onClick={() => actions.raiseWork({ milestone: true })}>
+                  Add milestone
+                </button>
+              </span>
+            }
+          />
         ) : (
-          <Timeline columns={d.opsColumns} today={d.today} />
+          <Gantt columns={d.opsColumns} today={d.today} />
         )}
       </div>
     </>

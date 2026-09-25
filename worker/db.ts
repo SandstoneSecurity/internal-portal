@@ -152,7 +152,7 @@ export async function getClients(db: D1Database): Promise<Client[]> {
 const PRIORITY_SET = new Set<string>(PRIORITIES);
 
 export async function getOpsBoard(db: D1Database, today: string): Promise<OpsColumn[]> {
-  const [{ results: cols }, { results: cards }, { results: subs }] = await Promise.all([
+  const [{ results: cols }, { results: cards }, { results: subs }, { results: deps }] = await Promise.all([
     db.prepare(`SELECT id, label, is_done FROM ops_columns ORDER BY sort_order`).all<{
       id: number;
       label: string;
@@ -161,7 +161,7 @@ export async function getOpsBoard(db: D1Database, today: string): Promise<OpsCol
     db
       .prepare(
         `SELECT id, column_id, ref, title, site, line, due_label, due_date, start_date, created_at, completed_at,
-                is_late, owner_initials, description, priority
+                is_late, owner_initials, description, priority, is_milestone
          FROM ops_cards ORDER BY column_id, sort_order, id`
       )
       .all<{
@@ -180,6 +180,7 @@ export async function getOpsBoard(db: D1Database, today: string): Promise<OpsCol
         owner_initials: string;
         description: string;
         priority: string;
+        is_milestone: number;
       }>(),
     db
       .prepare(
@@ -195,7 +196,13 @@ export async function getOpsBoard(db: D1Database, today: string): Promise<OpsCol
         start_date: string | null;
         due_date: string | null;
       }>(),
+    db
+      .prepare(`SELECT card_id, depends_on_id FROM ops_dependencies ORDER BY created_at`)
+      .all<{ card_id: number; depends_on_id: number }>(),
   ]);
+
+  const blockedBy = new Map<number, number[]>();
+  for (const d of deps) blockedBy.set(d.card_id, [...(blockedBy.get(d.card_id) ?? []), d.depends_on_id]);
 
   const subsByCard = new Map<number, OpsSubtask[]>();
   for (const s of subs) {
@@ -235,6 +242,8 @@ export async function getOpsBoard(db: D1Database, today: string): Promise<OpsCol
       completedAt: c.completed_at,
       late,
       who: c.owner_initials,
+      milestone: c.is_milestone === 1,
+      blockedBy: blockedBy.get(c.id) ?? [],
       subtasks: subsByCard.get(c.id) ?? [],
     });
     cardsByColumn.set(c.column_id, list);

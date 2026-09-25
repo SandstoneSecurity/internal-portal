@@ -9,6 +9,7 @@ DELETE FROM candidates;
 DELETE FROM roles;
 DELETE FROM gantt_tasks;
 DELETE FROM gantt_sections;
+DELETE FROM ops_dependencies;
 DELETE FROM ops_subtasks;
 DELETE FROM ops_cards;
 DELETE FROM ops_columns;
@@ -115,6 +116,15 @@ INSERT INTO ops_cards (id, column_id, ref, title, site, line, due_label, is_late
 (10, 3, 'OP-218', 'Licence renewals batch — August', 'Fourteen officers', 'Ops', '', 0, 'TA', 1, '', 'None', date('now', '-20 days'), date('now', '-8 days'), datetime('now', '-21 days'), datetime('now', '-9 days')),
 (11, 3, 'OP-219', 'Patrol route change', 'Port Kembla Logistics', 'Ops', '', 0, 'DM', 2, '', 'None', date('now', '-14 days'), date('now', '-6 days'), datetime('now', '-15 days'), datetime('now', '-6 days')),
 (12, 3, 'OP-220', 'Alarm response test', 'Kent Street tower', 'Tech', '', 0, 'SK', 3, '', 'None', date('now', '-10 days'), date('now', '-5 days'), datetime('now', '-11 days'), datetime('now', '-5 days'));
+
+INSERT INTO ops_cards (id, column_id, ref, title, site, line, due_label, is_late, owner_initials, sort_order, description, priority, start_date, due_date, created_at, completed_at, is_milestone) VALUES
+(13, 1, 'OP-235', 'Barangaroo contract go-live', 'Aster Constructions', 'Ops', '', 0, 'DM', 5, 'First night shift on the Barangaroo site with the full inducted team.', 'High', NULL, date('now', '+7 days'), datetime('now', '-2 days'), NULL, 1),
+(14, 1, 'OP-236', 'Meridian quarterly board meeting', 'Meridian Family Office', 'Protective', '', 0, 'MK', 6, '', 'Medium', NULL, date('now', '+5 days'), datetime('now', '-2 days'), NULL, 1);
+
+INSERT INTO ops_dependencies (card_id, depends_on_id, created_at) VALUES
+(13, 8, datetime('now', '-2 days')),
+(14, 6, datetime('now', '-2 days')),
+(2, 1, datetime('now', '-1 days'));
 
 INSERT INTO ops_subtasks (card_id, title, done, owner_initials, start_date, due_date, sort_order, created_at, completed_at) VALUES
 (1, 'Pull access-control logs for both nights', 1, 'DM', date('now', '-2 days'), date('now', '-1 day'), 1, datetime('now', '-2 days'), datetime('now', '-1 days')),
