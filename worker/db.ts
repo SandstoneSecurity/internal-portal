@@ -6,11 +6,14 @@ import type {
   IntelItem,
   Metric,
   OpsColumn,
+  OpsSubtask,
   PortalData,
+  Priority,
   Region,
   Role,
   StatusKind,
 } from "../shared/types";
+import { PRIORITIES } from "../shared/types";
 import { addDays, dayMonth, daysBetween, shortDate, todaySydney } from "./dates";
 
 export function asKind(v: string): StatusKind {
@@ -146,8 +149,10 @@ export async function getClients(db: D1Database): Promise<Client[]> {
   }));
 }
 
+const PRIORITY_SET = new Set<string>(PRIORITIES);
+
 export async function getOpsBoard(db: D1Database, today: string): Promise<OpsColumn[]> {
-  const [{ results: cols }, { results: cards }] = await Promise.all([
+  const [{ results: cols }, { results: cards }, { results: subs }] = await Promise.all([
     db.prepare(`SELECT id, label, is_done FROM ops_columns ORDER BY sort_order`).all<{
       id: number;
       label: string;
@@ -155,7 +160,8 @@ export async function getOpsBoard(db: D1Database, today: string): Promise<OpsCol
     }>(),
     db
       .prepare(
-        `SELECT id, column_id, ref, title, site, line, due_label, due_date, created_at, is_late, owner_initials
+        `SELECT id, column_id, ref, title, site, line, due_label, due_date, start_date, created_at, completed_at,
+                is_late, owner_initials, description, priority
          FROM ops_cards ORDER BY column_id, sort_order, id`
       )
       .all<{
@@ -167,11 +173,45 @@ export async function getOpsBoard(db: D1Database, today: string): Promise<OpsCol
         line: string;
         due_label: string;
         due_date: string | null;
+        start_date: string | null;
         created_at: string | null;
+        completed_at: string | null;
         is_late: number;
         owner_initials: string;
+        description: string;
+        priority: string;
+      }>(),
+    db
+      .prepare(
+        `SELECT id, card_id, title, done, owner_initials, start_date, due_date
+         FROM ops_subtasks ORDER BY card_id, sort_order, id`
+      )
+      .all<{
+        id: number;
+        card_id: number;
+        title: string;
+        done: number;
+        owner_initials: string;
+        start_date: string | null;
+        due_date: string | null;
       }>(),
   ]);
+
+  const subsByCard = new Map<number, OpsSubtask[]>();
+  for (const s of subs) {
+    const list = subsByCard.get(s.card_id) ?? [];
+    list.push({
+      id: s.id,
+      cardId: s.card_id,
+      title: s.title,
+      done: s.done === 1,
+      who: s.owner_initials,
+      startDate: s.start_date,
+      dueDate: s.due_date,
+      late: s.done !== 1 && !!s.due_date && s.due_date < today,
+    });
+    subsByCard.set(s.card_id, list);
+  }
 
   const doneColumns = new Set(cols.filter((c) => c.is_done === 1).map((c) => c.id));
   const cardsByColumn = new Map<number, OpsColumn["cards"]>();
@@ -186,11 +226,16 @@ export async function getOpsBoard(db: D1Database, today: string): Promise<OpsCol
       title: c.title,
       site: c.site,
       line: c.line,
+      description: c.description,
+      priority: (PRIORITY_SET.has(c.priority) ? c.priority : "None") as Priority,
       due: c.due_date ? `DUE ${dayMonth(c.due_date)}` : c.due_label,
+      startDate: c.start_date,
       dueDate: c.due_date,
       createdAt: c.created_at,
+      completedAt: c.completed_at,
       late,
       who: c.owner_initials,
+      subtasks: subsByCard.get(c.id) ?? [],
     });
     cardsByColumn.set(c.column_id, list);
   }

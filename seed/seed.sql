@@ -9,6 +9,7 @@ DELETE FROM candidates;
 DELETE FROM roles;
 DELETE FROM gantt_tasks;
 DELETE FROM gantt_sections;
+DELETE FROM ops_subtasks;
 DELETE FROM ops_cards;
 DELETE FROM ops_columns;
 DELETE FROM client_activity;
@@ -96,25 +97,40 @@ INSERT INTO client_activity (client_id, activity_date, body, sort_order) VALUES
 (9, '21 AUG 26', 'Capability statement sent following referral.', 1);
 
 INSERT INTO ops_columns (id, label, is_done, sort_order) VALUES
-(1, 'Raised', 0, 1),
-(2, 'In preparation', 0, 2),
-(3, 'Awaiting sign-off', 0, 3),
-(4, 'Complete — week 35', 1, 4);
+(1, 'To do', 0, 1),
+(2, 'In progress', 0, 2),
+(3, 'Complete', 1, 3);
 
-INSERT INTO ops_cards (column_id, ref, title, site, line, due_label, is_late, owner_initials, sort_order) VALUES
-(1, 'OP-231', 'Night patrol variance — loading dock', 'Harbourline · Kent Street tower', 'Ops', 'DUE 02 SEP', 0, 'DM', 1),
-(1, 'OP-232', 'Key register audit', 'Castlereagh Hotels · four sites', 'Ops', 'DUE 04 SEP', 0, 'TA', 2),
-(1, 'OP-233', 'Incident debrief — trespass 28 Aug', 'Port Kembla Logistics', 'Advisory', 'DUE 01 SEP', 1, 'JR', 3),
-(1, 'OP-234', 'CCTV fault — camera 14, dock entry', 'Pyrmont Retail Trust', 'Tech', 'DUE 03 SEP', 0, 'SK', 4),
-(2, 'OP-227', 'Order book revision, issue 4', 'Crown Street residence', 'Protective', 'DUE 09 SEP', 0, 'MK', 1),
-(2, 'OP-228', 'Counter-surveillance sweep', 'Meridian Family Office', 'Protective', 'DUE 11 SEP', 0, 'MK', 2),
-(2, 'OP-229', 'Roster uplift — October long weekend', 'All CBD sites', 'Ops', 'DUE 18 SEP', 0, 'TA', 3),
-(3, 'OP-221', 'Q3 order book review — north shore', 'Six sites', 'Ops', 'DUE 31 AUG', 1, 'JR', 1),
-(3, 'OP-224', 'Induction pack — Barangaroo mobilisation', 'Aster Constructions', 'Ops', 'DUE 05 SEP', 0, 'DM', 2),
-(3, 'OP-225', 'Escalation matrix update', 'Nortec Data Centres', 'Tech', 'DUE 08 SEP', 0, 'SK', 3),
-(4, 'OP-218', 'Licence renewals batch — August', 'Fourteen officers', 'Ops', '26 AUG', 0, 'TA', 1),
-(4, 'OP-219', 'Patrol route change', 'Port Kembla Logistics', 'Ops', '27 AUG', 0, 'DM', 2),
-(4, 'OP-220', 'Alarm response test', 'Kent Street tower', 'Tech', '28 AUG', 0, 'SK', 3);
+-- Dates are relative to the day the seed is loaded so the board always looks live.
+INSERT INTO ops_cards (id, column_id, ref, title, site, line, due_label, is_late, owner_initials, sort_order, description, priority, start_date, due_date, created_at, completed_at) VALUES
+(1, 1, 'OP-231', 'Night patrol variance — loading dock', 'Harbourline · Kent Street tower', 'Ops', '', 0, 'DM', 1, 'Patrol logged the dock roller door open at 02:40 on two consecutive nights. Confirm with the building manager and amend the patrol brief.', 'High', date('now', '-2 days'), date('now', '+1 day'), datetime('now', '-3 days'), NULL),
+(2, 1, 'OP-232', 'Key register audit', 'Castlereagh Hotels · four sites', 'Ops', '', 0, 'TA', 2, 'Quarterly reconciliation of issued keys and access cards against the register.', 'Medium', date('now'), date('now', '+6 days'), datetime('now', '-1 days'), NULL),
+(3, 1, 'OP-233', 'Incident debrief — trespass', 'Port Kembla Logistics', 'Advisory', '', 0, 'JR', 3, 'Debrief the client on the trespass incident and recommend perimeter changes.', 'High', date('now', '-6 days'), date('now', '-1 day'), datetime('now', '-6 days'), NULL),
+(4, 1, 'OP-234', 'CCTV fault — camera 14, dock entry', 'Pyrmont Retail Trust', 'Tech', '', 0, 'SK', 4, '', 'Low', NULL, date('now', '+3 days'), datetime('now', '-1 days'), NULL),
+(5, 2, 'OP-227', 'Order book revision, issue 4', 'Crown Street residence', 'Protective', '', 0, 'MK', 1, 'Revise the order book for the principal''s new movement schedule.', 'Medium', date('now', '-4 days'), date('now', '+9 days'), datetime('now', '-5 days'), NULL),
+(6, 2, 'OP-228', 'Counter-surveillance sweep', 'Meridian Family Office', 'Protective', '', 0, 'MK', 2, 'Technical sweep of the boardroom and principal''s office ahead of the quarterly meeting.', 'High', date('now', '+2 days'), date('now', '+4 days'), datetime('now', '-2 days'), NULL),
+(7, 2, 'OP-229', 'Roster uplift — October long weekend', 'All CBD sites', 'Ops', '', 0, 'TA', 3, '', 'Medium', date('now', '-1 days'), date('now', '+11 days'), datetime('now', '-4 days'), NULL),
+(8, 2, 'OP-224', 'Induction pack — Barangaroo mobilisation', 'Aster Constructions', 'Training', '', 0, 'DM', 4, 'Site induction for twelve officers joining the Barangaroo contract.', 'Medium', date('now', '-3 days'), date('now'), datetime('now', '-8 days'), NULL),
+(9, 2, 'OP-225', 'Escalation matrix update', 'Nortec Data Centres', 'Tech', '', 0, 'SK', 5, '', 'Low', NULL, date('now', '+14 days'), datetime('now', '-2 days'), NULL),
+(10, 3, 'OP-218', 'Licence renewals batch — August', 'Fourteen officers', 'Ops', '', 0, 'TA', 1, '', 'None', date('now', '-20 days'), date('now', '-8 days'), datetime('now', '-21 days'), datetime('now', '-9 days')),
+(11, 3, 'OP-219', 'Patrol route change', 'Port Kembla Logistics', 'Ops', '', 0, 'DM', 2, '', 'None', date('now', '-14 days'), date('now', '-6 days'), datetime('now', '-15 days'), datetime('now', '-6 days')),
+(12, 3, 'OP-220', 'Alarm response test', 'Kent Street tower', 'Tech', '', 0, 'SK', 3, '', 'None', date('now', '-10 days'), date('now', '-5 days'), datetime('now', '-11 days'), datetime('now', '-5 days'));
+
+INSERT INTO ops_subtasks (card_id, title, done, owner_initials, start_date, due_date, sort_order, created_at, completed_at) VALUES
+(1, 'Pull access-control logs for both nights', 1, 'DM', date('now', '-2 days'), date('now', '-1 day'), 1, datetime('now', '-2 days'), datetime('now', '-1 days')),
+(1, 'Walk the dock with the building manager', 0, 'DM', date('now'), date('now'), 2, datetime('now', '-2 days'), NULL),
+(1, 'Amend patrol brief and reissue', 0, 'JR', date('now', '+1 day'), date('now', '+1 day'), 3, datetime('now', '-2 days'), NULL),
+(3, 'Draft debrief note', 1, 'JR', date('now', '-6 days'), date('now', '-4 days'), 1, datetime('now', '-6 days'), datetime('now', '-4 days')),
+(3, 'Perimeter recommendations', 0, 'JR', date('now', '-3 days'), date('now', '-1 day'), 2, datetime('now', '-6 days'), NULL),
+(5, 'Confirm principal movement schedule', 1, 'MK', date('now', '-4 days'), date('now', '-2 days'), 1, datetime('now', '-4 days'), datetime('now', '-2 days')),
+(5, 'Redraft residence routines', 0, 'MK', date('now', '-1 days'), date('now', '+5 days'), 2, datetime('now', '-4 days'), NULL),
+(5, 'Client sign-off', 0, 'JR', date('now', '+6 days'), date('now', '+9 days'), 3, datetime('now', '-4 days'), NULL),
+(6, 'Book sweep equipment', 1, 'SK', date('now', '-1 days'), date('now'), 1, datetime('now', '-2 days'), datetime('now')),
+(6, 'Sweep boardroom and principal''s office', 0, 'MK', date('now', '+2 days'), date('now', '+2 days'), 2, datetime('now', '-2 days'), NULL),
+(6, 'Written findings to client', 0, 'MK', date('now', '+3 days'), date('now', '+4 days'), 3, datetime('now', '-2 days'), NULL),
+(8, 'Print induction packs', 1, 'DM', date('now', '-3 days'), date('now', '-2 days'), 1, datetime('now', '-3 days'), datetime('now', '-2 days')),
+(8, 'Site walk with Aster safety lead', 1, 'DM', date('now', '-1 days'), date('now', '-1 days'), 2, datetime('now', '-3 days'), datetime('now', '-1 days')),
+(8, 'Induction session — twelve officers', 0, 'DM', date('now'), date('now'), 3, datetime('now', '-3 days'), NULL);
 
 INSERT INTO gantt_sections (id, num, name, sort_order) VALUES
 (1, '01', 'Mobilisation — Crown Street residence', 1),

@@ -25,9 +25,22 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
   Add employee, Roster shift, New account, Add contact, Log activity, Record
   proposal and Log an item open a form drawer and save straight to D1. Records
   can be edited and deleted from their row menu or file panel.
-- **Drag and drop.** Drag work cards between Operations columns and
-  candidates between Recruitment stages. Moves update the screen immediately
-  and roll back if the save fails.
+- **Operations task board.** Three sections: To do, In progress and Complete.
+  - **Cards** show the service line and priority tags, the assignee and the
+    start–due dates. Past-due dates show in clay; dates due today or tomorrow
+    show in eucalypt.
+  - **Subtask progress** is shown on each card, and the subtasks expand in
+    place.
+  - **The tick** completes a task.
+  - **"Add task"** at the foot of a section adds tasks inline.
+  - **Dragging** moves a task between sections or reorders it within one.
+  - **Opening a task** shows a panel that saves as you edit: name, assignee,
+    dates, section, priority, service line, client/site and description.
+    Subtasks there have their own assignee and start/due dates, and the panel
+    also lists the task's activity.
+  - **The timeline** draws each task and its subtasks as coloured bars.
+- **Drag and drop** also moves candidates between Recruitment stages. Moves
+  update the screen at once and roll back if the save fails.
 - **Command palette:** press `Ctrl K` / `⌘K` or `/`. From there you can jump
   to any page, person, account, work item, role or intelligence item, run any
   action, switch theme, open the activity log or sign out. `N` starts the
@@ -73,7 +86,9 @@ input returns `400 {error, fields}`.
 | Method | Route | |
 | --- | --- | --- |
 | GET | `/api/portal` | Everything the app renders, with computed metrics |
-| POST · PATCH · DELETE | `/api/work[/:id]` | Work items (`columnId` moves a card) |
+| POST · PATCH · DELETE | `/api/work[/:id]` | Tasks (`columnId` moves a card, `position` places it within the section) |
+| POST | `/api/work/:id/subtasks` | Add a subtask |
+| PATCH · DELETE | `/api/subtasks/:id` | Edit, complete, reorder or remove a subtask |
 | POST · PATCH · DELETE | `/api/employees[/:id]` | Personnel register |
 | POST | `/api/employees/:id/shifts` | Roster a shift |
 | POST · PATCH · DELETE | `/api/clients[/:id]` | Accounts |
@@ -129,6 +144,6 @@ worker/         Cloudflare Worker (Hono): auth, reads (db.ts), writes (writes.ts
 shared/types.ts Types shared between the Worker and the React app
 src/            React app (pages/, components/, actions/, lib/)
 src/styles/ds/  Sandstone design system tokens + component CSS (ported as-is)
-migrations/     D1 schema (0002 adds dates, the audit log, board columns, regions)
+migrations/     D1 schema (0002: dates, audit log, regions; 0003: three-section board, task fields, subtasks)
 seed/           Fictional demo data for local development
 ```

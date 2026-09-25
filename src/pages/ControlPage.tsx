@@ -168,9 +168,9 @@ export function ControlPage() {
                   <span className="pt-reg__text" style={{ color: "var(--text-primary)" }}>
                     {c.title}
                   </span>
-                  <span className="pt-reg__sub pt-hide-sm">{c.site}</span>
+                  <span className="pt-reg__sub pt-hide-sm">{c.site || "—"}</span>
                   <span className="pt-reg__mono pt-hide-sm" style={c.late ? { color: "var(--status-breach-fg)" } : undefined}>
-                    {c.due}
+                    {c.due || "NO DATE"}
                   </span>
                   <span>{c.late ? <Badge kind="breach" label="Past due" pulse /> : <Badge kind="neutral" label={c.column} />}</span>
                 </motion.div>

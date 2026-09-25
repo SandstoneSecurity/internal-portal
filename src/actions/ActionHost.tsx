@@ -4,6 +4,7 @@ import {
   CLIENT_STATUSES,
   EMPLOYEE_STATUSES,
   INTEL_SEVERITIES,
+  PRIORITIES,
   ROLE_STATUSES,
   SERVICE_LINES,
   STAGES,
@@ -12,15 +13,17 @@ import {
   type Employee,
   type IntelItem,
   type OpsCard,
+  type OpsSubtask,
   type PortalData,
   type Role,
 } from "../../shared/types";
 import { send } from "../lib/api";
 import { usePortalData } from "../lib/DataProvider";
-import { addDays, initialsOf, moneyValue } from "../lib/format";
+import { addDays, dayMonth, initialsOf, moneyValue } from "../lib/format";
 import { useConfirm } from "../components/ui/Confirm";
 import { FormDrawer, type FieldSpec, type FormSpec, type FormValues } from "../components/ui/FormDrawer";
 import { useToast } from "../components/ui/Toast";
+import { TaskPane } from "../components/TaskPane";
 
 const opts = (list: readonly string[]) => list.map((v) => ({ value: v, label: v }));
 const statusOpts = (t: readonly (readonly [string, string])[]) => t.map(([l]) => ({ value: l, label: l }));
@@ -33,9 +36,18 @@ const isoOr = (iso: string | null, fallback = "") => iso ?? fallback;
 
 export interface Actions {
   raiseWork: (o?: { columnId?: number }) => void;
+  /** Opens the task panel. */
   editWork: (card: OpsCard) => void;
-  moveWork: (card: OpsCard, columnId: number) => Promise<void>;
+  openTask: (id: number) => void;
+  /** Moves a card to a column, optionally at an index within it (0 = top). */
+  moveWork: (card: OpsCard, columnId: number, position?: number) => Promise<void>;
+  toggleComplete: (card: OpsCard) => Promise<void>;
+  quickAddWork: (columnId: number, title: string) => Promise<void>;
+  patchWork: (card: OpsCard, patch: WorkPatch) => Promise<boolean>;
   deleteWork: (card: OpsCard) => Promise<boolean>;
+  addSubtask: (card: OpsCard, title: string) => Promise<void>;
+  patchSubtask: (card: OpsCard, sub: OpsSubtask, patch: SubtaskPatch) => Promise<boolean>;
+  deleteSubtask: (card: OpsCard, sub: OpsSubtask) => Promise<void>;
   addEmployee: () => void;
   editEmployee: (e: Employee) => void;
   rosterShift: (e: Employee) => void;
@@ -59,6 +71,27 @@ export interface Actions {
   primaryFor: (pathname: string) => { label: string; run: () => void } | null;
 }
 
+export type WorkPatch = Partial<Pick<OpsCard, "title" | "site" | "line" | "description" | "priority" | "startDate" | "dueDate">> & {
+  owner?: string;
+};
+export type SubtaskPatch = Partial<Pick<OpsSubtask, "title" | "done" | "startDate" | "dueDate">> & { owner?: string };
+
+/** Re-derives the display fields the Worker would compute, for optimistic updates. */
+function derive(k: OpsCard, done: boolean, today: string): OpsCard {
+  return {
+    ...k,
+    late: !done && !!k.dueDate && k.dueDate < today,
+    subtasks: k.subtasks.map((st) => ({ ...st, late: !st.done && !!st.dueDate && st.dueDate < today })),
+  };
+}
+
+function mapCard(d: PortalData, id: number, fn: (k: OpsCard) => OpsCard): PortalData {
+  return {
+    ...d,
+    opsColumns: d.opsColumns.map((c) => ({ ...c, cards: c.cards.map((k) => (k.id === id ? derive(fn(k), c.done, d.today) : k)) })),
+  };
+}
+
 const ActionContext = createContext<Actions | null>(null);
 
 export function ActionProvider({ children }: { children: ReactNode }) {
@@ -67,6 +100,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
   const confirm = useConfirm();
   const navigate = useNavigate();
   const [spec, setSpec] = useState<FormSpec | null>(null);
+  const [taskId, setTaskId] = useState<number | null>(null);
   const close = useCallback(() => setSpec(null), []);
 
   const done = useCallback(
@@ -103,15 +137,16 @@ export function ActionProvider({ children }: { children: ReactNode }) {
     const roles = d?.roles ?? [];
     const columns = d?.opsColumns ?? [];
 
-    const workFields = (withColumn: boolean): FieldSpec[] => [
-      { name: "title", label: "Work item", required: true, max: 120, placeholder: "e.g. Key register audit" },
-      { name: "site", label: "Client / site", required: true, max: 120, placeholder: "e.g. Castlereagh Hotels · four sites" },
+    const workFields: FieldSpec[] = [
+      { name: "title", label: "Task", required: true, max: 120, placeholder: "e.g. Key register audit" },
+      { name: "site", label: "Client / site", max: 120, placeholder: "e.g. Castlereagh Hotels · four sites" },
       { name: "line", label: "Service line", type: "select", options: opts(SERVICE_LINES), required: true, half: true },
-      { name: "owner", label: "Owner (initials)", type: "initials", required: true, half: true, placeholder: "JR" },
-      { name: "dueDate", label: "Due", type: "date", required: true, half: true },
-      ...(withColumn
-        ? [{ name: "columnId", label: "Stage", type: "select" as const, options: columns.map((c) => ({ value: String(c.id), label: c.label })), required: true, half: true }]
-        : []),
+      { name: "priority", label: "Priority", type: "select", options: opts(PRIORITIES), required: true, half: true },
+      { name: "owner", label: "Assignee (initials)", type: "initials", half: true, placeholder: "JR" },
+      { name: "columnId", label: "Section", type: "select", options: columns.map((c) => ({ value: String(c.id), label: c.label })), required: true, half: true },
+      { name: "startDate", label: "Start", type: "date", half: true },
+      { name: "dueDate", label: "Due", type: "date", half: true },
+      { name: "description", label: "Description", type: "textarea", max: 4000, placeholder: "What needs doing, and what does done look like?" },
     ];
 
     const employeeFields: FieldSpec[] = [
@@ -158,84 +193,200 @@ export function ActionProvider({ children }: { children: ReactNode }) {
       title: v.title,
       site: v.site,
       line: v.line,
+      priority: v.priority,
       owner: v.owner,
-      dueDate: v.dueDate,
+      startDate: v.startDate || null,
+      dueDate: v.dueDate || null,
+      description: v.description,
       ...(v.columnId ? { columnId: Number(v.columnId) } : {}),
     });
+
+    const moveCard = (dd: PortalData, card: OpsCard, columnId: number, position?: number): PortalData => {
+      const now = new Date().toISOString();
+      return {
+        ...dd,
+        opsColumns: dd.opsColumns.map((c) => {
+          const rest = c.cards.filter((k) => k.id !== card.id);
+          if (c.id !== columnId) return { ...c, cards: rest };
+          const moved = derive(
+            { ...card, columnId, completedAt: c.done ? card.completedAt ?? now : null },
+            c.done,
+            dd.today
+          );
+          const at = Math.min(position ?? rest.length, rest.length);
+          return { ...c, cards: [...rest.slice(0, at), moved, ...rest.slice(at)] };
+        }),
+      };
+    };
 
     const a: Actions = {
       raiseWork: (o) =>
         setSpec({
           eyebrow: "Operations",
           title: "Raise work",
-          submitLabel: "Raise work item",
-          fields: workFields(true),
+          submitLabel: "Create task",
+          fields: workFields,
           initial: {
             title: "",
             site: "",
             line: "Ops",
+            priority: "None",
             owner: me,
+            startDate: today,
             dueDate: addDays(today, 7),
+            description: "",
             columnId: String(o?.columnId ?? columns.find((c) => !c.done)?.id ?? ""),
           },
           submit: async (v) => {
             const r = await send("POST", "/work", workBody(v));
-            await done(`${r.ref} raised`, String(v.title), `/operations?card=${r.id}`);
+            await done(`${r.ref} created`, String(v.title), `/operations?card=${r.id}`);
           },
         }),
 
-      editWork: (card) =>
-        setSpec({
-          eyebrow: `Work item · ${card.ref}`,
-          title: card.title,
-          submitLabel: "Save changes",
-          fields: workFields(true),
-          initial: {
-            title: card.title,
-            site: card.site,
-            line: card.line,
-            owner: card.who,
-            dueDate: isoOr(card.dueDate),
-            columnId: String(card.columnId),
-          },
-          submit: async (v) => {
-            await send("PATCH", `/work/${card.id}`, workBody(v));
-            await done(`${card.ref} updated`);
-          },
-          danger: { label: "Delete item", run: () => a.deleteWork(card) },
-        }),
+      editWork: (card) => setTaskId(card.id),
+      openTask: (id) => setTaskId(id),
 
-      moveWork: async (card, columnId) => {
-        if (card.columnId === columnId) return;
+      moveWork: async (card, columnId, position) => {
+        const from = columns.find((c) => c.id === card.columnId);
         const col = columns.find((c) => c.id === columnId);
+        const same = card.columnId === columnId;
+        if (same) {
+          const rest = (from?.cards ?? []).filter((k) => k.id !== card.id);
+          const current = (from?.cards ?? []).findIndex((k) => k.id === card.id);
+          if (position === undefined || Math.min(position, rest.length) === current) return;
+        }
         try {
           await mutate(
-            (dd) => ({
-              ...dd,
-              opsColumns: dd.opsColumns.map((c) => ({
-                ...c,
-                cards:
-                  c.id === columnId
-                    ? [...c.cards.filter((k) => k.id !== card.id), { ...card, columnId, late: c.done ? false : card.late }]
-                    : c.cards.filter((k) => k.id !== card.id),
-              })),
-            }),
-            () => send("PATCH", `/work/${card.id}`, { columnId })
+            (dd) => moveCard(dd, card, columnId, position),
+            () => send("PATCH", `/work/${card.id}`, { ...(same ? {} : { columnId }), ...(position !== undefined ? { position } : {}) })
           );
-          toast({ title: `${card.ref} moved to ${col?.label ?? "a new column"}`, kind: col?.done ? "secure" : "info" });
+          if (!same)
+            toast(
+              col?.done
+                ? { title: `${card.ref} completed`, desc: card.title, kind: "secure" }
+                : { title: `${card.ref} moved to ${col?.label ?? "a new section"}`, kind: "info" }
+            );
         } catch (err) {
           fail(err);
         }
       },
 
-      deleteWork: (card) =>
-        destroy({
+      toggleComplete: async (card) => {
+        const current = columns.find((c) => c.id === card.columnId);
+        const target = current?.done ? columns.find((c) => !c.done) : columns.find((c) => c.done);
+        if (!target) return;
+        await a.moveWork(card, target.id, target.done ? 0 : undefined);
+      },
+
+      quickAddWork: async (columnId, title) => {
+        const col = columns.find((c) => c.id === columnId);
+        const temp: OpsCard = {
+          id: -Date.now(),
+          columnId,
+          ref: "OP-…",
+          title,
+          site: "",
+          line: "Ops",
+          description: "",
+          priority: "None",
+          due: "",
+          startDate: null,
+          dueDate: null,
+          createdAt: new Date().toISOString(),
+          completedAt: col?.done ? new Date().toISOString() : null,
+          late: false,
+          who: "",
+          subtasks: [],
+        };
+        try {
+          await mutate(
+            (dd) => ({ ...dd, opsColumns: dd.opsColumns.map((c) => (c.id === columnId ? { ...c, cards: [...c.cards, temp] } : c)) }),
+            () => send("POST", "/work", { title, columnId })
+          );
+        } catch (err) {
+          fail(err);
+        }
+      },
+
+      patchWork: async (card, patch) => {
+        const body: Record<string, unknown> = { ...patch };
+        try {
+          await mutate(
+            (dd) =>
+              mapCard(dd, card.id, (k) => ({
+                ...k,
+                ...patch,
+                ...(patch.owner !== undefined ? { who: patch.owner.toUpperCase() } : {}),
+                ...(patch.dueDate !== undefined ? { due: patch.dueDate ? `DUE ${dayMonth(patch.dueDate)}` : "" } : {}),
+              })),
+            () => send("PATCH", `/work/${card.id}`, body)
+          );
+          return true;
+        } catch (err) {
+          fail(err);
+          return false;
+        }
+      },
+
+      deleteWork: async (card) => {
+        const ok = await destroy({
           title: `Delete ${card.ref}?`,
-          body: <>“{card.title}” will be removed from the board. The audit log keeps a record of the deletion.</>,
-          confirmLabel: "Delete item",
+          body: (
+            <>
+              “{card.title}”{card.subtasks.length ? ` and its ${card.subtasks.length} subtasks` : ""} will be removed from the board. The audit log keeps a
+              record of the deletion.
+            </>
+          ),
+          confirmLabel: "Delete task",
           path: `/work/${card.id}`,
           toast: `${card.ref} deleted`,
-        }),
+        });
+        if (ok) setTaskId(null);
+        return ok;
+      },
+
+      addSubtask: async (card, title) => {
+        const temp: OpsSubtask = { id: -Date.now(), cardId: card.id, title, done: false, who: "", startDate: null, dueDate: null, late: false };
+        try {
+          await mutate(
+            (dd) => mapCard(dd, card.id, (k) => ({ ...k, subtasks: [...k.subtasks, temp] })),
+            () => send("POST", `/work/${card.id}/subtasks`, { title })
+          );
+        } catch (err) {
+          fail(err);
+        }
+      },
+
+      patchSubtask: async (card, sub, patch) => {
+        try {
+          await mutate(
+            (dd) =>
+              mapCard(dd, card.id, (k) => ({
+                ...k,
+                subtasks: k.subtasks.map((st) =>
+                  st.id === sub.id ? { ...st, ...patch, ...(patch.owner !== undefined ? { who: patch.owner.toUpperCase() } : {}) } : st
+                ),
+              })),
+            () => send("PATCH", `/subtasks/${sub.id}`, patch)
+          );
+          return true;
+        } catch (err) {
+          fail(err);
+          return false;
+        }
+      },
+
+      deleteSubtask: async (card, sub) => {
+        try {
+          await mutate(
+            (dd) => mapCard(dd, card.id, (k) => ({ ...k, subtasks: k.subtasks.filter((st) => st.id !== sub.id) })),
+            () => send("DELETE", `/subtasks/${sub.id}`)
+          );
+          toast({ title: "Subtask removed", desc: sub.title, kind: "info" });
+        } catch (err) {
+          fail(err);
+        }
+      },
 
       addEmployee: () =>
         setSpec({
@@ -553,6 +704,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
     <ActionContext.Provider value={actions}>
       {children}
       <FormDrawer spec={spec} onClose={close} />
+      <TaskPane id={taskId} onClose={() => setTaskId(null)} />
     </ActionContext.Provider>
   );
 }

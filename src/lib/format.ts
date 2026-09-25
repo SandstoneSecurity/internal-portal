@@ -113,3 +113,34 @@ export function matches(query: string, ...haystack: (string | number | undefined
     .filter(Boolean)
     .every((term) => hay.includes(term));
 }
+
+const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** Task-style date relative to `today`: "Today", "Tomorrow", "Yesterday", "3 Oct", "3 Oct 27". */
+export function friendlyDate(iso: string, today: string): string {
+  const p = parts(iso);
+  if (!p) return iso;
+  const diff = daysBetween(today, iso);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Tomorrow";
+  if (diff === -1) return "Yesterday";
+  const base = `${p[2]} ${SHORT_MONTHS[p[1] - 1]}`;
+  return p[0] === Number(today.slice(0, 4)) ? base : `${base} ${String(p[0]).slice(2)}`;
+}
+
+/** "3 – 9 Oct", "28 Sep – 3 Oct", or just the due date when there is no start. */
+export function dateRange(start: string | null, due: string | null, today: string): string {
+  if (!due) return start ? `From ${friendlyDate(start, today)}` : "";
+  if (!start || start === due) return friendlyDate(due, today);
+  const s = parts(start), d = parts(due);
+  if (s && d && s[0] === d[0] && s[1] === d[1] && daysBetween(today, start) > 1 && daysBetween(today, due) > 1)
+    return `${s[2]} – ${d[2]} ${SHORT_MONTHS[d[1] - 1]}`;
+  return `${friendlyDate(start, today)} – ${friendlyDate(due, today)}`;
+}
+
+/** How a due date should read: past due, due soon (today/tomorrow), or neither. */
+export function dueTone(due: string | null, today: string, done: boolean): "late" | "soon" | "none" {
+  if (!due || done) return "none";
+  const diff = daysBetween(today, due);
+  return diff < 0 ? "late" : diff <= 1 ? "soon" : "none";
+}
