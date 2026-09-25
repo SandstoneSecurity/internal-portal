@@ -38,35 +38,83 @@ export interface Employee {
 }
 
 export interface ClientContact {
+  id: number;
   name: string;
+  /** Job title. */
   role: string;
+  email: string;
+  phone: string;
 }
 
-export interface ClientDeal {
-  name: string;
-  value: string;
-  stage: string;
-  review: string;
-}
+export const ENGAGEMENT_KINDS = ["note", "email", "call", "meeting", "task"] as const;
+export type EngagementKind = (typeof ENGAGEMENT_KINDS)[number];
+export const CALL_OUTCOMES = ["Connected", "Left voicemail", "No answer", "Wrong number"] as const;
 
-export interface ClientActivity {
-  date: string;
-  text: string;
+/** Something logged against a company: a note, email, call, meeting or task. */
+export interface Engagement {
+  id: number;
+  clientId: number;
+  kind: EngagementKind;
+  subject: string;
+  body: string;
+  /** When it happened (or is scheduled for, for meetings): ISO date or timestamp. */
+  at: string;
+  /** Who logged it (Access email); "" for legacy rows. */
+  actor: string;
+  /** Call outcome. */
+  outcome: string;
+  /** Tasks: due date and whether it's done. */
+  dueDate: string | null;
+  done: boolean;
+  contactId: number | null;
 }
 
 export interface Client {
   id: number;
   org: string;
+  /** Industry. */
   sector: string;
   sites: number;
+  /** Annual contract value, display form ("$840,000"). */
   value: string;
+  valueNum: number;
   owner: string;
+  /** Lifecycle stage. */
   status: string;
   kind: StatusKind;
+  /** Description. */
   meta: string;
+  domain: string;
+  phone: string;
+  city: string;
+  createdAt: string | null;
+  /** Latest engagement date, ISO. */
+  lastActivity: string | null;
   contacts: ClientContact[];
-  deal: ClientDeal | null;
-  activity: ClientActivity[];
+  activity: Engagement[];
+}
+
+/** Deal pipeline stages with win probability, in order. */
+export const DEAL_STAGES = [
+  ["Enquiry", 10],
+  ["Site survey", 25],
+  ["Proposal sent", 50],
+  ["Negotiation", 75],
+  ["Closed won", 100],
+  ["Closed lost", 0],
+] as const satisfies readonly (readonly [string, number])[];
+export type DealStage = (typeof DEAL_STAGES)[number][0];
+
+export interface Deal {
+  id: number;
+  clientId: number;
+  name: string;
+  amount: number;
+  stage: DealStage;
+  closeDate: string | null;
+  owner: string;
+  createdAt: string;
+  closedAt: string | null;
 }
 
 export const PRIORITIES = ["None", "Low", "Medium", "High"] as const;
@@ -121,9 +169,32 @@ export interface Role {
   id: number;
   title: string;
   meta: string;
+  /** Job state: Draft, Published, On hold, Closed. */
   status: string;
   kind: StatusKind;
+  /** Active (not disqualified) candidates per pipeline stage. */
   counts: number[];
+  disqualified: number;
+  department: string;
+  location: string;
+  employmentType: string;
+  openings: number;
+  description: string;
+  hiringManager: string;
+  createdAt: string | null;
+}
+
+export type CandidateEventKind = "created" | "stage" | "comment" | "evaluation" | "disqualified" | "requalified";
+
+export interface CandidateEvent {
+  id: number;
+  at: string;
+  actor: string;
+  kind: CandidateEventKind;
+  body: string;
+  /** Evaluations: 1–5 and a verdict. */
+  score: number | null;
+  verdict: string | null;
 }
 
 export interface Candidate {
@@ -134,7 +205,18 @@ export interface Candidate {
   lic: string;
   ok: boolean;
   source: string;
+  /** Days in the current stage. */
   days: number;
+  email: string;
+  phone: string;
+  location: string;
+  headline: string;
+  disqualified: boolean;
+  disqualifyReason: string;
+  appliedAt: string | null;
+  /** Average scorecard score, 1–5, or null when nobody has evaluated yet. */
+  rating: number | null;
+  events: CandidateEvent[];
 }
 
 export interface Region {
@@ -175,6 +257,7 @@ export interface PortalData {
   metrics: Metric[];
   employees: Employee[];
   clients: Client[];
+  deals: Deal[];
   opsColumns: OpsColumn[];
   roles: Role[];
   candidates: Candidate[];
@@ -184,7 +267,20 @@ export interface PortalData {
 }
 
 /** Recruitment pipeline stages, in order; Candidate.stage indexes this list. */
-export const STAGES = ["Applied", "Screened", "Interview", "Licence check", "Offer"] as const;
+export const STAGES = ["Sourced", "Applied", "Phone screen", "Licence check", "Interview", "Offer", "Hired"] as const;
+export const HIRED_STAGE = STAGES.length - 1;
+
+export const EMPLOYMENT_TYPES = ["Full time", "Part time", "Casual", "Contract"] as const;
+export const DEPARTMENTS = ["Ops", "Protective", "Advisory", "Tech", "Training", "Head office"] as const;
+export const DISQUALIFY_REASONS = [
+  "Licence not current",
+  "Failed reference check",
+  "Not the right fit",
+  "Withdrew",
+  "Accepted another offer",
+  "No response",
+] as const;
+export const VERDICTS = ["Strong hire", "Hire", "No hire"] as const;
 
 export const EMPLOYEE_STATUSES = [
   ["On shift", "secure"],
@@ -193,19 +289,20 @@ export const EMPLOYEE_STATUSES = [
   ["Stood down", "breach"],
 ] as const satisfies readonly (readonly [string, StatusKind])[];
 
+/** Company lifecycle stages. */
 export const CLIENT_STATUSES = [
-  ["Prospect", "info"],
-  ["Proposal", "advisory"],
-  ["Active", "secure"],
-  ["Dormant", "neutral"],
+  ["Lead", "info"],
+  ["Opportunity", "advisory"],
+  ["Customer", "secure"],
+  ["Former customer", "neutral"],
 ] as const satisfies readonly (readonly [string, StatusKind])[];
 
+/** Job states. */
 export const ROLE_STATUSES = [
-  ["New", "info"],
-  ["Open", "secure"],
-  ["Shortlisting", "advisory"],
-  ["On hold", "neutral"],
-  ["Filled", "neutral"],
+  ["Draft", "info"],
+  ["Published", "secure"],
+  ["On hold", "advisory"],
+  ["Closed", "neutral"],
 ] as const satisfies readonly (readonly [string, StatusKind])[];
 
 export const INTEL_SEVERITIES = [

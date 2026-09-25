@@ -31,13 +31,15 @@ function useHeading(pathname: string): { title: string; meta: string } {
   const expiring = d.employees.filter((e) => e.expirySoon).length;
   const candidates = d.candidates.length;
   const breaches = d.feed.filter((f) => f.kind === "breach").length;
-  const active = d.clients.filter((c) => c.status === "Active").length;
+  const active = d.clients.filter((c) => c.status === "Customer").length;
+  const openDeals = d.deals.filter((x) => x.stage !== "Closed won" && x.stage !== "Closed lost");
+  const openJobs = d.roles.filter((r) => r.status === "Published").length;
   const map: Record<string, { title: string; meta: string }> = {
     "/": { title: "Control", meta: `${longDate(d.today)} · week ${isoWeek(d.today)}` },
     "/operations": { title: "Operations", meta: `Order book · ${open} open · ${late} past due` },
-    "/recruitment": { title: "Recruitment", meta: `${d.roles.length} roles · ${candidates} candidates · SLED licence checks tracked` },
+    "/recruitment": { title: "Recruitment", meta: `${openJobs} published ${openJobs === 1 ? "job" : "jobs"} · ${candidates} candidates` },
     "/employees": { title: "Employees", meta: `Licensed personnel register · ${d.employees.length} on file · ${onShift} on shift · ${expiring} licences due` },
-    "/clients": { title: "Clients", meta: `${d.clients.length} accounts · ${active} active` },
+    "/clients": { title: "Clients", meta: `${d.clients.length} companies · ${active} customers · ${openDeals.length} open deals` },
     "/intelligence": { title: "Intelligence", meta: `Monitored activity across New South Wales · ${d.feed.length} items · ${breaches} breach` },
   };
   return map[pathname] ?? map["/"]!;

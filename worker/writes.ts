@@ -3,8 +3,15 @@ import { z } from "zod";
 import {
   CLIENT_STATUSES,
   EMPLOYEE_STATUSES,
+  CALL_OUTCOMES,
+  DEAL_STAGES,
+  DEPARTMENTS,
+  EMPLOYMENT_TYPES,
+  ENGAGEMENT_KINDS,
   INTEL_SEVERITIES,
   PRIORITIES,
+  VERDICTS,
+  type DealStage,
   ROLE_STATUSES,
   SERVICE_LINES,
   STAGES,
@@ -83,33 +90,75 @@ export const schemas = {
   }),
   client: z.object({
     org: text(80),
-    sector: text(60),
-    sites: z.coerce.number().int().min(0).max(999),
-    valuePa: z.coerce.number().int().min(0).max(1_000_000_000),
-    owner: initials,
-    status: z.enum(labels(CLIENT_STATUSES)),
-    meta: optText(160),
+    sector: optText(60),
+    sites: z.coerce.number().int().min(0).max(999).default(0),
+    valuePa: z.coerce.number().int().min(0).max(1_000_000_000).default(0),
+    owner: optInitials,
+    status: z.enum(labels(CLIENT_STATUSES)).default("Lead"),
+    meta: optText(400),
+    domain: optText(120),
+    phone: optText(30),
+    city: optText(60),
   }),
-  contact: z.object({ name: text(80), role: text(80) }),
-  activity: z.object({ text: text(400) }),
+  contact: z.object({
+    name: text(80),
+    role: optText(80),
+    email: z.union([z.literal(""), z.string().trim().email("Enter a valid email").max(120)]).default(""),
+    phone: optText(30),
+  }),
+  engagementPatch: z.object({
+      kind: z.enum(ENGAGEMENT_KINDS).default("note"),
+      subject: optText(160),
+      body: optText(4000),
+      outcome: z.union([z.literal(""), z.enum(CALL_OUTCOMES)]).default(""),
+      /** When it happened / is scheduled: a date or an ISO timestamp. */
+      at: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}(T[\d:.]+Z?)?$/, "Use a date")
+        .optional(),
+      dueDate: optDate,
+      done: z.boolean().default(false),
+      contactId: id.nullable().optional(),
+  }),
   deal: z.object({
+    clientId: id,
     name: text(120),
-    value: z.coerce.number().int().min(0).max(1_000_000_000),
-    stage: z.enum(["SCOPING", "DRAFTING", "SUBMITTED", "NEGOTIATING"]),
-    review: isoDate,
+    amount: z.coerce.number().int().min(0).max(1_000_000_000).default(0),
+    stage: z.enum(DEAL_STAGES.map(([st]) => st) as unknown as [DealStage, ...DealStage[]]).default("Enquiry"),
+    closeDate: optDate,
+    owner: optInitials,
+    position: z.coerce.number().int().min(0).max(10_000).optional(),
   }),
   role: z.object({
     title: text(100),
     meta: optText(140),
-    status: z.enum(labels(ROLE_STATUSES)),
+    status: z.enum(labels(ROLE_STATUSES)).default("Draft"),
+    department: z.enum(DEPARTMENTS).default("Ops"),
+    location: optText(80),
+    employmentType: z.enum(EMPLOYMENT_TYPES).default("Full time"),
+    openings: z.coerce.number().int().min(1).max(99).default(1),
+    description: optText(6000),
+    hiringManager: optText(80),
   }),
   candidate: z.object({
     roleId: id,
     name: text(80),
-    licence: text(40),
-    licenceOk: z.boolean().default(true),
-    source: text(60),
-    stage: z.coerce.number().int().min(0).max(STAGES.length - 1).default(0),
+    email: z.union([z.literal(""), z.string().trim().email("Enter a valid email").max(120)]).default(""),
+    phone: optText(30),
+    location: optText(80),
+    headline: optText(140),
+    licence: optText(40),
+    licenceOk: z.boolean().default(false),
+    source: optText(60),
+    stage: z.coerce.number().int().min(0).max(STAGES.length - 1).default(1),
+    disqualified: z.boolean().default(false),
+    disqualifyReason: optText(120),
+  }),
+  comment: z.object({ body: text(4000) }),
+  evaluation: z.object({
+    score: z.coerce.number().int().min(1, "Give a score").max(5),
+    verdict: z.enum(VERDICTS),
+    body: optText(4000),
   }),
   intel: z.object({
     severity: z.enum(labels(INTEL_SEVERITIES)),
@@ -574,18 +623,44 @@ writes.post("/employees/:id/shifts", async (c) => {
   return c.json({ ok: true }, 201);
 });
 
-// ── Clients ──────────────────────────────────────────────────────────────────
+// ── Companies (CRM) ──────────────────────────────────────────────────────────
+const CLIENT_COLUMNS = {
+  org: "org",
+  sector: "sector",
+  sites: "sites",
+  valuePa: "value_pa",
+  owner: "owner_initials",
+  status: "status",
+  statusKind: "status_kind",
+  meta: "meta",
+  domain: "domain",
+  phone: "phone",
+  city: "city",
+};
+const PROPERTY_NAMES: Record<string, string> = {
+  org: "name",
+  sector: "industry",
+  sites: "sites",
+  valuePa: "annual value",
+  owner: "owner",
+  status: "lifecycle stage",
+  meta: "description",
+  domain: "domain",
+  phone: "phone",
+  city: "city",
+};
+
 writes.post("/clients", async (c) => {
   const v = await body(c, schemas.client);
   const db = c.env.DB;
   const [ins] = await db.batch([
     db
       .prepare(
-        `INSERT INTO clients (org, sector, sites, value_pa, owner_initials, status, status_kind, meta)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
+        `INSERT INTO clients (org, sector, sites, value_pa, owner_initials, status, status_kind, meta, domain, phone, city, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
       )
-      .bind(v.org, v.sector, v.sites, aud(v.valuePa), v.owner, v.status, kindFor(CLIENT_STATUSES, v.status), v.meta || `${v.status} · ${v.sector}`),
-    auditLastInsert(c, "client", `Opened account for ${v.org}`),
+      .bind(v.org, v.sector, v.sites, aud(v.valuePa), v.owner, v.status, kindFor(CLIENT_STATUSES, v.status), v.meta, v.domain, v.phone, v.city, nowIso()),
+    auditLastInsert(c, "client", `Created company ${v.org}`),
   ]);
   return c.json({ id: (ins.results[0] as { id: number }).id }, 201);
 });
@@ -600,13 +675,20 @@ writes.patch("/clients/:id", async (c) => {
       valuePa: v.valuePa !== undefined ? aud(v.valuePa) : undefined,
       statusKind: v.status ? kindFor(CLIENT_STATUSES, v.status) : undefined,
     },
-    { org: "org", sector: "sector", sites: "sites", valuePa: "value_pa", owner: "owner_initials", status: "status", statusKind: "status_kind", meta: "meta" }
+    CLIENT_COLUMNS
   );
   if (!sql) return c.json({ ok: true });
-  const changed = v.status && v.status !== client.status ? ` — now ${v.status}` : "";
+  const keys = Object.keys(v);
+  const name = v.org ?? String(client.org);
+  const summary =
+    v.status && v.status !== client.status
+      ? `Moved ${name} to ${v.status}`
+      : keys.length === 1
+        ? `Updated ${PROPERTY_NAMES[keys[0]!] ?? "details"} for ${name}`
+        : `Updated ${name}`;
   await c.env.DB.batch([
     c.env.DB.prepare(`UPDATE clients SET ${sql} WHERE id = ?`).bind(...binds, clientId),
-    audit(c, "update", "client", String(clientId), `Updated ${v.org ?? client.org}${changed}`),
+    audit(c, "update", "client", String(clientId), summary),
   ]);
   return c.json({ ok: true });
 });
@@ -617,87 +699,203 @@ writes.delete("/clients/:id", async (c) => {
   const db = c.env.DB;
   await db.batch([
     db.prepare(`DELETE FROM client_contacts WHERE client_id = ?`).bind(clientId),
-    db.prepare(`DELETE FROM client_deals WHERE client_id = ?`).bind(clientId),
+    db.prepare(`DELETE FROM deals WHERE client_id = ?`).bind(clientId),
     db.prepare(`DELETE FROM client_activity WHERE client_id = ?`).bind(clientId),
     db.prepare(`DELETE FROM clients WHERE id = ?`).bind(clientId),
-    audit(c, "delete", "client", String(clientId), `Closed account for ${client.org}`),
+    audit(c, "delete", "client", String(clientId), `Deleted company ${client.org}`),
   ]);
   return c.json({ ok: true });
 });
 
+// Contacts
 writes.post("/clients/:id/contacts", async (c) => {
   const clientId = param(c);
   const v = await body(c, schemas.contact);
   const client = await mustExist(c, "clients", clientId);
   const db = c.env.DB;
-  await db.batch([
-    db
-      .prepare(
-        `INSERT INTO client_contacts (client_id, name, role, sort_order)
-         VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM client_contacts WHERE client_id = ?))`
-      )
-      .bind(clientId, v.name, v.role, clientId),
-    audit(c, "create", "contact", String(clientId), `Added contact ${v.name} (${v.role}) at ${client.org}`),
-  ]);
-  return c.json({ ok: true }, 201);
-});
-
-writes.post("/clients/:id/activity", async (c) => {
-  const clientId = param(c);
-  const v = await body(c, schemas.activity);
-  const client = await mustExist(c, "clients", clientId);
-  const db = c.env.DB;
-  await db.batch([
-    db
-      .prepare(
-        `INSERT INTO client_activity (client_id, activity_date, body, sort_order)
-         VALUES (?, ?, ?, (SELECT COALESCE(MIN(sort_order), 1) - 1 FROM client_activity WHERE client_id = ?))`
-      )
-      .bind(clientId, shortDate(todaySydney()), v.text, clientId),
-    audit(c, "create", "activity", String(clientId), `Logged activity at ${client.org}`),
-  ]);
-  return c.json({ ok: true }, 201);
-});
-
-writes.put("/clients/:id/deal", async (c) => {
-  const clientId = param(c);
-  const v = await body(c, schemas.deal);
-  const client = await mustExist(c, "clients", clientId);
-  const db = c.env.DB;
-  await db.batch([
-    db
-      .prepare(
-        `INSERT INTO client_deals (client_id, name, value, stage, review_date) VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT(client_id) DO UPDATE SET name = excluded.name, value = excluded.value, stage = excluded.stage, review_date = excluded.review_date`
-      )
-      .bind(clientId, v.name, aud(v.value), v.stage, shortDate(v.review)),
-    audit(c, "update", "proposal", String(clientId), `Proposal for ${client.org}: ${v.name} (${v.stage.toLowerCase()})`),
-  ]);
-  return c.json({ ok: true });
-});
-
-writes.delete("/clients/:id/deal", async (c) => {
-  const clientId = param(c);
-  const client = await mustExist(c, "clients", clientId);
-  await c.env.DB.batch([
-    c.env.DB.prepare(`DELETE FROM client_deals WHERE client_id = ?`).bind(clientId),
-    audit(c, "delete", "proposal", String(clientId), `Closed the open proposal for ${client.org}`),
-  ]);
-  return c.json({ ok: true });
-});
-
-// ── Recruitment ──────────────────────────────────────────────────────────────
-writes.post("/roles", async (c) => {
-  const v = await body(c, schemas.role);
-  const db = c.env.DB;
   const [ins] = await db.batch([
     db
       .prepare(
-        `INSERT INTO roles (title, meta, status, status_kind, sort_order)
-         VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM roles)) RETURNING id`
+        `INSERT INTO client_contacts (client_id, name, role, email, phone, sort_order)
+         VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM client_contacts WHERE client_id = ?)) RETURNING id`
       )
-      .bind(v.title, v.meta, v.status, kindFor(ROLE_STATUSES, v.status)),
-    auditLastInsert(c, "role", `Posted role — ${v.title}`),
+      .bind(clientId, v.name, v.role, v.email, v.phone, clientId),
+    audit(c, "create", "client", String(clientId), `Added contact ${v.name}${v.role ? ` (${v.role})` : ""} to ${client.org}`),
+  ]);
+  return c.json({ id: (ins.results[0] as { id: number }).id }, 201);
+});
+
+writes.patch("/contacts/:id", async (c) => {
+  const contactId = param(c);
+  const v = await body(c, schemas.contact, true);
+  const contact = await mustExist(c, "client_contacts", contactId);
+  const { sql, binds } = setClause(v, { name: "name", role: "role", email: "email", phone: "phone" });
+  if (!sql) return c.json({ ok: true });
+  await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE client_contacts SET ${sql} WHERE id = ?`).bind(...binds, contactId),
+    audit(c, "update", "client", String(contact.client_id), `Updated contact ${v.name ?? contact.name}`),
+  ]);
+  return c.json({ ok: true });
+});
+
+writes.delete("/contacts/:id", async (c) => {
+  const contactId = param(c);
+  const contact = await mustExist(c, "client_contacts", contactId);
+  await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE client_activity SET contact_id = NULL WHERE contact_id = ?`).bind(contactId),
+    c.env.DB.prepare(`DELETE FROM client_contacts WHERE id = ?`).bind(contactId),
+    audit(c, "delete", "client", String(contact.client_id), `Removed contact ${contact.name}`),
+  ]);
+  return c.json({ ok: true });
+});
+
+// Engagements: notes, emails, calls, meetings, tasks
+const engagementCreate = schemas.engagementPatch.refine((v) => v.subject || v.body, {
+  message: "Add a subject or some detail",
+  path: ["body"],
+});
+const KIND_VERB: Record<string, string> = { note: "Added a note", email: "Logged an email", call: "Logged a call", meeting: "Logged a meeting", task: "Created a task" };
+
+writes.post("/clients/:id/activity", async (c) => {
+  const clientId = param(c);
+  const v = await body(c, engagementCreate);
+  const client = await mustExist(c, "clients", clientId);
+  const db = c.env.DB;
+  const at = v.at ?? nowIso();
+  const [ins] = await db.batch([
+    db
+      .prepare(
+        `INSERT INTO client_activity (client_id, activity_date, body, sort_order, kind, subject, at, actor, outcome, due_date, done, contact_id)
+         VALUES (?, ?, ?, (SELECT COALESCE(MIN(sort_order), 1) - 1 FROM client_activity WHERE client_id = ?), ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
+      )
+      .bind(clientId, shortDate(at.slice(0, 10)), v.body, clientId, v.kind, v.subject, at, c.get("userEmail"), v.outcome, v.dueDate, v.done ? 1 : 0, v.contactId ?? null),
+    audit(c, "create", "client", String(clientId), `${KIND_VERB[v.kind]} on ${client.org}${v.subject ? `: ${v.subject}` : ""}`),
+  ]);
+  return c.json({ id: (ins.results[0] as { id: number }).id }, 201);
+});
+
+writes.patch("/activity/:id", async (c) => {
+  const actId = param(c);
+  const v = await body(c, schemas.engagementPatch, true);
+  const act = await mustExist(c, "client_activity", actId);
+  const { sql, binds } = setClause(
+    { ...v, done: v.done === undefined ? undefined : v.done ? 1 : 0, contactId: v.contactId === undefined ? undefined : v.contactId },
+    { subject: "subject", body: "body", outcome: "outcome", at: "at", dueDate: "due_date", done: "done", contactId: "contact_id" }
+  );
+  if (!sql) return c.json({ ok: true });
+  const label = String(act.subject || act.body).slice(0, 60);
+  const summary = v.done !== undefined && Object.keys(v).length === 1 ? `${v.done ? "Completed" : "Reopened"} task “${label}”` : `Edited ${act.kind} “${label}”`;
+  await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE client_activity SET ${sql} WHERE id = ?`).bind(...binds, actId),
+    audit(c, "update", "client", String(act.client_id), summary),
+  ]);
+  return c.json({ ok: true });
+});
+
+writes.delete("/activity/:id", async (c) => {
+  const actId = param(c);
+  const act = await mustExist(c, "client_activity", actId);
+  await c.env.DB.batch([
+    c.env.DB.prepare(`DELETE FROM client_activity WHERE id = ?`).bind(actId),
+    audit(c, "delete", "client", String(act.client_id), `Deleted ${act.kind} “${String(act.subject || act.body).slice(0, 60)}”`),
+  ]);
+  return c.json({ ok: true });
+});
+
+// Deals
+const CLOSED = new Set(["Closed won", "Closed lost"]);
+
+writes.post("/deals", async (c) => {
+  const v = await body(c, schemas.deal);
+  const client = await mustExist(c, "clients", v.clientId);
+  const db = c.env.DB;
+  const now = nowIso();
+  const order = (await db.prepare(`SELECT COALESCE(MAX(sort_order), 0) + 1 AS n FROM deals WHERE stage = ?`).bind(v.stage).first<number>("n")) ?? 1;
+  const stmts: D1PreparedStatement[] = [
+    db
+      .prepare(
+        `INSERT INTO deals (client_id, name, amount, stage, close_date, owner_initials, sort_order, created_at, closed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
+      )
+      .bind(v.clientId, v.name, v.amount, v.stage, v.closeDate, v.owner || String(client.owner_initials), order, now, CLOSED.has(v.stage) ? now : null),
+    audit(c, "create", "client", String(v.clientId), `Created deal “${v.name}” (${aud(v.amount)}) for ${client.org}`),
+  ];
+  // A company with an open deal is at least an opportunity.
+  if (client.status === "Lead" && !CLOSED.has(v.stage))
+    stmts.push(db.prepare(`UPDATE clients SET status = 'Opportunity', status_kind = 'advisory' WHERE id = ?`).bind(v.clientId));
+  const [ins] = await db.batch(stmts);
+  return c.json({ id: (ins.results[0] as { id: number }).id }, 201);
+});
+
+writes.patch("/deals/:id", async (c) => {
+  const dealId = param(c);
+  const v = await body(c, schemas.deal, true);
+  const deal = await mustExist(c, "deals", dealId);
+  const db = c.env.DB;
+  if (v.clientId !== undefined) await mustExist(c, "clients", v.clientId);
+  const stmts: D1PreparedStatement[] = [];
+  const stageChanged = v.stage !== undefined && v.stage !== deal.stage;
+  const { sql, binds } = setClause(
+    { ...v, closedAt: stageChanged ? (CLOSED.has(v.stage!) ? nowIso() : null) : undefined },
+    { clientId: "client_id", name: "name", amount: "amount", stage: "stage", closeDate: "close_date", owner: "owner_initials", closedAt: "closed_at" }
+  );
+  if (sql) stmts.push(db.prepare(`UPDATE deals SET ${sql} WHERE id = ?`).bind(...binds, dealId));
+  if (v.position !== undefined || stageChanged) {
+    const stage = v.stage ?? String(deal.stage);
+    const { results } = await db.prepare(`SELECT id FROM deals WHERE stage = ? AND id != ? ORDER BY sort_order, id`).bind(stage, dealId).all<{ id: number }>();
+    const ids = results.map((r) => r.id);
+    ids.splice(Math.min(v.position ?? ids.length, ids.length), 0, dealId);
+    ids.forEach((rowId, i) => stmts.push(db.prepare(`UPDATE deals SET sort_order = ? WHERE id = ?`).bind(i + 1, rowId)));
+  }
+  if (!stmts.length) return c.json({ ok: true });
+  const clientId = v.clientId ?? (deal.client_id as number);
+  const name = v.name ?? String(deal.name);
+  if (stageChanged) {
+    stmts.push(audit(c, "move", "client", String(clientId), `Moved deal “${name}” to ${v.stage}`));
+    // Winning a deal makes the company a customer.
+    if (v.stage === "Closed won")
+      stmts.push(db.prepare(`UPDATE clients SET status = 'Customer', status_kind = 'secure' WHERE id = ? AND status != 'Customer'`).bind(clientId));
+  } else if (sql) stmts.push(audit(c, "update", "client", String(clientId), `Updated deal “${name}”`));
+  await db.batch(stmts);
+  return c.json({ ok: true });
+});
+
+writes.delete("/deals/:id", async (c) => {
+  const dealId = param(c);
+  const deal = await mustExist(c, "deals", dealId);
+  await c.env.DB.batch([
+    c.env.DB.prepare(`DELETE FROM deals WHERE id = ?`).bind(dealId),
+    audit(c, "delete", "client", String(deal.client_id), `Deleted deal “${deal.name}”`),
+  ]);
+  return c.json({ ok: true });
+});
+
+// ── Recruitment (jobs and candidates) ────────────────────────────────────────
+const ROLE_COLUMNS = {
+  title: "title",
+  meta: "meta",
+  status: "status",
+  statusKind: "status_kind",
+  department: "department",
+  location: "location",
+  employmentType: "employment_type",
+  openings: "openings",
+  description: "description",
+  hiringManager: "hiring_manager",
+};
+
+writes.post("/roles", async (c) => {
+  const v = await body(c, schemas.role);
+  const db = c.env.DB;
+  const meta = v.meta || [v.department, v.location, v.employmentType.toLowerCase(), v.openings > 1 ? `${v.openings} positions` : ""].filter(Boolean).join(" · ");
+  const [ins] = await db.batch([
+    db
+      .prepare(
+        `INSERT INTO roles (title, meta, status, status_kind, department, location, employment_type, openings, description, hiring_manager, created_at, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM roles)) RETURNING id`
+      )
+      .bind(v.title, meta, v.status, kindFor(ROLE_STATUSES, v.status), v.department, v.location, v.employmentType, v.openings, v.description, v.hiringManager, nowIso()),
+    auditLastInsert(c, "role", `Created job — ${v.title}${v.status === "Published" ? " (published)" : ""}`),
   ]);
   return c.json({ id: (ins.results[0] as { id: number }).id }, 201);
 });
@@ -706,14 +904,13 @@ writes.patch("/roles/:id", async (c) => {
   const roleId = param(c);
   const v = await body(c, schemas.role, true);
   const role = await mustExist(c, "roles", roleId);
-  const { sql, binds } = setClause(
-    { ...v, statusKind: v.status ? kindFor(ROLE_STATUSES, v.status) : undefined },
-    { title: "title", meta: "meta", status: "status", statusKind: "status_kind" }
-  );
+  const { sql, binds } = setClause({ ...v, statusKind: v.status ? kindFor(ROLE_STATUSES, v.status) : undefined }, ROLE_COLUMNS);
   if (!sql) return c.json({ ok: true });
+  const title = v.title ?? String(role.title);
+  const summary = v.status && v.status !== role.status ? `${v.status === "Published" ? "Published" : `Set to ${v.status}:`} ${title}` : `Updated job — ${title}`;
   await c.env.DB.batch([
     c.env.DB.prepare(`UPDATE roles SET ${sql} WHERE id = ?`).bind(...binds, roleId),
-    audit(c, "update", "role", String(roleId), `Updated role — ${v.title ?? role.title}${v.status ? ` (${v.status})` : ""}`),
+    audit(c, "update", "role", String(roleId), summary),
   ]);
   return c.json({ ok: true });
 });
@@ -723,12 +920,24 @@ writes.delete("/roles/:id", async (c) => {
   const role = await mustExist(c, "roles", roleId);
   const db = c.env.DB;
   await db.batch([
+    db.prepare(`DELETE FROM candidate_events WHERE candidate_id IN (SELECT id FROM candidates WHERE role_id = ?)`).bind(roleId),
     db.prepare(`DELETE FROM candidates WHERE role_id = ?`).bind(roleId),
     db.prepare(`DELETE FROM roles WHERE id = ?`).bind(roleId),
-    audit(c, "delete", "role", String(roleId), `Withdrew role — ${role.title}`),
+    audit(c, "delete", "role", String(roleId), `Deleted job — ${role.title}`),
   ]);
   return c.json({ ok: true });
 });
+
+/** A timeline event. "newest" targets the candidate just inserted earlier in the same batch. */
+function candidateEvent(c: Ctx, candidateId: number | "newest", kind: string, body = "", score: number | null = null, verdict: string | null = null) {
+  const idSql = candidateId === "newest" ? "(SELECT MAX(id) FROM candidates)" : "?";
+  const stmt = c.env.DB.prepare(
+    `INSERT INTO candidate_events (candidate_id, at, actor, kind, body, score, verdict) VALUES (${idSql}, ?, ?, ?, ?, ?, ?)`
+  );
+  return candidateId === "newest"
+    ? stmt.bind(nowIso(), c.get("userEmail"), kind, body, score, verdict)
+    : stmt.bind(candidateId, nowIso(), c.get("userEmail"), kind, body, score, verdict);
+}
 
 writes.post("/candidates", async (c) => {
   const v = await body(c, schemas.candidate);
@@ -737,40 +946,67 @@ writes.post("/candidates", async (c) => {
   const [ins] = await db.batch([
     db
       .prepare(
-        `INSERT INTO candidates (role_id, stage, name, licence, licence_ok, source, days_in_stage, stage_since, sort_order)
-         VALUES (?, ?, ?, ?, ?, ?, 0, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM candidates WHERE role_id = ?)) RETURNING id`
+        `INSERT INTO candidates (role_id, stage, name, licence, licence_ok, source, days_in_stage, stage_since, sort_order,
+                                 email, phone, location, headline, disqualified, disqualify_reason, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, 0, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM candidates WHERE role_id = ?),
+                 ?, ?, ?, ?, 0, '', ?) RETURNING id`
       )
-      .bind(v.roleId, v.stage, v.name, v.licence.toUpperCase(), v.licenceOk ? 1 : 0, v.source, todaySydney(), v.roleId),
+      .bind(v.roleId, v.stage, v.name, v.licence.toUpperCase(), v.licenceOk ? 1 : 0, v.source, todaySydney(), v.roleId, v.email, v.phone, v.location, v.headline, nowIso()),
+    // Audit first: it reads last_insert_rowid(), which the event insert would overwrite.
     auditLastInsert(c, "candidate", `Added candidate ${v.name} for ${role.title}`),
+    candidateEvent(c, "newest", "created", `Added to ${STAGES[v.stage]}${v.source ? ` · source: ${v.source}` : ""}`),
   ]);
   return c.json({ id: (ins.results[0] as { id: number }).id }, 201);
 });
 
 writes.patch("/candidates/:id", async (c) => {
   const candId = param(c);
-  const v = await body(c, schemas.candidate.omit({ roleId: true }), true);
+  const v = await body(c, schemas.candidate, true);
   const cand = await mustExist(c, "candidates", candId);
+  if (v.roleId !== undefined) await mustExist(c, "roles", v.roleId);
   const stageChanged = v.stage !== undefined && v.stage !== cand.stage;
+  const dqChanged = v.disqualified !== undefined && v.disqualified !== (cand.disqualified === 1);
   const { sql, binds } = setClause(
     {
       ...v,
       licence: v.licence?.toUpperCase(),
       licenceOk: v.licenceOk === undefined ? undefined : v.licenceOk ? 1 : 0,
+      disqualified: v.disqualified === undefined ? undefined : v.disqualified ? 1 : 0,
+      disqualifyReason: dqChanged && !v.disqualified ? "" : v.disqualifyReason,
       stageSince: stageChanged ? todaySydney() : undefined,
     },
-    { name: "name", licence: "licence", licenceOk: "licence_ok", source: "source", stage: "stage", stageSince: "stage_since" }
+    {
+      roleId: "role_id",
+      name: "name",
+      email: "email",
+      phone: "phone",
+      location: "location",
+      headline: "headline",
+      licence: "licence",
+      licenceOk: "licence_ok",
+      source: "source",
+      stage: "stage",
+      stageSince: "stage_since",
+      disqualified: "disqualified",
+      disqualifyReason: "disqualify_reason",
+    }
   );
   if (!sql) return c.json({ ok: true });
-  await c.env.DB.batch([
-    c.env.DB.prepare(`UPDATE candidates SET ${sql} WHERE id = ?`).bind(...binds, candId),
-    audit(
-      c,
-      stageChanged ? "move" : "update",
-      "candidate",
-      String(candId),
-      stageChanged ? `Moved ${cand.name} to ${STAGES[v.stage as number]}` : `Updated candidate ${v.name ?? cand.name}`
-    ),
-  ]);
+  const name = v.name ?? String(cand.name);
+  const stmts: D1PreparedStatement[] = [c.env.DB.prepare(`UPDATE candidates SET ${sql} WHERE id = ?`).bind(...binds, candId)];
+  let summary = `Updated candidate ${name}`;
+  let action: "update" | "move" = "update";
+  if (stageChanged) {
+    stmts.push(candidateEvent(c, candId, "stage", `Moved to ${STAGES[v.stage!]}`));
+    summary = `Moved ${name} to ${STAGES[v.stage!]}`;
+    action = "move";
+  }
+  if (dqChanged) {
+    stmts.push(candidateEvent(c, candId, v.disqualified ? "disqualified" : "requalified", v.disqualified ? v.disqualifyReason ?? "" : ""));
+    summary = v.disqualified ? `Disqualified ${name}${v.disqualifyReason ? ` — ${v.disqualifyReason}` : ""}` : `Requalified ${name}`;
+  }
+  stmts.push(audit(c, action, "candidate", String(candId), summary));
+  await c.env.DB.batch(stmts);
   return c.json({ ok: true });
 });
 
@@ -778,8 +1014,42 @@ writes.delete("/candidates/:id", async (c) => {
   const candId = param(c);
   const cand = await mustExist(c, "candidates", candId);
   await c.env.DB.batch([
+    c.env.DB.prepare(`DELETE FROM candidate_events WHERE candidate_id = ?`).bind(candId),
     c.env.DB.prepare(`DELETE FROM candidates WHERE id = ?`).bind(candId),
-    audit(c, "delete", "candidate", String(candId), `Withdrew candidate ${cand.name}`),
+    audit(c, "delete", "candidate", String(candId), `Deleted candidate ${cand.name}`),
+  ]);
+  return c.json({ ok: true });
+});
+
+writes.post("/candidates/:id/comments", async (c) => {
+  const candId = param(c);
+  const v = await body(c, schemas.comment);
+  const cand = await mustExist(c, "candidates", candId);
+  await c.env.DB.batch([
+    candidateEvent(c, candId, "comment", v.body),
+    audit(c, "create", "candidate", String(candId), `Commented on ${cand.name}`),
+  ]);
+  return c.json({ ok: true }, 201);
+});
+
+writes.post("/candidates/:id/evaluations", async (c) => {
+  const candId = param(c);
+  const v = await body(c, schemas.evaluation);
+  const cand = await mustExist(c, "candidates", candId);
+  await c.env.DB.batch([
+    candidateEvent(c, candId, "evaluation", v.body, v.score, v.verdict),
+    audit(c, "create", "candidate", String(candId), `Evaluated ${cand.name}: ${v.verdict} (${v.score}/5)`),
+  ]);
+  return c.json({ ok: true }, 201);
+});
+
+writes.delete("/candidate-events/:id", async (c) => {
+  const evId = param(c);
+  const ev = await mustExist(c, "candidate_events", evId);
+  if (ev.kind !== "comment" && ev.kind !== "evaluation") throw new BadRequest("Only comments and evaluations can be deleted.");
+  await c.env.DB.batch([
+    c.env.DB.prepare(`DELETE FROM candidate_events WHERE id = ?`).bind(evId),
+    audit(c, "delete", "candidate", String(ev.candidate_id), `Deleted a ${ev.kind}`),
   ]);
   return c.json({ ok: true });
 });

@@ -55,8 +55,35 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
       make that task wait on this one, or use the Dependencies section in the
       task panel. Arrows join linked tasks; a dashed red arrow means the
       dependent starts before its predecessor is due. Loops are refused.
-- **Drag and drop** also moves candidates between Recruitment stages. Moves
-  update the screen at once and roll back if the save fails.
+- **Recruitment (applicant tracking, in the style of Workable):**
+  - **Jobs list:** each job shows its state (Draft, Published, On hold,
+    Closed) and candidate counts for all seven pipeline stages. Those stages
+    are Sourced, Applied, Phone screen, Licence check, Interview, Offer and
+    Hired; clicking a count opens the job at that stage.
+  - **Job page:** a stage bar, a list/profile split view and a drag-and-drop
+    pipeline board.
+  - **Candidate profiles:** contact details, licence (SLED) status, a stage
+    stepper and a "Move to next stage" button. You can also disqualify a
+    candidate (with a reason) or requalify them.
+  - **Tabs on each profile:** a timeline of everything that happened,
+    star-rated scorecards (the average becomes the candidate's rating) and
+    team comments.
+- **Clients (a CRM in the style of HubSpot):**
+  - **Companies:** a sortable, searchable table with saved views (all, mine,
+    and one per lifecycle stage: Lead, Opportunity, Customer, Former
+    customer).
+  - **Company record, left column:** properties you edit in place, plus
+    quick-log buttons.
+  - **Company record, middle column:** an activity timeline for notes,
+    emails, calls (with outcome), meetings and tasks (with due dates and
+    completion). Upcoming tasks are pinned at the top.
+  - **Company record, right column:** contacts (email and phone) and deals.
+  - **Deals:** a pipeline board (Enquiry → Site survey → Proposal sent →
+    Negotiation → Closed won or lost) with stage totals, win probabilities
+    and a weighted forecast. Dragging a deal to Closed won makes the company
+    a Customer, and an open deal lifts a Lead to Opportunity.
+- **Drag and drop** updates the screen at once and rolls back if the save
+  fails.
 - **Command palette:** press `Ctrl K` / `⌘K` or `/`. From there you can jump
   to any page, person, account, work item, role or intelligence item, run any
   action, switch theme, open the activity log or sign out. `N` starts the
@@ -109,10 +136,14 @@ input returns `400 {error, fields}`.
 | DELETE | `/api/work/:id/dependencies/:dependsOn` | Remove a dependency |
 | POST · PATCH · DELETE | `/api/employees[/:id]` | Personnel register |
 | POST | `/api/employees/:id/shifts` | Roster a shift |
-| POST · PATCH · DELETE | `/api/clients[/:id]` | Accounts |
-| POST | `/api/clients/:id/contacts`, `/api/clients/:id/activity` | Contacts, activity |
-| PUT · DELETE | `/api/clients/:id/deal` | Open proposal |
-| POST · PATCH · DELETE | `/api/roles[/:id]`, `/api/candidates[/:id]` | Recruitment |
+| POST · PATCH · DELETE | `/api/clients[/:id]` | Companies |
+| POST · PATCH · DELETE | `/api/clients/:id/contacts`, `/api/contacts/:id` | Contacts |
+| POST · PATCH · DELETE | `/api/clients/:id/activity`, `/api/activity/:id` | Notes, emails, calls, meetings, tasks |
+| POST · PATCH · DELETE | `/api/deals[/:id]` | Deals (`stage`, `position`) |
+| POST · PATCH · DELETE | `/api/roles[/:id]` | Jobs |
+| POST · PATCH · DELETE | `/api/candidates[/:id]` | Candidates (`stage`, `disqualified`, `disqualifyReason`) |
+| POST | `/api/candidates/:id/comments`, `/api/candidates/:id/evaluations` | Comments, scorecards |
+| DELETE | `/api/candidate-events/:id` | Delete a comment or scorecard |
 | POST · DELETE | `/api/intel[/:id]` | Intelligence feed |
 
 Each write runs as one D1 batch together with its `audit_log` row.
@@ -162,6 +193,6 @@ worker/         Cloudflare Worker (Hono): auth, reads (db.ts), writes (writes.ts
 shared/types.ts Types shared between the Worker and the React app
 src/            React app (pages/, components/, actions/, lib/)
 src/styles/ds/  Sandstone design system tokens + component CSS (ported as-is)
-migrations/     D1 schema (0002: dates, audit log, regions; 0003: three-section board, task fields, subtasks; 0004: milestones, dependencies)
+migrations/     D1 schema (0002: dates, audit log, regions; 0003: three-section board, task fields, subtasks; 0004: milestones, dependencies; 0005: applicant tracking and CRM)
 seed/           Fictional demo data for local development
 ```

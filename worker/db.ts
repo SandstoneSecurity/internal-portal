@@ -1,7 +1,14 @@
 import type {
   AuditEntry,
   Candidate,
+  CandidateEvent,
+  CandidateEventKind,
   Client,
+  ClientContact,
+  Deal,
+  DealStage,
+  Engagement,
+  EngagementKind,
   Employee,
   IntelItem,
   Metric,
@@ -13,7 +20,7 @@ import type {
   Role,
   StatusKind,
 } from "../shared/types";
-import { PRIORITIES } from "../shared/types";
+import { DEAL_STAGES, ENGAGEMENT_KINDS, PRIORITIES, STAGES } from "../shared/types";
 import { addDays, dayMonth, daysBetween, shortDate, todaySydney } from "./dates";
 
 export function asKind(v: string): StatusKind {
@@ -86,66 +93,139 @@ export async function getEmployees(db: D1Database, today: string): Promise<Emplo
   });
 }
 
-export async function getClients(db: D1Database): Promise<Client[]> {
-  const [{ results: rows }, { results: contactRows }, { results: dealRows }, { results: activityRows }] =
-    await Promise.all([
-      db
-        .prepare(
-          `SELECT id, org, sector, sites, value_pa, owner_initials, status, status_kind, meta
-           FROM clients ORDER BY org COLLATE NOCASE`
-        )
-        .all<{
-          id: number;
-          org: string;
-          sector: string;
-          sites: number;
-          value_pa: string;
-          owner_initials: string;
-          status: string;
-          status_kind: string;
-          meta: string;
-        }>(),
-      db
-        .prepare(`SELECT client_id, name, role FROM client_contacts ORDER BY client_id, sort_order, id`)
-        .all<{ client_id: number; name: string; role: string }>(),
-      db
-        .prepare(`SELECT client_id, name, value, stage, review_date FROM client_deals`)
-        .all<{ client_id: number; name: string; value: string; stage: string; review_date: string }>(),
-      db
-        .prepare(`SELECT client_id, activity_date, body FROM client_activity ORDER BY client_id, sort_order, id DESC`)
-        .all<{ client_id: number; activity_date: string; body: string }>(),
-    ]);
+const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+/** Legacy display dates ("28 AUG 26") back to ISO, so old and new activity sort together. */
+function labelToIso(label: string): string | null {
+  const m = /^(\d{1,2}) ([A-Z]{3}) (\d{2})$/.exec(label.trim().toUpperCase());
+  if (!m) return null;
+  const mo = MONTHS.indexOf(m[2]!);
+  return mo < 0 ? null : `20${m[3]}-${String(mo + 1).padStart(2, "0")}-${m[1]!.padStart(2, "0")}`;
+}
 
-  const contactsByClient = new Map<number, { name: string; role: string }[]>();
+const moneyNum = (v: string) => Number(v.replace(/[^0-9.]/g, "") || 0);
+
+export async function getClients(db: D1Database): Promise<Client[]> {
+  const [{ results: rows }, { results: contactRows }, { results: activityRows }] = await Promise.all([
+    db
+      .prepare(
+        `SELECT id, org, sector, sites, value_pa, owner_initials, status, status_kind, meta, domain, phone, city, created_at
+         FROM clients ORDER BY org COLLATE NOCASE`
+      )
+      .all<{
+        id: number;
+        org: string;
+        sector: string;
+        sites: number;
+        value_pa: string;
+        owner_initials: string;
+        status: string;
+        status_kind: string;
+        meta: string;
+        domain: string;
+        phone: string;
+        city: string;
+        created_at: string | null;
+      }>(),
+    db
+      .prepare(`SELECT id, client_id, name, role, email, phone FROM client_contacts ORDER BY client_id, sort_order, id`)
+      .all<{ id: number; client_id: number; name: string; role: string; email: string; phone: string }>(),
+    db
+      .prepare(
+        `SELECT id, client_id, activity_date, body, kind, subject, at, actor, outcome, due_date, done, contact_id
+         FROM client_activity ORDER BY client_id, sort_order, id DESC`
+      )
+      .all<{
+        id: number;
+        client_id: number;
+        activity_date: string;
+        body: string;
+        kind: string;
+        subject: string;
+        at: string | null;
+        actor: string;
+        outcome: string;
+        due_date: string | null;
+        done: number;
+        contact_id: number | null;
+      }>(),
+  ]);
+
+  const contactsByClient = new Map<number, ClientContact[]>();
   for (const c of contactRows) {
     const list = contactsByClient.get(c.client_id) ?? [];
-    list.push({ name: c.name, role: c.role });
+    list.push({ id: c.id, name: c.name, role: c.role, email: c.email, phone: c.phone });
     contactsByClient.set(c.client_id, list);
   }
-  const dealByClient = new Map<number, { name: string; value: string; stage: string; review: string }>();
-  for (const d of dealRows) {
-    dealByClient.set(d.client_id, { name: d.name, value: d.value, stage: d.stage, review: d.review_date });
-  }
-  const activityByClient = new Map<number, { date: string; text: string }[]>();
+  const activityByClient = new Map<number, Engagement[]>();
   for (const a of activityRows) {
     const list = activityByClient.get(a.client_id) ?? [];
-    list.push({ date: a.activity_date, text: a.body });
+    list.push({
+      id: a.id,
+      clientId: a.client_id,
+      kind: (ENGAGEMENT_KINDS as readonly string[]).includes(a.kind) ? (a.kind as EngagementKind) : "note",
+      subject: a.subject,
+      body: a.body,
+      at: a.at ?? labelToIso(a.activity_date) ?? a.activity_date,
+      actor: a.actor,
+      outcome: a.outcome,
+      dueDate: a.due_date,
+      done: a.done === 1,
+      contactId: a.contact_id,
+    });
     activityByClient.set(a.client_id, list);
   }
+  for (const list of activityByClient.values()) list.sort((x, y) => y.at.localeCompare(x.at) || y.id - x.id);
 
-  return rows.map((r) => ({
+  return rows.map((r) => {
+    const activity = activityByClient.get(r.id) ?? [];
+    return {
+      id: r.id,
+      org: r.org,
+      sector: r.sector,
+      sites: r.sites,
+      value: r.value_pa,
+      valueNum: moneyNum(r.value_pa),
+      owner: r.owner_initials,
+      status: r.status,
+      kind: asKind(r.status_kind),
+      meta: r.meta,
+      domain: r.domain,
+      phone: r.phone,
+      city: r.city,
+      createdAt: r.created_at,
+      lastActivity: activity.find((a) => a.kind !== "task" || a.done)?.at.slice(0, 10) ?? null,
+      contacts: contactsByClient.get(r.id) ?? [],
+      activity,
+    };
+  });
+}
+
+const DEAL_STAGE_SET = new Set<string>(DEAL_STAGES.map(([s]) => s));
+
+export async function getDeals(db: D1Database): Promise<Deal[]> {
+  const { results } = await db
+    .prepare(`SELECT id, client_id, name, amount, stage, close_date, owner_initials, created_at, closed_at FROM deals ORDER BY sort_order, id`)
+    .all<{
+      id: number;
+      client_id: number;
+      name: string;
+      amount: number;
+      stage: string;
+      close_date: string | null;
+      owner_initials: string;
+      created_at: string;
+      closed_at: string | null;
+    }>();
+  return results.map((r) => ({
     id: r.id,
-    org: r.org,
-    sector: r.sector,
-    sites: r.sites,
-    value: r.value_pa,
+    clientId: r.client_id,
+    name: r.name,
+    amount: r.amount,
+    stage: (DEAL_STAGE_SET.has(r.stage) ? r.stage : "Enquiry") as DealStage,
+    closeDate: r.close_date,
     owner: r.owner_initials,
-    status: r.status,
-    kind: asKind(r.status_kind),
-    meta: r.meta,
-    contacts: contactsByClient.get(r.id) ?? [],
-    deal: dealByClient.get(r.id) ?? null,
-    activity: activityByClient.get(r.id) ?? [],
+    createdAt: r.created_at,
+    closedAt: r.closed_at,
   }));
 }
 
@@ -259,23 +339,37 @@ export async function getOpsBoard(db: D1Database, today: string): Promise<OpsCol
 
 export async function getRoles(db: D1Database): Promise<Role[]> {
   const [{ results: roles }, { results: stageCounts }] = await Promise.all([
-    db.prepare(`SELECT id, title, meta, status, status_kind FROM roles ORDER BY sort_order, id`).all<{
-      id: number;
-      title: string;
-      meta: string;
-      status: string;
-      status_kind: string;
-    }>(),
     db
-      .prepare(`SELECT role_id, stage, COUNT(*) as n FROM candidates GROUP BY role_id, stage`)
-      .all<{ role_id: number; stage: number; n: number }>(),
+      .prepare(
+        `SELECT id, title, meta, status, status_kind, department, location, employment_type, openings, description, hiring_manager, created_at
+         FROM roles ORDER BY sort_order, id`
+      )
+      .all<{
+        id: number;
+        title: string;
+        meta: string;
+        status: string;
+        status_kind: string;
+        department: string;
+        location: string;
+        employment_type: string;
+        openings: number;
+        description: string;
+        hiring_manager: string;
+        created_at: string | null;
+      }>(),
+    db
+      .prepare(`SELECT role_id, stage, disqualified, COUNT(*) as n FROM candidates GROUP BY role_id, stage, disqualified`)
+      .all<{ role_id: number; stage: number; disqualified: number; n: number }>(),
   ]);
 
-  const countsByRole = new Map<number, number[]>();
-  for (const r of roles) countsByRole.set(r.id, [0, 0, 0, 0, 0]);
+  const countsByRole = new Map<number, { counts: number[]; dq: number }>();
+  for (const r of roles) countsByRole.set(r.id, { counts: STAGES.map(() => 0), dq: 0 });
   for (const sc of stageCounts) {
-    const counts = countsByRole.get(sc.role_id);
-    if (counts && sc.stage >= 0 && sc.stage < counts.length) counts[sc.stage] = sc.n;
+    const entry = countsByRole.get(sc.role_id);
+    if (!entry) continue;
+    if (sc.disqualified) entry.dq += sc.n;
+    else if (sc.stage >= 0 && sc.stage < STAGES.length) entry.counts[sc.stage]! += sc.n;
   }
 
   return roles.map((r) => ({
@@ -284,37 +378,77 @@ export async function getRoles(db: D1Database): Promise<Role[]> {
     meta: r.meta,
     status: r.status,
     kind: asKind(r.status_kind),
-    counts: countsByRole.get(r.id) ?? [0, 0, 0, 0, 0],
+    counts: countsByRole.get(r.id)?.counts ?? STAGES.map(() => 0),
+    disqualified: countsByRole.get(r.id)?.dq ?? 0,
+    department: r.department,
+    location: r.location,
+    employmentType: r.employment_type,
+    openings: r.openings,
+    description: r.description,
+    hiringManager: r.hiring_manager,
+    createdAt: r.created_at,
   }));
 }
 
 export async function getCandidates(db: D1Database, today: string): Promise<Candidate[]> {
-  const { results } = await db
-    .prepare(
-      `SELECT id, role_id, stage, name, licence, licence_ok, source, days_in_stage, stage_since
-       FROM candidates ORDER BY role_id, stage, sort_order, id`
-    )
-    .all<{
-      id: number;
-      role_id: number;
-      stage: number;
-      name: string;
-      licence: string;
-      licence_ok: number;
-      source: string;
-      days_in_stage: number;
-      stage_since: string | null;
-    }>();
-  return results.map((r) => ({
-    id: r.id,
-    roleId: r.role_id,
-    stage: r.stage,
-    name: r.name,
-    lic: r.licence,
-    ok: r.licence_ok === 1,
-    source: r.source,
-    days: r.stage_since ? Math.max(0, daysBetween(r.stage_since.slice(0, 10), today)) : r.days_in_stage,
-  }));
+  const [{ results }, { results: events }] = await Promise.all([
+    db
+      .prepare(
+        `SELECT id, role_id, stage, name, licence, licence_ok, source, days_in_stage, stage_since,
+                email, phone, location, headline, disqualified, disqualify_reason, created_at
+         FROM candidates ORDER BY role_id, stage, sort_order, id`
+      )
+      .all<{
+        id: number;
+        role_id: number;
+        stage: number;
+        name: string;
+        licence: string;
+        licence_ok: number;
+        source: string;
+        days_in_stage: number;
+        stage_since: string | null;
+        email: string;
+        phone: string;
+        location: string;
+        headline: string;
+        disqualified: number;
+        disqualify_reason: string;
+        created_at: string | null;
+      }>(),
+    db
+      .prepare(`SELECT id, candidate_id, at, actor, kind, body, score, verdict FROM candidate_events ORDER BY at DESC, id DESC`)
+      .all<{ id: number; candidate_id: number; at: string; actor: string; kind: string; body: string; score: number | null; verdict: string | null }>(),
+  ]);
+  const eventsByCandidate = new Map<number, CandidateEvent[]>();
+  for (const e of events) {
+    const list = eventsByCandidate.get(e.candidate_id) ?? [];
+    list.push({ id: e.id, at: e.at, actor: e.actor, kind: e.kind as CandidateEventKind, body: e.body, score: e.score, verdict: e.verdict });
+    eventsByCandidate.set(e.candidate_id, list);
+  }
+  return results.map((r) => {
+    const evs = eventsByCandidate.get(r.id) ?? [];
+    const scores = evs.filter((e) => e.kind === "evaluation" && e.score).map((e) => e.score!);
+    return {
+      id: r.id,
+      roleId: r.role_id,
+      stage: r.stage,
+      name: r.name,
+      lic: r.licence,
+      ok: r.licence_ok === 1,
+      source: r.source,
+      days: r.stage_since ? Math.max(0, daysBetween(r.stage_since.slice(0, 10), today)) : r.days_in_stage,
+      email: r.email,
+      phone: r.phone,
+      location: r.location,
+      headline: r.headline,
+      disqualified: r.disqualified === 1,
+      disqualifyReason: r.disqualify_reason,
+      appliedAt: r.created_at,
+      rating: scores.length ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10 : null,
+      events: evs,
+    };
+  });
 }
 
 export async function getRegions(db: D1Database): Promise<Region[]> {
@@ -423,9 +557,9 @@ export function computeMetrics(
   const rostered = employees.filter((e) => e.status === "Rostered").length;
   const onLeave = employees.filter((e) => e.status === "Leave").length;
 
-  const active = clients.filter((c) => c.status === "Active");
+  const active = clients.filter((c) => c.status === "Customer");
   const sites = active.reduce((n, c) => n + c.sites, 0);
-  const value = active.reduce((n, c) => n + Number(c.value.replace(/[^0-9.]/g, "") || 0), 0);
+  const value = active.reduce((n, c) => n + c.valueNum, 0);
 
   const open = opsColumns.filter((c) => !c.done).flatMap((c) => c.cards);
   const late = open.filter((c) => c.late);
@@ -449,7 +583,7 @@ export function computeMetrics(
       key: "sites",
       label: "Sites under order",
       value: sites,
-      unit: `${active.length} active ${active.length === 1 ? "account" : "accounts"}`,
+      unit: `${active.length} ${active.length === 1 ? "customer" : "customers"}`,
       note: `CONTRACT VALUE ${money(value)} P.A.`,
       noteKind: "neutral",
     },
@@ -478,9 +612,10 @@ export function computeMetrics(
 
 export async function getPortal(db: D1Database, email: string, now = new Date()): Promise<PortalData> {
   const today = todaySydney(now);
-  const [employees, clients, opsColumns, roles, candidates, regions, feed, audit] = await Promise.all([
+  const [employees, clients, deals, opsColumns, roles, candidates, regions, feed, audit] = await Promise.all([
     getEmployees(db, today),
     getClients(db),
+    getDeals(db),
     getOpsBoard(db, today),
     getRoles(db),
     getCandidates(db, today),
@@ -494,6 +629,7 @@ export async function getPortal(db: D1Database, email: string, now = new Date())
     metrics: computeMetrics(employees, clients, opsColumns),
     employees,
     clients,
+    deals,
     opsColumns,
     roles,
     candidates,
