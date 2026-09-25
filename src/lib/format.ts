@@ -144,3 +144,8 @@ export function dueTone(due: string | null, today: string, done: boolean): "late
   const diff = daysBetween(today, due);
   return diff < 0 ? "late" : diff <= 1 ? "soon" : "none";
 }
+
+/** Full dollar amount: 840000 → "$840,000". */
+export function aud(n: number): string {
+  return `$${Math.round(n).toLocaleString("en-AU")}`;
+}

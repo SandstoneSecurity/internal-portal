@@ -61,10 +61,11 @@ export function CommandPalette({ open, onClose, onActivity }: { open: boolean; o
       { id: "nav-cli", group: "Jump to", label: "Clients", icon: <Building2 size={15} />, run: go("/clients"), keywords: "accounts crm" },
       { id: "nav-int", group: "Jump to", label: "Intelligence", icon: <MapPin size={15} />, run: go("/intelligence"), keywords: "feed map incidents" },
       { id: "act-work", group: "Actions", label: "Raise work", icon: <Plus size={15} />, run: () => actions.raiseWork(), keywords: "new task item op" },
-      { id: "act-role", group: "Actions", label: "Post a role", icon: <Plus size={15} />, run: actions.postRole, keywords: "job vacancy" },
+      { id: "act-role", group: "Actions", label: "Create job", icon: <Plus size={15} />, run: actions.postRole, keywords: "job vacancy role post" },
       { id: "act-cand", group: "Actions", label: "Add candidate", icon: <Plus size={15} />, run: () => actions.addCandidate(), keywords: "applicant" },
       { id: "act-emp", group: "Actions", label: "Add employee", icon: <Plus size={15} />, run: actions.addEmployee, keywords: "officer staff hire" },
-      { id: "act-cli", group: "Actions", label: "New account", icon: <Plus size={15} />, run: actions.newClient, keywords: "client customer" },
+      { id: "act-cli", group: "Actions", label: "Create company", icon: <Plus size={15} />, run: actions.newClient, keywords: "client customer account" },
+      { id: "act-deal", group: "Actions", label: "Create deal", icon: <Plus size={15} />, run: () => actions.newDeal(), keywords: "opportunity pipeline proposal" },
       { id: "act-int", group: "Actions", label: "Log an intelligence item", icon: <Plus size={15} />, run: () => actions.logIntel(), keywords: "incident report breach advisory" },
       { id: "act-log", group: "Actions", label: "Open activity log", icon: <History size={15} />, run: onActivity, keywords: "audit history changes" },
       {
@@ -85,7 +86,11 @@ export function CommandPalette({ open, onClose, onActivity }: { open: boolean; o
       for (const k of col.cards)
         cmds.push({ id: `op-${k.id}`, group: "Work items", label: `${k.ref} — ${k.title}`, hint: col.label, icon: <Route size={15} />, keywords: `${k.site} ${k.line} ${k.who}`, run: go(`/operations?card=${k.id}`) });
     for (const r of data.roles)
-      cmds.push({ id: `role-${r.id}`, group: "Roles", label: r.title, hint: r.status, icon: <Briefcase size={15} />, keywords: r.meta, run: go(`/recruitment?role=${r.id}`) });
+      cmds.push({ id: `role-${r.id}`, group: "Jobs", label: r.title, hint: `${r.status} · ${r.location || r.department}`, icon: <Briefcase size={15} />, keywords: `${r.meta} ${r.department}`, run: go(`/recruitment?role=${r.id}`) });
+    for (const c of data.candidates)
+      cmds.push({ id: `cand-${c.id}`, group: "Candidates", label: c.name, hint: c.headline || c.lic, icon: <UserPlus size={15} />, keywords: `${c.email} ${c.source} ${c.location}`, run: go(`/recruitment?role=${c.roleId}&candidate=${c.id}`) });
+    for (const x of data.deals)
+      cmds.push({ id: `deal-${x.id}`, group: "Deals", label: x.name, hint: x.stage, icon: <Building2 size={15} />, keywords: data.clients.find((c) => c.id === x.clientId)?.org, run: go(`/clients?view=deals&deal=${x.id}`) });
     for (const f of data.feed)
       cmds.push({ id: `int-${f.id}`, group: "Intelligence", label: f.headline, hint: `${f.sev} · ${f.region}`, icon: <MapPin size={15} />, keywords: f.source, run: go(`/intelligence?item=${f.id}`) });
     return cmds;

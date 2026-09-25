@@ -102,7 +102,18 @@ export function Tabs<T extends string>({
 }
 
 /** Small overflow menu for row actions. */
-export function RowMenu({ items, label = "More actions" }: { items: { label: string; onSelect: () => void; danger?: boolean }[]; label?: string }) {
+export function RowMenu({
+  items,
+  label = "More actions",
+  trigger,
+  triggerClass = "pt-iconbtn pt-iconbtn--sm",
+}: {
+  items: { label: string; onSelect: () => void; danger?: boolean }[];
+  label?: string;
+  /** Replaces the default "…" icon, e.g. a text button. */
+  trigger?: ReactNode;
+  triggerClass?: string;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -119,14 +130,8 @@ export function RowMenu({ items, label = "More actions" }: { items: { label: str
   }, [open]);
   return (
     <div className="pt-menu" ref={ref} onClick={(e) => e.stopPropagation()}>
-      <button
-        className="pt-iconbtn pt-iconbtn--sm"
-        aria-label={label}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <MoreHorizontal size={15} />
+      <button className={triggerClass} aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        {trigger ?? <MoreHorizontal size={15} />}
       </button>
       {open && (
         <motion.div

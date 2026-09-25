@@ -47,7 +47,7 @@ export function ControlPage() {
 
   const ratio: Record<string, [number, "secure" | "ink" | "breach" | "advisory"]> = {
     shift: [d.employees.length ? onShift.length / d.employees.length : 0, "secure"],
-    sites: [d.clients.length ? d.clients.filter((c) => c.status === "Active").length / d.clients.length : 0, "ink"],
+    sites: [d.clients.length ? d.clients.filter((c) => c.status === "Customer").length / d.clients.length : 0, "ink"],
     work: [open.length ? late.length / open.length : 0, "breach"],
     licences: [d.employees.length ? expiring.length / d.employees.length : 0, "advisory"],
   };
@@ -84,7 +84,7 @@ export function ControlPage() {
                   Add employee
                 </button>
                 <button className="sds-btn sds-btn--md sds-btn--secondary" onClick={actions.newClient}>
-                  New account
+                  Create company
                 </button>
                 <button className="sds-btn sds-btn--md sds-btn--ghost" onClick={() => actions.raiseWork()}>
                   Raise work

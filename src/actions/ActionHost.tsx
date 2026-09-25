@@ -8,8 +8,16 @@ import {
   ROLE_STATUSES,
   SERVICE_LINES,
   STAGES,
+  DEAL_STAGES,
+  DEPARTMENTS,
+  EMPLOYMENT_TYPES,
   type Candidate,
+  type CandidateEvent,
   type Client,
+  type ClientContact,
+  type Deal,
+  type DealStage,
+  type Engagement,
   type Employee,
   type IntelItem,
   type OpsCard,
@@ -19,7 +27,7 @@ import {
 } from "../../shared/types";
 import { send } from "../lib/api";
 import { usePortalData } from "../lib/DataProvider";
-import { addDays, dayMonth, initialsOf, moneyValue } from "../lib/format";
+import { addDays, aud, dayMonth, initialsOf, money } from "../lib/format";
 import { useConfirm } from "../components/ui/Confirm";
 import { FormDrawer, type FieldSpec, type FormSpec, type FormValues } from "../components/ui/FormDrawer";
 import { useToast } from "../components/ui/Toast";
@@ -28,8 +36,6 @@ import { TaskPane } from "../components/TaskPane";
 const opts = (list: readonly string[]) => list.map((v) => ({ value: v, label: v }));
 const statusOpts = (t: readonly (readonly [string, string])[]) => t.map(([l]) => ({ value: l, label: l }));
 
-/** Parses "$840,000" back to 840000 for editing. */
-const toNumber = (v: string) => moneyValue(v);
 
 /** Legacy display dates ("14 OCT 26") can't seed a date input; ISO ones can. */
 const isoOr = (iso: string | null, fallback = "") => iso ?? fallback;
@@ -57,17 +63,29 @@ export interface Actions {
   removeEmployee: (e: Employee) => Promise<boolean>;
   newClient: () => void;
   editClient: (c: Client) => void;
-  addContact: (c: Client) => void;
-  logActivity: (c: Client) => void;
-  recordProposal: (c: Client) => void;
-  closeProposal: (c: Client) => Promise<boolean>;
+  patchClient: (c: Client, patch: ClientPatch) => Promise<boolean>;
   closeClient: (c: Client) => Promise<boolean>;
+  addContact: (c: Client) => void;
+  editContact: (c: Client, contact: ClientContact) => void;
+  logEngagement: (c: Client, e: EngagementInput) => Promise<boolean>;
+  patchEngagement: (e: Engagement, patch: Partial<Pick<Engagement, "done" | "subject" | "body" | "dueDate">>) => Promise<void>;
+  deleteEngagement: (e: Engagement) => Promise<boolean>;
+  newDeal: (o?: { clientId?: number; stage?: DealStage }) => void;
+  editDeal: (deal: Deal) => void;
+  moveDeal: (deal: Deal, stage: DealStage, position?: number) => Promise<void>;
   postRole: () => void;
   editRole: (r: Role) => void;
+  patchRole: (r: Role, patch: Partial<Pick<Role, "status">>) => Promise<void>;
   withdrawRole: (r: Role) => Promise<boolean>;
   addCandidate: (o?: { roleId?: number; stage?: number }) => void;
   editCandidate: (c: Candidate) => void;
   moveCandidate: (c: Candidate, stage: number) => Promise<void>;
+  disqualifyCandidate: (c: Candidate, reason: string) => Promise<void>;
+  requalifyCandidate: (c: Candidate) => Promise<void>;
+  commentCandidate: (c: Candidate, body: string) => Promise<boolean>;
+  evaluateCandidate: (c: Candidate, e: { score: number; verdict: string; body: string }) => Promise<boolean>;
+  deleteCandidateEvent: (c: Candidate, ev: CandidateEvent) => Promise<void>;
+  deleteCandidate: (c: Candidate) => Promise<boolean>;
   logIntel: (o?: { regionKey?: string }) => void;
   deleteIntel: (i: IntelItem) => Promise<boolean>;
   /** The page's primary action (header button, "N" shortcut). */
@@ -77,6 +95,17 @@ export interface Actions {
 export type WorkPatch = Partial<Pick<OpsCard, "title" | "site" | "line" | "description" | "priority" | "startDate" | "dueDate" | "milestone">> & {
   owner?: string;
 };
+export type ClientPatch = Partial<Pick<Client, "org" | "sector" | "sites" | "status" | "meta" | "domain" | "phone" | "city" | "owner">> & { valuePa?: number };
+export type EngagementInput = {
+  kind: Engagement["kind"];
+  subject?: string;
+  body?: string;
+  outcome?: string;
+  at?: string;
+  dueDate?: string | null;
+  contactId?: number | null;
+};
+
 export type SubtaskPatch = Partial<Pick<OpsSubtask, "title" | "done" | "startDate" | "dueDate">> & { owner?: string };
 
 /** Re-derives the display fields the Worker would compute, for optimistic updates. */
@@ -176,29 +205,60 @@ export function ActionProvider({ children }: { children: ReactNode }) {
     ];
 
     const clientFields: FieldSpec[] = [
-      { name: "org", label: "Organisation", required: true, max: 80 },
-      { name: "sector", label: "Sector", required: true, half: true, max: 60, placeholder: "e.g. Hospitality" },
-      { name: "status", label: "Status", type: "select", options: statusOpts(CLIENT_STATUSES), required: true, half: true },
-      { name: "sites", label: "Sites", type: "number", required: true, half: true, mono: true },
-      { name: "valuePa", label: "Value per annum (AUD)", type: "number", required: true, half: true, mono: true },
-      { name: "owner", label: "Account owner (initials)", type: "initials", required: true, half: true },
-      { name: "meta", label: "Summary line", max: 160, placeholder: "e.g. Client since 2023 · four venues, night coverage" },
+      { name: "org", label: "Company name", required: true, max: 80 },
+      { name: "domain", label: "Company domain", max: 120, placeholder: "e.g. harbourline.com.au", mono: true },
+      { name: "sector", label: "Industry", half: true, max: 60, placeholder: "e.g. Hospitality" },
+      { name: "status", label: "Lifecycle stage", type: "select", options: statusOpts(CLIENT_STATUSES), required: true, half: true },
+      { name: "owner", label: "Company owner (initials)", type: "initials", half: true },
+      { name: "city", label: "City", half: true, max: 60 },
+      { name: "phone", label: "Phone", half: true, mono: true, max: 30 },
+      { name: "sites", label: "Sites", type: "number", half: true, mono: true },
+      { name: "valuePa", label: "Annual contract value (AUD)", type: "number", mono: true },
+      { name: "meta", label: "Description", type: "textarea", max: 400 },
+    ];
+
+    const contactFields: FieldSpec[] = [
+      { name: "name", label: "Name", required: true, max: 80 },
+      { name: "role", label: "Job title", max: 80, placeholder: "e.g. Head of facilities" },
+      { name: "email", label: "Email", max: 120, placeholder: "name@company.com" },
+      { name: "phone", label: "Phone", mono: true, max: 30 },
+    ];
+
+    const clientsList = d?.clients ?? [];
+    const dealFields: FieldSpec[] = [
+      { name: "name", label: "Deal name", required: true, max: 120, placeholder: "e.g. Concierge coverage — two towers" },
+      { name: "clientId", label: "Company", type: "select", required: true, options: clientsList.map((c) => ({ value: String(c.id), label: c.org })) },
+      { name: "amount", label: "Amount (AUD)", type: "number", required: true, half: true, mono: true },
+      { name: "stage", label: "Deal stage", type: "select", required: true, half: true, options: DEAL_STAGES.map(([st]) => ({ value: st, label: st })) },
+      { name: "closeDate", label: "Close date", type: "date", half: true },
+      { name: "owner", label: "Deal owner (initials)", type: "initials", half: true },
     ];
 
     const roleFields: FieldSpec[] = [
-      { name: "title", label: "Role title", required: true, max: 100, placeholder: "e.g. Security officer — night, CBD portfolio" },
-      { name: "meta", label: "Details", max: 140, placeholder: "e.g. Class 1A 1C · full time · 4 positions" },
-      { name: "status", label: "Status", type: "select", options: statusOpts(ROLE_STATUSES), required: true },
+      { name: "title", label: "Job title", required: true, max: 100, placeholder: "e.g. Security officer — night, CBD portfolio" },
+      { name: "department", label: "Department", type: "select", options: opts(DEPARTMENTS), required: true, half: true },
+      { name: "location", label: "Location", half: true, max: 80, placeholder: "e.g. Sydney CBD" },
+      { name: "employmentType", label: "Employment type", type: "select", options: opts(EMPLOYMENT_TYPES), required: true, half: true },
+      { name: "openings", label: "Openings", type: "number", required: true, half: true, mono: true },
+      { name: "status", label: "State", type: "select", options: statusOpts(ROLE_STATUSES), required: true, half: true },
+      { name: "hiringManager", label: "Hiring manager", half: true, max: 80 },
+      { name: "description", label: "Description", type: "textarea", max: 6000, placeholder: "Duties, licence classes, shifts, what good looks like." },
     ];
 
     const candidateFields = (withRole: boolean): FieldSpec[] => [
       ...(withRole
-        ? [{ name: "roleId", label: "Role", type: "select" as const, options: roles.map((r) => ({ value: String(r.id), label: r.title })), required: true }]
+        ? [{ name: "roleId", label: "Job", type: "select" as const, options: roles.map((r) => ({ value: String(r.id), label: r.title })), required: true }]
         : []),
-      { name: "name", label: "Candidate", required: true, max: 80 },
-      { name: "licence", label: "Licence", required: true, half: true, mono: true, placeholder: "1A 1C CURRENT", max: 40 },
-      { name: "stage", label: "Stage", type: "select", options: STAGES.map((s, i) => ({ value: String(i), label: s })), required: true, half: true },
-      { name: "source", label: "Source", required: true, max: 60, placeholder: "e.g. Seek, referral" },
+      { name: "name", label: "Full name", required: true, max: 80 },
+      { name: "headline", label: "Headline", max: 140, placeholder: "e.g. Crowd controller, 4 years" },
+      { name: "email", label: "Email", half: true, max: 120 },
+      { name: "phone", label: "Phone", half: true, mono: true, max: 30 },
+      { name: "location", label: "Location", half: true, max: 80 },
+      { name: "source", label: "Source", half: true, max: 60, placeholder: "e.g. Seek, referral" },
+      { name: "licence", label: "Licence", half: true, mono: true, placeholder: "1A 1C", max: 40 },
+      ...(withRole
+        ? [{ name: "stage", label: "Stage", type: "select" as const, options: STAGES.map((st, i) => ({ value: String(i), label: st })), required: true, half: true }]
+        : []),
       { name: "licenceOk", label: "Licence verified as current (SLED)", type: "checkbox" },
     ];
 
@@ -509,151 +569,310 @@ export function ActionProvider({ children }: { children: ReactNode }) {
       newClient: () =>
         setSpec({
           eyebrow: "Clients",
-          title: "New account",
-          submitLabel: "Open account",
+          title: "Create company",
+          submitLabel: "Create company",
           fields: clientFields,
-          initial: { org: "", sector: "", status: "Prospect", sites: 1, valuePa: 0, owner: me, meta: "" },
+          initial: { org: "", domain: "", sector: "", status: "Lead", owner: me, city: "", phone: "", sites: 1, valuePa: 0, meta: "" },
           submit: async (v) => {
             const r = await send("POST", "/clients", v);
-            await done("Account opened", String(v.org), `/clients?id=${r.id}`);
+            await done("Company created", String(v.org), `/clients?id=${r.id}`);
           },
         }),
 
       editClient: (c) =>
         setSpec({
-          eyebrow: "Client record",
+          eyebrow: "Company",
           title: c.org,
-          submitLabel: "Save account",
+          submitLabel: "Save company",
           fields: clientFields,
-          initial: { org: c.org, sector: c.sector, status: c.status, sites: c.sites, valuePa: toNumber(c.value), owner: c.owner, meta: c.meta },
+          initial: { org: c.org, domain: c.domain, sector: c.sector, status: c.status, owner: c.owner, city: c.city, phone: c.phone, sites: c.sites, valuePa: c.valueNum, meta: c.meta },
           submit: async (v) => {
             await send("PATCH", `/clients/${c.id}`, v);
-            await done("Account saved", String(v.org));
+            await done("Company saved", String(v.org));
           },
-          danger: { label: "Close account", run: () => a.closeClient(c) },
+          danger: { label: "Delete company", run: () => a.closeClient(c) },
         }),
+
+      patchClient: async (c, patch) => {
+        try {
+          await mutate(
+            (dd) => ({
+              ...dd,
+              clients: dd.clients.map((k) =>
+                k.id === c.id
+                  ? {
+                      ...k,
+                      ...patch,
+                      ...(patch.valuePa !== undefined ? { value: aud(patch.valuePa), valueNum: patch.valuePa } : {}),
+                      ...(patch.status ? { kind: CLIENT_STATUSES.find(([l]) => l === patch.status)?.[1] ?? k.kind } : {}),
+                    }
+                  : k
+              ),
+            }),
+            () => send("PATCH", `/clients/${c.id}`, patch)
+          );
+          return true;
+        } catch (err) {
+          fail(err);
+          return false;
+        }
+      },
+
+      closeClient: async (c) => {
+        const ok = await destroy({
+          title: `Delete ${c.org}?`,
+          body: "The company, its contacts, deals and activity will be deleted. The audit log keeps a record.",
+          confirmLabel: "Delete company",
+          path: `/clients/${c.id}`,
+          toast: `${c.org} deleted`,
+        });
+        if (ok) navigate("/clients");
+        return ok;
+      },
 
       addContact: (c) =>
         setSpec({
           eyebrow: c.org,
           title: "Add contact",
           submitLabel: "Add contact",
-          fields: [
-            { name: "name", label: "Name", required: true, max: 80 },
-            { name: "role", label: "Role", required: true, max: 80, placeholder: "e.g. Head of facilities" },
-          ],
-          initial: { name: "", role: "" },
+          fields: contactFields,
+          initial: { name: "", role: "", email: "", phone: "" },
           submit: async (v) => {
             await send("POST", `/clients/${c.id}/contacts`, v);
             await done("Contact added", `${v.name} · ${c.org}`);
           },
         }),
 
-      logActivity: (c) =>
+      editContact: (c, contact) =>
         setSpec({
           eyebrow: c.org,
-          title: "Log activity",
-          submitLabel: "Log activity",
-          fields: [{ name: "text", label: "What happened", type: "textarea", required: true, max: 400, placeholder: "e.g. Quarterly review held on site; order book issue 4 agreed." }],
-          initial: { text: "" },
+          title: contact.name,
+          submitLabel: "Save contact",
+          fields: contactFields,
+          initial: { name: contact.name, role: contact.role, email: contact.email, phone: contact.phone },
           submit: async (v) => {
-            await send("POST", `/clients/${c.id}/activity`, v);
-            await done("Activity logged", c.org);
+            await send("PATCH", `/contacts/${contact.id}`, v);
+            await done("Contact saved", String(v.name));
+          },
+          danger: {
+            label: "Remove contact",
+            run: () =>
+              destroy({
+                title: `Remove ${contact.name}?`,
+                body: `They'll be removed from ${c.org}. Logged activity stays.`,
+                confirmLabel: "Remove contact",
+                path: `/contacts/${contact.id}`,
+                toast: `${contact.name} removed`,
+              }),
           },
         }),
 
-      recordProposal: (c) =>
+      logEngagement: async (c, e) => {
+        const temp: Engagement = {
+          id: -Date.now(),
+          clientId: c.id,
+          kind: e.kind,
+          subject: e.subject ?? "",
+          body: e.body ?? "",
+          at: e.at ?? new Date().toISOString(),
+          actor: d?.me.email ?? "",
+          outcome: e.outcome ?? "",
+          dueDate: e.dueDate ?? null,
+          done: false,
+          contactId: e.contactId ?? null,
+        };
+        try {
+          await mutate(
+            (dd) => ({ ...dd, clients: dd.clients.map((k) => (k.id === c.id ? { ...k, activity: [temp, ...k.activity] } : k)) }),
+            () => send("POST", `/clients/${c.id}/activity`, e)
+          );
+          const noun = { note: "Note added", email: "Email logged", call: "Call logged", meeting: "Meeting logged", task: "Task created" }[e.kind];
+          toast({ title: noun, desc: c.org, kind: "secure" });
+          return true;
+        } catch (err) {
+          fail(err);
+          return false;
+        }
+      },
+
+      patchEngagement: async (e, patch) => {
+        try {
+          await mutate(
+            (dd) => ({
+              ...dd,
+              clients: dd.clients.map((k) => (k.id === e.clientId ? { ...k, activity: k.activity.map((x) => (x.id === e.id ? { ...x, ...patch } : x)) } : k)),
+            }),
+            () => send("PATCH", `/activity/${e.id}`, patch)
+          );
+        } catch (err) {
+          fail(err);
+        }
+      },
+
+      deleteEngagement: (e) =>
+        destroy({
+          title: `Delete this ${e.kind}?`,
+          body: e.subject || e.body.slice(0, 120) || "It will be removed from the timeline.",
+          confirmLabel: "Delete",
+          path: `/activity/${e.id}`,
+          toast: `${e.kind[0]!.toUpperCase()}${e.kind.slice(1)} deleted`,
+        }),
+
+      newDeal: (o) =>
         setSpec({
-          eyebrow: c.org,
-          title: c.deal ? "Update proposal" : "Record proposal",
-          submitLabel: c.deal ? "Save proposal" : "Record proposal",
-          fields: [
-            { name: "name", label: "Proposal", required: true, max: 120 },
-            { name: "value", label: "Value (AUD)", type: "number", required: true, half: true, mono: true },
-            { name: "stage", label: "Stage", type: "select", required: true, half: true, options: opts(["SCOPING", "DRAFTING", "SUBMITTED", "NEGOTIATING"]) },
-            { name: "review", label: "Review date", type: "date", required: true, half: true },
-          ],
-          initial: c.deal
-            ? { name: c.deal.name, value: toNumber(c.deal.value), stage: c.deal.stage, review: addDays(today, 14) }
-            : { name: "", value: 0, stage: "SCOPING", review: addDays(today, 14) },
-          submit: async (v) => {
-            await send("PUT", `/clients/${c.id}/deal`, v);
-            await done("Proposal recorded", `${v.name} · ${c.org}`);
+          eyebrow: "Deals",
+          title: "Create deal",
+          submitLabel: "Create deal",
+          fields: dealFields,
+          initial: {
+            name: "",
+            clientId: String(o?.clientId ?? clientsList[0]?.id ?? ""),
+            amount: 0,
+            stage: o?.stage ?? "Enquiry",
+            closeDate: addDays(today, 30),
+            owner: me,
           },
-          danger: c.deal ? { label: "Close proposal", run: () => a.closeProposal(c) } : undefined,
+          submit: async (v) => {
+            await send("POST", "/deals", { ...v, clientId: Number(v.clientId), closeDate: v.closeDate || null });
+            await done("Deal created", String(v.name));
+          },
         }),
 
-      closeProposal: (c) =>
-        destroy({
-          title: "Close this proposal?",
-          body: `“${c.deal?.name}” will be removed from ${c.org}'s record.`,
-          confirmLabel: "Close proposal",
-          path: `/clients/${c.id}/deal`,
-          toast: "Proposal closed",
+      editDeal: (deal) =>
+        setSpec({
+          eyebrow: "Deal",
+          title: deal.name,
+          submitLabel: "Save deal",
+          fields: dealFields,
+          initial: { name: deal.name, clientId: String(deal.clientId), amount: deal.amount, stage: deal.stage, closeDate: deal.closeDate ?? "", owner: deal.owner },
+          submit: async (v) => {
+            await send("PATCH", `/deals/${deal.id}`, { ...v, clientId: Number(v.clientId), closeDate: v.closeDate || null });
+            await done("Deal saved", String(v.name));
+          },
+          danger: {
+            label: "Delete deal",
+            run: () =>
+              destroy({ title: `Delete “${deal.name}”?`, body: "The deal will be removed from the pipeline.", confirmLabel: "Delete deal", path: `/deals/${deal.id}`, toast: "Deal deleted" }),
+          },
         }),
 
-      closeClient: (c) =>
-        destroy({
-          title: `Close ${c.org}?`,
-          body: "The account, its contacts, proposal and activity will be deleted. The audit log keeps a record of the closure.",
-          confirmLabel: "Close account",
-          path: `/clients/${c.id}`,
-          toast: `${c.org} closed`,
-        }),
+      moveDeal: async (deal, stage, position) => {
+        const same = deal.stage === stage;
+        const inStage = (d?.deals ?? []).filter((x) => x.stage === stage && x.id !== deal.id);
+        if (same && (position === undefined || (d?.deals ?? []).filter((x) => x.stage === stage).findIndex((x) => x.id === deal.id) === Math.min(position, inStage.length))) return;
+        const closed = stage === "Closed won" || stage === "Closed lost";
+        try {
+          await mutate(
+            (dd) => {
+              const rest = dd.deals.filter((x) => x.id !== deal.id);
+              const moved = { ...deal, stage, closedAt: same ? deal.closedAt : closed ? new Date().toISOString() : null };
+              const idx = rest.filter((x) => x.stage === stage);
+              const at = Math.min(position ?? idx.length, idx.length);
+              const anchor = idx[at];
+              const deals = anchor ? rest.flatMap((x) => (x.id === anchor.id ? [moved, x] : [x])) : [...rest, moved];
+              return {
+                ...dd,
+                deals,
+                clients: stage === "Closed won" ? dd.clients.map((k) => (k.id === deal.clientId ? { ...k, status: "Customer", kind: "secure" } : k)) : dd.clients,
+              };
+            },
+            () => send("PATCH", `/deals/${deal.id}`, { ...(same ? {} : { stage }), ...(position !== undefined ? { position } : {}) })
+          );
+          if (!same)
+            toast(
+              stage === "Closed won"
+                ? { title: "Deal won", desc: `${deal.name} · ${money(deal.amount)}`, kind: "secure" }
+                : { title: `Moved to ${stage}`, desc: deal.name, kind: stage === "Closed lost" ? "breach" : "info" }
+            );
+        } catch (err) {
+          fail(err);
+        }
+      },
 
       postRole: () =>
         setSpec({
           eyebrow: "Recruitment",
-          title: "Post a role",
-          submitLabel: "Post role",
+          title: "Create job",
+          submitLabel: "Create job",
           fields: roleFields,
-          initial: { title: "", meta: "", status: "Open" },
+          initial: { title: "", department: "Ops", location: "", employmentType: "Full time", openings: 1, status: "Published", hiringManager: "", description: "" },
           submit: async (v) => {
             const r = await send("POST", "/roles", v);
-            await done("Role posted", String(v.title), `/recruitment?role=${r.id}`);
+            await done("Job created", String(v.title), `/recruitment?role=${r.id}`);
           },
         }),
 
       editRole: (r) =>
         setSpec({
-          eyebrow: "Recruitment",
+          eyebrow: "Job",
           title: r.title,
-          submitLabel: "Save role",
+          submitLabel: "Save job",
           fields: roleFields,
-          initial: { title: r.title, meta: r.meta, status: r.status },
+          initial: {
+            title: r.title,
+            department: r.department,
+            location: r.location,
+            employmentType: r.employmentType,
+            openings: r.openings,
+            status: r.status,
+            hiringManager: r.hiringManager,
+            description: r.description,
+          },
           submit: async (v) => {
             await send("PATCH", `/roles/${r.id}`, v);
-            await done("Role saved", String(v.title));
+            await done("Job saved", String(v.title));
           },
-          danger: { label: "Withdraw role", run: () => a.withdrawRole(r) },
+          danger: { label: "Delete job", run: () => a.withdrawRole(r) },
         }),
 
-      withdrawRole: (r) =>
-        destroy({
-          title: `Withdraw “${r.title}”?`,
-          body: "The role and its candidate pipeline will be deleted. The audit log keeps a record.",
-          confirmLabel: "Withdraw role",
+      patchRole: async (r, patch) => {
+        try {
+          await mutate(
+            (dd) => ({
+              ...dd,
+              roles: dd.roles.map((x) => (x.id === r.id ? { ...x, ...patch, kind: ROLE_STATUSES.find(([l]) => l === patch.status)?.[1] ?? x.kind } : x)),
+            }),
+            () => send("PATCH", `/roles/${r.id}`, patch)
+          );
+          toast({ title: `${r.title}: ${patch.status}`, kind: "info" });
+        } catch (err) {
+          fail(err);
+        }
+      },
+
+      withdrawRole: async (r) => {
+        const ok = await destroy({
+          title: `Delete “${r.title}”?`,
+          body: "The job and every candidate in its pipeline will be deleted. The audit log keeps a record.",
+          confirmLabel: "Delete job",
           path: `/roles/${r.id}`,
-          toast: "Role withdrawn",
-        }),
+          toast: "Job deleted",
+        });
+        if (ok) navigate("/recruitment");
+        return ok;
+      },
 
       addCandidate: (o) =>
         setSpec({
           eyebrow: "Recruitment",
           title: "Add candidate",
-          submitLabel: "Add to pipeline",
+          submitLabel: "Add candidate",
           fields: candidateFields(true),
           initial: {
             roleId: String(o?.roleId ?? roles[0]?.id ?? ""),
             name: "",
-            licence: "1A CURRENT",
-            stage: String(o?.stage ?? 0),
+            headline: "",
+            email: "",
+            phone: "",
+            location: "",
             source: "",
-            licenceOk: true,
+            licence: "",
+            stage: String(o?.stage ?? 1),
+            licenceOk: false,
           },
           submit: async (v) => {
-            await send("POST", "/candidates", { ...v, roleId: Number(v.roleId), stage: Number(v.stage) });
-            await done("Candidate added", String(v.name), `/recruitment?role=${v.roleId}`);
+            const r = await send("POST", "/candidates", { ...v, roleId: Number(v.roleId), stage: Number(v.stage) });
+            await done("Candidate added", String(v.name), `/recruitment?role=${v.roleId}&candidate=${r.id}`);
           },
         }),
 
@@ -663,42 +882,135 @@ export function ActionProvider({ children }: { children: ReactNode }) {
           title: c.name,
           submitLabel: "Save candidate",
           fields: candidateFields(false),
-          initial: { name: c.name, licence: c.lic, stage: String(c.stage), source: c.source, licenceOk: c.ok },
+          initial: { name: c.name, headline: c.headline, email: c.email, phone: c.phone, location: c.location, source: c.source, licence: c.lic, licenceOk: c.ok },
           submit: async (v) => {
-            await send("PATCH", `/candidates/${c.id}`, { ...v, stage: Number(v.stage) });
+            await send("PATCH", `/candidates/${c.id}`, v);
             await done("Candidate saved", String(v.name));
           },
-          danger: {
-            label: "Withdraw candidate",
-            run: () =>
-              destroy({
-                title: `Withdraw ${c.name}?`,
-                body: "They'll be removed from this role's pipeline.",
-                confirmLabel: "Withdraw",
-                path: `/candidates/${c.id}`,
-                toast: `${c.name} withdrawn`,
-              }),
-          },
+          danger: { label: "Delete candidate", run: () => a.deleteCandidate(c) },
         }),
 
       moveCandidate: async (c, stage) => {
         if (c.stage === stage) return;
+        const now = new Date().toISOString();
         try {
           await mutate(
             (dd) => ({
               ...dd,
-              candidates: dd.candidates.map((k) => (k.id === c.id ? { ...k, stage, days: 0 } : k)),
-              roles: dd.roles.map((r) =>
-                r.id === c.roleId ? { ...r, counts: r.counts.map((n, i) => n + (i === stage ? 1 : 0) - (i === c.stage ? 1 : 0)) } : r
+              candidates: dd.candidates.map((k) =>
+                k.id === c.id
+                  ? { ...k, stage, days: 0, events: [{ id: -Date.now(), at: now, actor: dd.me.email, kind: "stage" as const, body: `Moved to ${STAGES[stage]}`, score: null, verdict: null }, ...k.events] }
+                  : k
               ),
+              roles: c.disqualified
+                ? dd.roles
+                : dd.roles.map((r) => (r.id === c.roleId ? { ...r, counts: r.counts.map((n, i) => n + (i === stage ? 1 : 0) - (i === c.stage ? 1 : 0)) } : r)),
             }),
             () => send("PATCH", `/candidates/${c.id}`, { stage })
           );
-          toast({ title: `${c.name} moved to ${STAGES[stage]}`, kind: "info" });
+          toast({ title: `${c.name} moved to ${STAGES[stage]}`, kind: stage === STAGES.length - 1 ? "secure" : "info" });
         } catch (err) {
           fail(err);
         }
       },
+
+      disqualifyCandidate: async (c, reason) => {
+        try {
+          await mutate(
+            (dd) => ({
+              ...dd,
+              candidates: dd.candidates.map((k) => (k.id === c.id ? { ...k, disqualified: true, disqualifyReason: reason } : k)),
+              roles: dd.roles.map((r) => (r.id === c.roleId ? { ...r, disqualified: r.disqualified + 1, counts: r.counts.map((n, i) => n - (i === c.stage ? 1 : 0)) } : r)),
+            }),
+            () => send("PATCH", `/candidates/${c.id}`, { disqualified: true, disqualifyReason: reason })
+          );
+          toast({ title: `${c.name} disqualified`, desc: reason, kind: "breach" });
+        } catch (err) {
+          fail(err);
+        }
+      },
+
+      requalifyCandidate: async (c) => {
+        try {
+          await mutate(
+            (dd) => ({
+              ...dd,
+              candidates: dd.candidates.map((k) => (k.id === c.id ? { ...k, disqualified: false, disqualifyReason: "" } : k)),
+              roles: dd.roles.map((r) => (r.id === c.roleId ? { ...r, disqualified: Math.max(0, r.disqualified - 1), counts: r.counts.map((n, i) => n + (i === c.stage ? 1 : 0)) } : r)),
+            }),
+            () => send("PATCH", `/candidates/${c.id}`, { disqualified: false })
+          );
+          toast({ title: `${c.name} requalified`, kind: "info" });
+        } catch (err) {
+          fail(err);
+        }
+      },
+
+      commentCandidate: async (c, bodyText) => {
+        try {
+          await mutate(
+            (dd) => ({
+              ...dd,
+              candidates: dd.candidates.map((k) =>
+                k.id === c.id
+                  ? { ...k, events: [{ id: -Date.now(), at: new Date().toISOString(), actor: dd.me.email, kind: "comment" as const, body: bodyText, score: null, verdict: null }, ...k.events] }
+                  : k
+              ),
+            }),
+            () => send("POST", `/candidates/${c.id}/comments`, { body: bodyText })
+          );
+          return true;
+        } catch (err) {
+          fail(err);
+          return false;
+        }
+      },
+
+      evaluateCandidate: async (c, ev) => {
+        try {
+          await mutate(
+            (dd) => ({
+              ...dd,
+              candidates: dd.candidates.map((k) => {
+                if (k.id !== c.id) return k;
+                const events = [
+                  { id: -Date.now(), at: new Date().toISOString(), actor: dd.me.email, kind: "evaluation" as const, body: ev.body, score: ev.score, verdict: ev.verdict },
+                  ...k.events,
+                ];
+                const scores = events.filter((x) => x.kind === "evaluation" && x.score).map((x) => x.score!);
+                return { ...k, events, rating: Math.round((scores.reduce((p, q) => p + q, 0) / scores.length) * 10) / 10 };
+              }),
+            }),
+            () => send("POST", `/candidates/${c.id}/evaluations`, ev)
+          );
+          toast({ title: "Scorecard submitted", desc: `${c.name} · ${ev.verdict}`, kind: "secure" });
+          return true;
+        } catch (err) {
+          fail(err);
+          return false;
+        }
+      },
+
+      deleteCandidateEvent: async (c, ev) => {
+        if (!(await confirm({ title: `Delete this ${ev.kind}?`, body: ev.body.slice(0, 160) || "It will be removed from the profile.", confirmLabel: "Delete", danger: true }))) return;
+        try {
+          await mutate(
+            (dd) => ({ ...dd, candidates: dd.candidates.map((k) => (k.id === c.id ? { ...k, events: k.events.filter((x) => x.id !== ev.id) } : k)) }),
+            () => send("DELETE", `/candidate-events/${ev.id}`)
+          );
+        } catch (err) {
+          fail(err);
+        }
+      },
+
+      deleteCandidate: (c) =>
+        destroy({
+          title: `Delete ${c.name}?`,
+          body: "Their profile, timeline, comments and scorecards will be deleted. The audit log keeps a record.",
+          confirmLabel: "Delete candidate",
+          path: `/candidates/${c.id}`,
+          toast: `${c.name} deleted`,
+        }),
 
       logIntel: (o) =>
         setSpec({
@@ -731,16 +1043,16 @@ export function ActionProvider({ children }: { children: ReactNode }) {
         const map: Record<string, { label: string; run: () => void }> = {
           "/": { label: "Raise work", run: () => a.raiseWork() },
           "/operations": { label: "Raise work", run: () => a.raiseWork() },
-          "/recruitment": { label: "Post a role", run: () => a.postRole() },
+          "/recruitment": { label: "Create job", run: () => a.postRole() },
           "/employees": { label: "Add employee", run: () => a.addEmployee() },
-          "/clients": { label: "New account", run: () => a.newClient() },
+          "/clients": { label: "Create company", run: () => a.newClient() },
           "/intelligence": { label: "Log an item", run: () => a.logIntel() },
         };
         return map[pathname] ?? null;
       },
     };
     return a;
-  }, [data, done, destroy, fail, mutate, toast]);
+  }, [data, done, destroy, fail, mutate, toast, confirm, navigate]);
 
   return (
     <ActionContext.Provider value={actions}>
