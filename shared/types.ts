@@ -69,19 +69,41 @@ export interface Client {
   activity: ClientActivity[];
 }
 
+export const PRIORITIES = ["None", "Low", "Medium", "High"] as const;
+export type Priority = (typeof PRIORITIES)[number];
+
+export interface OpsSubtask {
+  id: number;
+  cardId: number;
+  title: string;
+  done: boolean;
+  /** Owner initials; "" when unassigned. */
+  who: string;
+  startDate: string | null;
+  dueDate: string | null;
+  late: boolean;
+}
+
 export interface OpsCard {
   id: number;
   columnId: number;
   ref: string;
   title: string;
+  /** Client / site; "" when not set. */
   site: string;
   line: string;
-  /** Display label, e.g. "DUE 04 SEP". */
+  description: string;
+  priority: Priority;
+  /** Display label, e.g. "DUE 04 SEP"; "" when there is no due date. */
   due: string;
+  startDate: string | null;
   dueDate: string | null;
   createdAt: string | null;
+  completedAt: string | null;
   late: boolean;
+  /** Owner initials; "" when unassigned. */
   who: string;
+  subtasks: OpsSubtask[];
 }
 
 export interface OpsColumn {

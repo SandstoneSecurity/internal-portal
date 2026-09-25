@@ -4,6 +4,7 @@ import {
   CLIENT_STATUSES,
   EMPLOYEE_STATUSES,
   INTEL_SEVERITIES,
+  PRIORITIES,
   ROLE_STATUSES,
   SERVICE_LINES,
   STAGES,
@@ -26,16 +27,40 @@ const initials = z
   .trim()
   .transform((s) => s.toUpperCase())
   .pipe(z.string().regex(/^[A-Z]{1,3}$/, "One to three letters"));
+const optInitials = z
+  .string()
+  .trim()
+  .transform((s) => s.toUpperCase())
+  .pipe(z.string().regex(/^[A-Z]{0,3}$/, "One to three letters"))
+  .default("");
+/** A date that may be cleared: "" or null both mean "no date". */
+const optDate = z
+  .union([isoDate, z.literal(""), z.null()])
+  .transform((v) => v || null)
+  .default(null);
 const id = z.coerce.number().int().positive();
 
 export const schemas = {
   work: z.object({
     title: text(120),
-    site: text(120),
-    line: z.enum(SERVICE_LINES),
-    dueDate: isoDate,
-    owner: initials,
+    site: optText(120),
+    line: z.enum(SERVICE_LINES).default("Ops"),
+    description: optText(4000),
+    priority: z.enum(PRIORITIES).default("None"),
+    startDate: optDate,
+    dueDate: optDate,
+    owner: optInitials,
     columnId: id.optional(),
+    /** Index within the target column (0 = top). */
+    position: z.coerce.number().int().min(0).max(10_000).optional(),
+  }),
+  subtask: z.object({
+    title: text(200),
+    done: z.boolean().default(false),
+    owner: optInitials,
+    startDate: optDate,
+    dueDate: optDate,
+    position: z.coerce.number().int().min(0).max(10_000).optional(),
   }),
   employee: z.object({
     name: text(80),
@@ -118,6 +143,12 @@ async function body<S extends z.ZodTypeAny>(c: Ctx, schema: S, partial = false):
     }
     throw new BadRequest("Some fields need attention.", fields);
   }
+  // zod applies .default() even to keys a partial update left out; a PATCH must
+  // only touch the fields it actually sent.
+  if (partial && json && typeof json === "object") {
+    const sent = new Set(Object.keys(json));
+    for (const k of Object.keys(parsed.data as object)) if (!sent.has(k)) delete (parsed.data as Record<string, unknown>)[k];
+  }
   return parsed.data as z.output<S>;
 }
 
@@ -176,27 +207,117 @@ export function handleApiError(err: Error, c: Context): Response {
 writes.onError(handleApiError);
 
 // ── Work items ───────────────────────────────────────────────────────────────
+const WORK_COLUMNS = {
+  title: "title",
+  site: "site",
+  line: "line",
+  description: "description",
+  priority: "priority",
+  startDate: "start_date",
+  dueDate: "due_date",
+  dueLabel: "due_label",
+  owner: "owner_initials",
+};
+
+function checkDates(start: string | null | undefined, due: string | null | undefined) {
+  if (start && due && start > due) throw new BadRequest("Some fields need attention.", { dueDate: "Due date is before the start date" });
+}
+
+/** Rewrites sort_order for a column (or a task's subtasks) so `movedId` lands at `position`. */
+async function reorder(
+  db: D1Database,
+  table: "ops_cards" | "ops_subtasks",
+  scopeCol: "column_id" | "card_id",
+  scopeId: number,
+  movedId: number,
+  position: number | undefined
+): Promise<D1PreparedStatement[]> {
+  const { results } = await db
+    .prepare(`SELECT id FROM ${table} WHERE ${scopeCol} = ? AND id != ? ORDER BY sort_order, id`)
+    .bind(scopeId, movedId)
+    .all<{ id: number }>();
+  const ids = results.map((r) => r.id);
+  ids.splice(Math.min(position ?? ids.length, ids.length), 0, movedId);
+  return ids.map((rowId, i) =>
+    rowId === movedId
+      ? db.prepare(`UPDATE ${table} SET ${scopeCol} = ?, sort_order = ? WHERE id = ?`).bind(scopeId, i + 1, rowId)
+      : db.prepare(`UPDATE ${table} SET sort_order = ? WHERE id = ?`).bind(i + 1, rowId)
+  );
+}
+
+/** One-line audit summary for an edit, specific when a single field changed. */
+function describeWorkEdit(ref: string, v: Partial<z.output<typeof schemas.work>>): string {
+  const keys = Object.keys(v).filter((k) => k !== "columnId" && k !== "position");
+  if (keys.length !== 1) return `Edited ${ref}`;
+  switch (keys[0]) {
+    case "title":
+      return `Renamed ${ref} to “${v.title}”`;
+    case "owner":
+      return v.owner ? `Assigned ${ref} to ${v.owner}` : `Unassigned ${ref}`;
+    case "dueDate":
+      return v.dueDate ? `Set ${ref} due ${dayMonth(v.dueDate)}` : `Cleared the due date on ${ref}`;
+    case "startDate":
+      return v.startDate ? `Set ${ref} to start ${dayMonth(v.startDate)}` : `Cleared the start date on ${ref}`;
+    case "priority":
+      return `Set ${ref} priority to ${v.priority}`;
+    case "description":
+      return `Updated the description of ${ref}`;
+    case "line":
+      return `Tagged ${ref} ${v.line}`;
+    case "site":
+      return `Set ${ref} client / site to ${v.site || "none"}`;
+    default:
+      return `Edited ${ref}`;
+  }
+}
+
 writes.post("/work", async (c) => {
   const v = await body(c, schemas.work);
+  checkDates(v.startDate, v.dueDate);
   const db = c.env.DB;
   const columnId =
     v.columnId ??
     (await db.prepare(`SELECT id FROM ops_columns WHERE is_done = 0 ORDER BY sort_order LIMIT 1`).first<number>("id"));
   if (!columnId) throw new BadRequest("The operations board has no columns yet.");
-  await mustExist(c, "ops_columns", columnId);
+  const col = await mustExist(c, "ops_columns", columnId);
   const next = (await db
     .prepare(`SELECT COALESCE(MAX(CAST(SUBSTR(ref, 4) AS INTEGER)), 100) + 1 AS n FROM ops_cards WHERE ref LIKE 'OP-%'`)
     .first<number>("n")) ?? 101;
   const ref = `OP-${next}`;
-  const order = (await db.prepare(`SELECT COALESCE(MAX(sort_order), 0) + 1 AS n FROM ops_cards WHERE column_id = ?`).bind(columnId).first<number>("n")) ?? 1;
+  const order =
+    (await db
+      .prepare(
+        v.position === 0
+          ? `SELECT COALESCE(MIN(sort_order), 1) - 1 AS n FROM ops_cards WHERE column_id = ?`
+          : `SELECT COALESCE(MAX(sort_order), 0) + 1 AS n FROM ops_cards WHERE column_id = ?`
+      )
+      .bind(columnId)
+      .first<number>("n")) ?? 1;
+  const now = nowIso();
   const [ins] = await db.batch([
     db
       .prepare(
-        `INSERT INTO ops_cards (column_id, ref, title, site, line, due_label, due_date, created_at, is_late, owner_initials, sort_order)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?) RETURNING id`
+        `INSERT INTO ops_cards (column_id, ref, title, site, line, description, priority, start_date, due_label, due_date,
+                                created_at, completed_at, is_late, owner_initials, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?) RETURNING id`
       )
-      .bind(columnId, ref, v.title, v.site, v.line, `DUE ${dayMonth(v.dueDate)}`, v.dueDate, nowIso(), v.owner, order),
-    auditLastInsert(c, "work", `Raised ${ref} — ${v.title}`),
+      .bind(
+        columnId,
+        ref,
+        v.title,
+        v.site,
+        v.line,
+        v.description,
+        v.priority,
+        v.startDate,
+        v.dueDate ? `DUE ${dayMonth(v.dueDate)}` : "",
+        v.dueDate,
+        now,
+        col.is_done === 1 ? now : null,
+        v.owner,
+        order
+      ),
+    auditLastInsert(c, "work", `Added ${ref} — ${v.title}`),
   ]);
   return c.json({ id: (ins.results[0] as { id: number }).id, ref }, 201);
 });
@@ -206,34 +327,34 @@ writes.patch("/work/:id", async (c) => {
   const v = await body(c, schemas.work, true);
   const db = c.env.DB;
   const card = await mustExist(c, "ops_cards", cardId);
+  checkDates(
+    v.startDate !== undefined ? v.startDate : (card.start_date as string | null),
+    v.dueDate !== undefined ? v.dueDate : (card.due_date as string | null)
+  );
   const stmts: D1PreparedStatement[] = [];
-  const edits = { ...v, dueLabel: v.dueDate ? `DUE ${dayMonth(v.dueDate)}` : undefined };
-  const { sql, binds } = setClause(edits, {
-    title: "title",
-    site: "site",
-    line: "line",
-    dueDate: "due_date",
-    dueLabel: "due_label",
-    owner: "owner_initials",
-  });
+  const edits = { ...v, dueLabel: v.dueDate === undefined ? undefined : v.dueDate ? `DUE ${dayMonth(v.dueDate)}` : "" };
+  const { sql, binds } = setClause(edits, WORK_COLUMNS);
   if (sql) stmts.push(db.prepare(`UPDATE ops_cards SET ${sql} WHERE id = ?`).bind(...binds, cardId));
 
-  let summary = `Edited ${card.ref}`;
+  const ref = String(card.ref);
+  let summary: string | null = sql ? describeWorkEdit(ref, v) : null;
   let action: "update" | "move" = "update";
-  if (v.columnId !== undefined && v.columnId !== card.column_id) {
-    const col = await mustExist(c, "ops_columns", v.columnId);
-    stmts.push(
-      db
-        .prepare(
-          `UPDATE ops_cards SET column_id = ?, sort_order = (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM ops_cards WHERE column_id = ?) WHERE id = ?`
-        )
-        .bind(v.columnId, v.columnId, cardId)
-    );
-    summary = sql ? `Edited ${card.ref} and moved it to ${col.label}` : `Moved ${card.ref} to ${col.label}`;
-    action = sql ? "update" : "move";
+  const moving = v.columnId !== undefined && v.columnId !== card.column_id;
+  if (moving || v.position !== undefined) {
+    const target = v.columnId ?? (card.column_id as number);
+    stmts.push(...(await reorder(db, "ops_cards", "column_id", target, cardId, v.position)));
+    if (moving) {
+      const col = await mustExist(c, "ops_columns", target);
+      const done = col.is_done === 1;
+      stmts.push(db.prepare(`UPDATE ops_cards SET completed_at = ? WHERE id = ?`).bind(done ? nowIso() : null, cardId));
+      const moved = done ? `Completed ${ref}` : `Moved ${ref} to ${col.label}`;
+      summary = sql ? `${summary} and ${moved.charAt(0).toLowerCase()}${moved.slice(1)}` : moved;
+      action = sql ? "update" : "move";
+    }
   }
   if (!stmts.length) return c.json({ ok: true });
-  stmts.push(audit(c, action, "work", String(cardId), summary));
+  // Reordering within a column is housekeeping, not a change worth logging.
+  if (summary) stmts.push(audit(c, action, "work", String(cardId), summary));
   await db.batch(stmts);
   return c.json({ ok: true });
 });
@@ -242,8 +363,72 @@ writes.delete("/work/:id", async (c) => {
   const cardId = param(c);
   const card = await mustExist(c, "ops_cards", cardId);
   await c.env.DB.batch([
+    c.env.DB.prepare(`DELETE FROM ops_subtasks WHERE card_id = ?`).bind(cardId),
     c.env.DB.prepare(`DELETE FROM ops_cards WHERE id = ?`).bind(cardId),
     audit(c, "delete", "work", String(cardId), `Deleted ${card.ref} — ${card.title}`),
+  ]);
+  return c.json({ ok: true });
+});
+
+// ── Subtasks ─────────────────────────────────────────────────────────────────
+const SUBTASK_COLUMNS = { title: "title", owner: "owner_initials", startDate: "start_date", dueDate: "due_date" };
+
+writes.post("/work/:id/subtasks", async (c) => {
+  const cardId = param(c);
+  const v = await body(c, schemas.subtask);
+  checkDates(v.startDate, v.dueDate);
+  const db = c.env.DB;
+  const card = await mustExist(c, "ops_cards", cardId);
+  const order =
+    (await db.prepare(`SELECT COALESCE(MAX(sort_order), 0) + 1 AS n FROM ops_subtasks WHERE card_id = ?`).bind(cardId).first<number>("n")) ?? 1;
+  const now = nowIso();
+  const [ins] = await db.batch([
+    db
+      .prepare(
+        `INSERT INTO ops_subtasks (card_id, title, done, owner_initials, start_date, due_date, sort_order, created_at, completed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
+      )
+      .bind(cardId, v.title, v.done ? 1 : 0, v.owner, v.startDate, v.dueDate, order, now, v.done ? now : null),
+    audit(c, "create", "work", String(cardId), `Added subtask “${v.title}” to ${card.ref}`),
+  ]);
+  return c.json({ id: (ins.results[0] as { id: number }).id }, 201);
+});
+
+writes.patch("/subtasks/:id", async (c) => {
+  const subId = param(c);
+  const v = await body(c, schemas.subtask, true);
+  const db = c.env.DB;
+  const sub = await mustExist(c, "ops_subtasks", subId);
+  const card = await mustExist(c, "ops_cards", sub.card_id as number);
+  checkDates(
+    v.startDate !== undefined ? v.startDate : (sub.start_date as string | null),
+    v.dueDate !== undefined ? v.dueDate : (sub.due_date as string | null)
+  );
+  const stmts: D1PreparedStatement[] = [];
+  const { sql, binds } = setClause(v, SUBTASK_COLUMNS);
+  if (sql) stmts.push(db.prepare(`UPDATE ops_subtasks SET ${sql} WHERE id = ?`).bind(...binds, subId));
+  const title = v.title ?? String(sub.title);
+  let summary: string | null = sql ? `Edited subtask “${title}” on ${card.ref}` : null;
+  if (v.done !== undefined && v.done !== (sub.done === 1)) {
+    stmts.push(
+      db.prepare(`UPDATE ops_subtasks SET done = ?, completed_at = ? WHERE id = ?`).bind(v.done ? 1 : 0, v.done ? nowIso() : null, subId)
+    );
+    summary = `${v.done ? "Completed" : "Reopened"} subtask “${title}” on ${card.ref}`;
+  }
+  if (v.position !== undefined) stmts.push(...(await reorder(db, "ops_subtasks", "card_id", card.id as number, subId, v.position)));
+  if (!stmts.length) return c.json({ ok: true });
+  if (summary) stmts.push(audit(c, "update", "work", String(card.id), summary));
+  await db.batch(stmts);
+  return c.json({ ok: true });
+});
+
+writes.delete("/subtasks/:id", async (c) => {
+  const subId = param(c);
+  const sub = await mustExist(c, "ops_subtasks", subId);
+  const card = await mustExist(c, "ops_cards", sub.card_id as number);
+  await c.env.DB.batch([
+    c.env.DB.prepare(`DELETE FROM ops_subtasks WHERE id = ?`).bind(subId),
+    audit(c, "delete", "work", String(card.id), `Removed subtask “${sub.title}” from ${card.ref}`),
   ]);
   return c.json({ ok: true });
 });

@@ -36,17 +36,31 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Saves can overlap (typing in one field while ticking a subtask). Only the
+  // last one to finish re-reads the server, so an early refresh can't briefly
+  // undo a later optimistic change.
+  const inFlight = useRef(0);
   const mutate = useCallback<DataState["mutate"]>(
     async (optimistic, commit) => {
       const before = latest.current;
-      if (before) setData(optimistic(before));
+      if (before) {
+        const next = optimistic(before);
+        latest.current = next;
+        setData(next);
+      }
+      inFlight.current++;
       try {
         await commit();
       } catch (err) {
-        if (before) setData(before);
+        if (before && inFlight.current === 1) {
+          latest.current = before;
+          setData(before);
+        }
         throw err;
+      } finally {
+        inFlight.current--;
+        if (inFlight.current === 0) await refresh();
       }
-      await refresh();
     },
     [refresh]
   );

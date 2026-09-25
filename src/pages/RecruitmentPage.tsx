@@ -130,8 +130,8 @@ export function RecruitmentPage() {
                         id={`cand-${c.id}`}
                         label={`${c.name}, ${label}. Drag to another stage, or press Enter to edit.`}
                         className="pt-card"
-                        onHover={setOver}
-                        onDrop={(t) => void actions.moveCandidate(c, Number(t))}
+                        onHover={(p) => setOver(p?.target ?? null)}
+                        onDrop={(p) => void actions.moveCandidate(c, Number(p.target))}
                         onOpen={() => actions.editCandidate(c)}
                       >
                         <div style={{ fontSize: 13.5, fontWeight: 600 }}>{c.name}</div>
