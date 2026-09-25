@@ -363,7 +363,7 @@ button { font: inherit; color: inherit; }
 }
 .pt-input::placeholder { color: var(--field-placeholder); }
 .pt-input:hover { border-color: var(--field-border-hover); }
-.pt-input:focus { border-color: var(--field-border-focus); box-shadow: var(--focus-ring); }
+.pt-input:focus { border-color: var(--field-border-focus); box-shadow: var(--field-halo); }
 .pt-input--mono { font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.02em; }
 .pt-input--invalid { border-color: var(--status-breach-dot); }
 .pt-textarea { height: auto; min-height: 104px; padding: 10px 12px; line-height: 1.55; resize: vertical; }
@@ -1037,7 +1037,6 @@ input[type="date"].pt-input { font-family: var(--font-mono); font-size: 13px; }
   height: 100%; border: 0; background: transparent; color: inherit; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; padding-right: 4px;
 }
 .pt-ats-state select:focus, .pt-ats-stagepick select:focus { outline: none; }
-.pt-ats-state:focus-within, .pt-ats-stagepick:focus-within { box-shadow: var(--focus-ring); }
 
 .pt-ats-pipebar { display: flex; gap: 3px; overflow-x: auto; scrollbar-width: none; }
 .pt-ats-pipebar::-webkit-scrollbar { display: none; }
@@ -1294,3 +1293,23 @@ input[type="date"].pt-input { font-family: var(--font-mono); font-size: 13px; }
   .pt-crm-stagecol { display: none !important; }
   .pt-crm-td, .pt-crm-th { padding-left: 10px; padding-right: 10px; }
 }
+
+/* ── Field focus ──────────────────────────────────────────────────────────
+   Fields show focus the design system's way (.sds-input): a brass border and
+   a soft brass halo, one outline. The global :focus-visible double ring is
+   for buttons and cards; on a field that already draws a border it read as
+   two rectangles. Controls that sit inside a bordered pill (stage and state
+   pickers, filter boxes) hand their focus to the pill. */
+:root { --field-halo: 0 0 0 3px rgba(150, 119, 76, 0.18); }
+:root[data-theme="night"] { --field-halo: 0 0 0 3px rgba(176, 146, 95, 0.3); }
+:is(input, select, textarea):focus-visible { box-shadow: none; }
+.pt-edit:focus,
+.pt-datefield input:focus,
+.pt-deps__add select:focus,
+.pt-crm-subject:focus,
+.pt-crm-body:focus,
+.pt-crm-inline select:focus,
+.pt-crm-inline input:focus { box-shadow: var(--field-halo); }
+.pt-filter:focus-within { box-shadow: var(--field-halo); }
+.pt-ats-state:focus-within,
+.pt-ats-stagepick:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--hue) 24%, transparent); }
