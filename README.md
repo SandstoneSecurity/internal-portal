@@ -38,7 +38,23 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
     dates, section, priority, service line, client/site and description.
     Subtasks there have their own assignee and start/due dates, and the panel
     also lists the task's activity.
-  - **The timeline** draws each task and its subtasks as coloured bars.
+  - **The timeline** is an interactive Gantt chart:
+    - **Colours:** bars and board sections share one progress palette. To do
+      is jacaranda, in progress harbour, waiting on another task ochre, past
+      due clay and complete eucalypt. Subtask completion fills each task's bar.
+    - **Editing dates:** drag a bar to move it, or drag either end to change
+      its start or due date. Arrow keys nudge a focused bar by a day (Shift
+      changes the due date only). Subtask bars work the same way.
+    - **Scheduling:** click an empty row to schedule an undated task.
+    - **Scrolling:** the view scrolls endlessly across months. There are
+      Today and previous/next buttons, and Days / Weeks / Months zoom.
+      Dragging empty space pans the view.
+    - **Milestones** are diamonds with a single date. Add them from the
+      toolbar, or switch any task's Type in its panel.
+    - **Dependencies:** drag the dot at the end of a bar onto another bar to
+      make that task wait on this one, or use the Dependencies section in the
+      task panel. Arrows join linked tasks; a dashed red arrow means the
+      dependent starts before its predecessor is due. Loops are refused.
 - **Drag and drop** also moves candidates between Recruitment stages. Moves
   update the screen at once and roll back if the save fails.
 - **Command palette:** press `Ctrl K` / `⌘K` or `/`. From there you can jump
@@ -89,6 +105,8 @@ input returns `400 {error, fields}`.
 | POST · PATCH · DELETE | `/api/work[/:id]` | Tasks (`columnId` moves a card, `position` places it within the section) |
 | POST | `/api/work/:id/subtasks` | Add a subtask |
 | PATCH · DELETE | `/api/subtasks/:id` | Edit, complete, reorder or remove a subtask |
+| POST | `/api/work/:id/dependencies` | `{ dependsOn }`: this task waits on another (loops refused) |
+| DELETE | `/api/work/:id/dependencies/:dependsOn` | Remove a dependency |
 | POST · PATCH · DELETE | `/api/employees[/:id]` | Personnel register |
 | POST | `/api/employees/:id/shifts` | Roster a shift |
 | POST · PATCH · DELETE | `/api/clients[/:id]` | Accounts |
@@ -144,6 +162,6 @@ worker/         Cloudflare Worker (Hono): auth, reads (db.ts), writes (writes.ts
 shared/types.ts Types shared between the Worker and the React app
 src/            React app (pages/, components/, actions/, lib/)
 src/styles/ds/  Sandstone design system tokens + component CSS (ported as-is)
-migrations/     D1 schema (0002: dates, audit log, regions; 0003: three-section board, task fields, subtasks)
+migrations/     D1 schema (0002: dates, audit log, regions; 0003: three-section board, task fields, subtasks; 0004: milestones, dependencies)
 seed/           Fictional demo data for local development
 ```

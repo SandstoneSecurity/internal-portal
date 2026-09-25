@@ -35,7 +35,7 @@ const toNumber = (v: string) => moneyValue(v);
 const isoOr = (iso: string | null, fallback = "") => iso ?? fallback;
 
 export interface Actions {
-  raiseWork: (o?: { columnId?: number }) => void;
+  raiseWork: (o?: { columnId?: number; milestone?: boolean; dueDate?: string }) => void;
   /** Opens the task panel. */
   editWork: (card: OpsCard) => void;
   openTask: (id: number) => void;
@@ -48,6 +48,9 @@ export interface Actions {
   addSubtask: (card: OpsCard, title: string) => Promise<void>;
   patchSubtask: (card: OpsCard, sub: OpsSubtask, patch: SubtaskPatch) => Promise<boolean>;
   deleteSubtask: (card: OpsCard, sub: OpsSubtask) => Promise<void>;
+  /** `card` waits on `dependsOn`. */
+  addDependency: (card: OpsCard, dependsOn: number) => Promise<void>;
+  removeDependency: (card: OpsCard, dependsOn: number) => Promise<void>;
   addEmployee: () => void;
   editEmployee: (e: Employee) => void;
   rosterShift: (e: Employee) => void;
@@ -71,7 +74,7 @@ export interface Actions {
   primaryFor: (pathname: string) => { label: string; run: () => void } | null;
 }
 
-export type WorkPatch = Partial<Pick<OpsCard, "title" | "site" | "line" | "description" | "priority" | "startDate" | "dueDate">> & {
+export type WorkPatch = Partial<Pick<OpsCard, "title" | "site" | "line" | "description" | "priority" | "startDate" | "dueDate" | "milestone">> & {
   owner?: string;
 };
 export type SubtaskPatch = Partial<Pick<OpsSubtask, "title" | "done" | "startDate" | "dueDate">> & { owner?: string };
@@ -137,6 +140,16 @@ export function ActionProvider({ children }: { children: ReactNode }) {
     const roles = d?.roles ?? [];
     const columns = d?.opsColumns ?? [];
 
+    const milestoneFields: FieldSpec[] = [
+      { name: "title", label: "Milestone", required: true, max: 120, placeholder: "e.g. Barangaroo contract go-live" },
+      { name: "dueDate", label: "Date", type: "date", required: true, half: true },
+      { name: "columnId", label: "Section", type: "select", options: columns.map((c) => ({ value: String(c.id), label: c.label })), required: true, half: true },
+      { name: "site", label: "Client / site", max: 120, placeholder: "e.g. Aster Constructions" },
+      { name: "line", label: "Service line", type: "select", options: opts(SERVICE_LINES), required: true, half: true },
+      { name: "owner", label: "Owner (initials)", type: "initials", half: true, placeholder: "JR" },
+      { name: "description", label: "Description", type: "textarea", max: 4000, placeholder: "What marks this milestone as reached?" },
+    ];
+
     const workFields: FieldSpec[] = [
       { name: "title", label: "Task", required: true, max: 120, placeholder: "e.g. Key register audit" },
       { name: "site", label: "Client / site", max: 120, placeholder: "e.g. Castlereagh Hotels · four sites" },
@@ -198,6 +211,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
       startDate: v.startDate || null,
       dueDate: v.dueDate || null,
       description: v.description,
+      milestone: v.milestone === true || v.milestone === "true",
       ...(v.columnId ? { columnId: Number(v.columnId) } : {}),
     });
 
@@ -223,23 +237,24 @@ export function ActionProvider({ children }: { children: ReactNode }) {
       raiseWork: (o) =>
         setSpec({
           eyebrow: "Operations",
-          title: "Raise work",
-          submitLabel: "Create task",
-          fields: workFields,
+          title: o?.milestone ? "Add milestone" : "Raise work",
+          submitLabel: o?.milestone ? "Add milestone" : "Create task",
+          fields: o?.milestone ? milestoneFields : workFields,
           initial: {
             title: "",
             site: "",
             line: "Ops",
             priority: "None",
             owner: me,
-            startDate: today,
-            dueDate: addDays(today, 7),
+            startDate: o?.milestone ? "" : today,
+            dueDate: o?.dueDate ?? addDays(today, 7),
             description: "",
+            milestone: o?.milestone ? "true" : "",
             columnId: String(o?.columnId ?? columns.find((c) => !c.done)?.id ?? ""),
           },
           submit: async (v) => {
             const r = await send("POST", "/work", workBody(v));
-            await done(`${r.ref} created`, String(v.title), `/operations?card=${r.id}`);
+            await done(`${r.ref} ${o?.milestone ? "milestone added" : "created"}`, String(v.title), `/operations?card=${r.id}`);
           },
         }),
 
@@ -296,6 +311,8 @@ export function ActionProvider({ children }: { children: ReactNode }) {
           completedAt: col?.done ? new Date().toISOString() : null,
           late: false,
           who: "",
+          milestone: false,
+          blockedBy: [],
           subtasks: [],
         };
         try {
@@ -373,6 +390,31 @@ export function ActionProvider({ children }: { children: ReactNode }) {
         } catch (err) {
           fail(err);
           return false;
+        }
+      },
+
+      addDependency: async (card, dependsOn) => {
+        if (card.id === dependsOn || card.blockedBy.includes(dependsOn)) return;
+        const pre = columns.flatMap((c) => c.cards).find((k) => k.id === dependsOn);
+        try {
+          await mutate(
+            (dd) => mapCard(dd, card.id, (k) => ({ ...k, blockedBy: [...k.blockedBy, dependsOn] })),
+            () => send("POST", `/work/${card.id}/dependencies`, { dependsOn })
+          );
+          toast({ title: `${card.ref} now waits on ${pre?.ref ?? "another task"}`, desc: pre?.title, kind: "info" });
+        } catch (err) {
+          fail(err);
+        }
+      },
+
+      removeDependency: async (card, dependsOn) => {
+        try {
+          await mutate(
+            (dd) => mapCard(dd, card.id, (k) => ({ ...k, blockedBy: k.blockedBy.filter((x) => x !== dependsOn) })),
+            () => send("DELETE", `/work/${card.id}/dependencies/${dependsOn}`)
+          );
+        } catch (err) {
+          fail(err);
         }
       },
 

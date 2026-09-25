@@ -50,10 +50,12 @@ export const schemas = {
     startDate: optDate,
     dueDate: optDate,
     owner: optInitials,
+    milestone: z.boolean().default(false),
     columnId: id.optional(),
     /** Index within the target column (0 = top). */
     position: z.coerce.number().int().min(0).max(10_000).optional(),
   }),
+  dependency: z.object({ dependsOn: id }),
   subtask: z.object({
     title: text(200),
     done: z.boolean().default(false),
@@ -217,6 +219,7 @@ const WORK_COLUMNS = {
   dueDate: "due_date",
   dueLabel: "due_label",
   owner: "owner_initials",
+  milestoneFlag: "is_milestone",
 };
 
 function checkDates(start: string | null | undefined, due: string | null | undefined) {
@@ -247,7 +250,9 @@ async function reorder(
 
 /** One-line audit summary for an edit, specific when a single field changed. */
 function describeWorkEdit(ref: string, v: Partial<z.output<typeof schemas.work>>): string {
-  const keys = Object.keys(v).filter((k) => k !== "columnId" && k !== "position");
+  const keys = Object.keys(v).filter((k) => k !== "columnId" && k !== "position" && !(k === "startDate" && v.milestone !== undefined));
+  if (keys.length === 2 && v.startDate !== undefined && v.dueDate !== undefined)
+    return v.startDate && v.dueDate ? `Rescheduled ${ref} to ${dayMonth(v.startDate)} – ${dayMonth(v.dueDate)}` : `Edited the dates on ${ref}`;
   if (keys.length !== 1) return `Edited ${ref}`;
   switch (keys[0]) {
     case "title":
@@ -266,6 +271,8 @@ function describeWorkEdit(ref: string, v: Partial<z.output<typeof schemas.work>>
       return `Tagged ${ref} ${v.line}`;
     case "site":
       return `Set ${ref} client / site to ${v.site || "none"}`;
+    case "milestone":
+      return v.milestone ? `Made ${ref} a milestone` : `Made ${ref} a task`;
     default:
       return `Edited ${ref}`;
   }
@@ -273,6 +280,7 @@ function describeWorkEdit(ref: string, v: Partial<z.output<typeof schemas.work>>
 
 writes.post("/work", async (c) => {
   const v = await body(c, schemas.work);
+  if (v.milestone) v.startDate = null;
   checkDates(v.startDate, v.dueDate);
   const db = c.env.DB;
   const columnId =
@@ -298,8 +306,8 @@ writes.post("/work", async (c) => {
     db
       .prepare(
         `INSERT INTO ops_cards (column_id, ref, title, site, line, description, priority, start_date, due_label, due_date,
-                                created_at, completed_at, is_late, owner_initials, sort_order)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?) RETURNING id`
+                                created_at, completed_at, is_late, owner_initials, sort_order, is_milestone)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?) RETURNING id`
       )
       .bind(
         columnId,
@@ -315,9 +323,10 @@ writes.post("/work", async (c) => {
         now,
         col.is_done === 1 ? now : null,
         v.owner,
-        order
+        order,
+        v.milestone ? 1 : 0
       ),
-    auditLastInsert(c, "work", `Added ${ref} — ${v.title}`),
+    auditLastInsert(c, "work", `Added ${v.milestone ? "milestone " : ""}${ref} — ${v.title}`),
   ]);
   return c.json({ id: (ins.results[0] as { id: number }).id, ref }, 201);
 });
@@ -332,7 +341,13 @@ writes.patch("/work/:id", async (c) => {
     v.dueDate !== undefined ? v.dueDate : (card.due_date as string | null)
   );
   const stmts: D1PreparedStatement[] = [];
-  const edits = { ...v, dueLabel: v.dueDate === undefined ? undefined : v.dueDate ? `DUE ${dayMonth(v.dueDate)}` : "" };
+  // A milestone has one date: turning a task into one (or editing one) drops any start date.
+  if (v.milestone === true || (card.is_milestone === 1 && v.milestone !== false && v.startDate !== undefined)) v.startDate = null;
+  const edits = {
+    ...v,
+    dueLabel: v.dueDate === undefined ? undefined : v.dueDate ? `DUE ${dayMonth(v.dueDate)}` : "",
+    milestoneFlag: v.milestone === undefined ? undefined : v.milestone ? 1 : 0,
+  };
   const { sql, binds } = setClause(edits, WORK_COLUMNS);
   if (sql) stmts.push(db.prepare(`UPDATE ops_cards SET ${sql} WHERE id = ?`).bind(...binds, cardId));
 
@@ -364,9 +379,51 @@ writes.delete("/work/:id", async (c) => {
   const card = await mustExist(c, "ops_cards", cardId);
   await c.env.DB.batch([
     c.env.DB.prepare(`DELETE FROM ops_subtasks WHERE card_id = ?`).bind(cardId),
+    c.env.DB.prepare(`DELETE FROM ops_dependencies WHERE card_id = ? OR depends_on_id = ?`).bind(cardId, cardId),
     c.env.DB.prepare(`DELETE FROM ops_cards WHERE id = ?`).bind(cardId),
     audit(c, "delete", "work", String(cardId), `Deleted ${card.ref} — ${card.title}`),
   ]);
+  return c.json({ ok: true });
+});
+
+// ── Dependencies ─────────────────────────────────────────────────────────────
+writes.post("/work/:id/dependencies", async (c) => {
+  const cardId = param(c);
+  const { dependsOn } = await body(c, schemas.dependency);
+  const db = c.env.DB;
+  if (dependsOn === cardId) throw new BadRequest("A task can't wait on itself.", { dependsOn: "A task can't wait on itself" });
+  const card = await mustExist(c, "ops_cards", cardId);
+  const before = await mustExist(c, "ops_cards", dependsOn);
+  const { results } = await db.prepare(`SELECT card_id, depends_on_id FROM ops_dependencies`).all<{ card_id: number; depends_on_id: number }>();
+  if (results.some((r) => r.card_id === cardId && r.depends_on_id === dependsOn)) return c.json({ ok: true });
+  // Refuse a loop: if `dependsOn` already (transitively) waits on this task, linking would deadlock both.
+  const waitsOn = new Map<number, number[]>();
+  for (const r of results) waitsOn.set(r.card_id, [...(waitsOn.get(r.card_id) ?? []), r.depends_on_id]);
+  const seen = new Set<number>();
+  const stack = [dependsOn];
+  while (stack.length) {
+    const n = stack.pop()!;
+    if (n === cardId)
+      throw new BadRequest(`${before.ref} already waits on ${card.ref}, so this would make a loop.`, { dependsOn: "That would make a loop" });
+    if (seen.has(n)) continue;
+    seen.add(n);
+    stack.push(...(waitsOn.get(n) ?? []));
+  }
+  await db.batch([
+    db.prepare(`INSERT INTO ops_dependencies (card_id, depends_on_id, created_at) VALUES (?, ?, ?)`).bind(cardId, dependsOn, nowIso()),
+    audit(c, "update", "work", String(cardId), `${card.ref} now waits on ${before.ref}`),
+  ]);
+  return c.json({ ok: true }, 201);
+});
+
+writes.delete("/work/:id/dependencies/:dependsOn", async (c) => {
+  const cardId = param(c);
+  const dependsOn = param(c, "dependsOn");
+  const card = await mustExist(c, "ops_cards", cardId);
+  const before = await c.env.DB.prepare(`SELECT ref FROM ops_cards WHERE id = ?`).bind(dependsOn).first<{ ref: string }>();
+  const res = await c.env.DB.prepare(`DELETE FROM ops_dependencies WHERE card_id = ? AND depends_on_id = ?`).bind(cardId, dependsOn).run();
+  if (!res.meta.changes) throw new NotFound();
+  await audit(c, "update", "work", String(cardId), `${card.ref} no longer waits on ${before?.ref ?? "a deleted task"}`).run();
   return c.json({ ok: true });
 });
 

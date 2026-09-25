@@ -103,6 +103,10 @@ export interface OpsCard {
   late: boolean;
   /** Owner initials; "" when unassigned. */
   who: string;
+  /** A milestone has one date (its due date) and is drawn as a diamond. */
+  milestone: boolean;
+  /** Ids of the tasks this one waits on. */
+  blockedBy: number[];
   subtasks: OpsSubtask[];
 }
 
