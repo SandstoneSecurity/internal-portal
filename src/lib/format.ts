@@ -149,3 +149,10 @@ export function dueTone(due: string | null, today: string, done: boolean): "late
 export function aud(n: number): string {
   return `$${Math.round(n).toLocaleString("en-AU")}`;
 }
+
+/** File size as people read it: 80063 → "78 KB". */
+export function fileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}

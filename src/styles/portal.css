@@ -1106,6 +1106,28 @@ input[type="date"].pt-input { font-family: var(--font-mono); font-size: 13px; }
 .pt-ats-lic { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 11px; color: var(--status-advisory-fg); }
 .pt-ats-lic.is-ok { color: var(--status-secure-fg); }
 .pt-ats-latest { padding: 12px 14px; background: var(--surface-sunken); }
+.pt-ats-row__clip { margin-left: 6px; vertical-align: -1px; color: var(--text-tertiary); }
+button.pt-ats-link { background: none; border: 0; padding: 0; font: inherit; font-size: 12.5px; cursor: pointer; text-align: left; }
+.pt-ats-cvlink { font-size: 13.5px !important; color: var(--text-primary) !important; max-width: 100%; }
+.pt-ats-link.is-current { color: var(--text-primary); font-weight: 600; }
+
+/* CV tab: the file bar, then the document itself at reading size. */
+.pt-ats-cv { display: flex; flex-direction: column; gap: 12px; }
+.pt-ats-cv__bar { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--surface-sunken); border-top: 2px solid var(--brass); }
+.pt-ats-cv__icon { flex: none; color: var(--brass); }
+.pt-ats-cv__name { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pt-ats-cv__file { font-size: 13.5px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pt-ats-cv__frame { width: 100%; height: min(78vh, 900px); min-height: 420px; border: 1px solid var(--border-subtle); background: var(--surface-sunken); display: block; }
+.pt-ats-cv__img { max-width: 100%; border: 1px solid var(--border-subtle); display: block; }
+.pt-ats-cv__none { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 36px 16px; text-align: center; background: var(--surface-sunken); color: var(--text-secondary); font-size: 13px; }
+.pt-ats-cv__none p { margin: 6px 0 0; color: var(--text-primary); font-weight: 600; }
+.pt-ats-cv__list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pt-ats-cv__list li { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+@media (max-width: 560px) {
+  .pt-ats-cv__bar { flex-wrap: wrap; }
+  .pt-ats-cv__name { flex-basis: calc(100% - 30px); }
+  .pt-ats-cv__frame { height: 70vh; min-height: 360px; }
+}
 .pt-ats-latest p { margin: 0; font-size: 13.5px; color: var(--text-secondary); font-style: italic; }
 .pt-ats-card { padding: 14px; border: var(--border-hair) solid var(--border-default); background: var(--surface-raised); display: flex; flex-direction: column; gap: 10px; }
 .pt-ats-card__title { font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
@@ -1285,6 +1307,9 @@ input[type="date"].pt-input { font-family: var(--font-mono); font-size: 13px; }
   .pt-ats-job__stages { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .pt-ats-stepper__label { display: none; }
   .pt-ats-profile__head { flex-wrap: wrap; }
+  /* Name and contact get the full row beside the avatar; the rating drops below. */
+  .pt-ats-profile__who { flex: 1 1 calc(100% - 120px); }
+  .pt-ats-profile__rating { order: 3; flex-basis: 100%; flex-direction: row; align-items: center; gap: 10px; padding-left: 62px; }
   .pt-ats-facts { grid-template-columns: 1fr; gap: 2px; }
   .pt-ats-facts dd { margin-bottom: 8px; }
   .pt-crm-totals > div { min-width: 0; flex: 1 1 40%; }

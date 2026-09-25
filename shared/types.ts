@@ -197,6 +197,16 @@ export interface CandidateEvent {
   verdict: string | null;
 }
 
+/** A file sent with an application (usually the CV), served by GET /api/files/:id. */
+export interface CandidateFile {
+  id: number;
+  filename: string;
+  mime: string;
+  /** Bytes. */
+  size: number;
+  uploadedAt: string;
+}
+
 export interface Candidate {
   id: number;
   roleId: number;
@@ -217,6 +227,8 @@ export interface Candidate {
   /** Average scorecard score, 1–5, or null when nobody has evaluated yet. */
   rating: number | null;
   events: CandidateEvent[];
+  /** Newest first; the first is treated as the CV. */
+  files: CandidateFile[];
 }
 
 export interface Region {

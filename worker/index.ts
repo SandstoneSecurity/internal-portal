@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { requireAccess, type AccessEnv, type AuthVariables } from "./auth";
 import { getPortal } from "./db";
+import { files } from "./files";
 import { handleApiError, writes } from "./writes";
 
 interface Env extends AccessEnv {
@@ -29,6 +30,7 @@ app.use("/api/*", async (c, next) => {
 
 app.get("/api/me", (c) => c.json({ email: c.get("userEmail") }));
 app.get("/api/portal", async (c) => c.json(await getPortal(c.env.DB, c.get("userEmail"))));
+app.route("/api", files);
 app.route("/api", writes);
 app.all("/api/*", (c) => c.json({ error: "Not found." }, 404));
 
