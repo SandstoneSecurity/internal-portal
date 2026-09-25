@@ -2,6 +2,7 @@ import type {
   AuditEntry,
   Candidate,
   CandidateEvent,
+  CandidateFile,
   CandidateEventKind,
   Client,
   ClientContact,
@@ -391,7 +392,7 @@ export async function getRoles(db: D1Database): Promise<Role[]> {
 }
 
 export async function getCandidates(db: D1Database, today: string): Promise<Candidate[]> {
-  const [{ results }, { results: events }] = await Promise.all([
+  const [{ results }, { results: events }, { results: files }] = await Promise.all([
     db
       .prepare(
         `SELECT id, role_id, stage, name, licence, licence_ok, source, days_in_stage, stage_since,
@@ -419,7 +420,16 @@ export async function getCandidates(db: D1Database, today: string): Promise<Cand
     db
       .prepare(`SELECT id, candidate_id, at, actor, kind, body, score, verdict FROM candidate_events ORDER BY at DESC, id DESC`)
       .all<{ id: number; candidate_id: number; at: string; actor: string; kind: string; body: string; score: number | null; verdict: string | null }>(),
+    db
+      .prepare(`SELECT id, candidate_id, filename, mime, size, created_at FROM careers_cv_files ORDER BY created_at DESC, id DESC`)
+      .all<{ id: number; candidate_id: number; filename: string; mime: string; size: number; created_at: string }>(),
   ]);
+  const filesByCandidate = new Map<number, CandidateFile[]>();
+  for (const f of files) {
+    const list = filesByCandidate.get(f.candidate_id) ?? [];
+    list.push({ id: f.id, filename: f.filename, mime: f.mime, size: f.size, uploadedAt: f.created_at });
+    filesByCandidate.set(f.candidate_id, list);
+  }
   const eventsByCandidate = new Map<number, CandidateEvent[]>();
   for (const e of events) {
     const list = eventsByCandidate.get(e.candidate_id) ?? [];
@@ -447,6 +457,7 @@ export async function getCandidates(db: D1Database, today: string): Promise<Cand
       appliedAt: r.created_at,
       rating: scores.length ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10 : null,
       events: evs,
+      files: filesByCandidate.get(r.id) ?? [],
     };
   });
 }

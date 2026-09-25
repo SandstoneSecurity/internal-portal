@@ -65,9 +65,14 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
   - **Candidate profiles:** contact details, licence (SLED) status, a stage
     stepper and a "Move to next stage" button. You can also disqualify a
     candidate (with a reason) or requalify them.
-  - **Tabs on each profile:** a timeline of everything that happened,
-    star-rated scorecards (the average becomes the candidate's rating) and
-    team comments.
+  - **Tabs on each profile:** the CV, a timeline of everything that
+    happened, star-rated scorecards (the average becomes the candidate's
+    rating) and team comments.
+  - **CVs:** the careers site stores each CV sent with an application in
+    D1 (`careers_cv_files`, with the bytes split across `careers_cv_chunks`).
+    The CV tab shows PDFs and images in place, with Open and Download; other
+    types (Word, for example) download. A paperclip in the candidate list
+    marks who has one. Deleting a candidate or job deletes their files.
 - **Clients (a CRM in the style of HubSpot):**
   - **Companies:** a sortable, searchable table with saved views (all, mine,
     and one per lifecycle stage: Lead, Opportunity, Customer, Former
@@ -144,9 +149,16 @@ input returns `400 {error, fields}`.
 | POST · PATCH · DELETE | `/api/candidates[/:id]` | Candidates (`stage`, `disqualified`, `disqualifyReason`) |
 | POST | `/api/candidates/:id/comments`, `/api/candidates/:id/evaluations` | Comments, scorecards |
 | DELETE | `/api/candidate-events/:id` | Delete a comment or scorecard |
+| GET | `/api/files/:id[?download=1]` | A candidate's CV, reassembled from its chunks and checked against its SHA-256 |
 | POST · DELETE | `/api/intel[/:id]` | Intelligence feed |
 
 Each write runs as one D1 batch together with its `audit_log` row.
+
+Files are sent with `X-Content-Type-Options: nosniff` and
+`Cache-Control: private, no-store`. Only PDFs (which must start with `%PDF-`)
+and PNG, JPEG, GIF or WebP images display in the browser. Anything else is sent
+as an `application/octet-stream` attachment under a sandboxing CSP, so an
+uploaded HTML file can never run on the portal's origin.
 
 ## Access control
 
@@ -189,10 +201,10 @@ could be left on in production.
 ## Project layout
 
 ```
-worker/         Cloudflare Worker (Hono): auth, reads (db.ts), writes (writes.ts)
+worker/         Cloudflare Worker (Hono): auth, reads (db.ts), writes (writes.ts), files (files.ts)
 shared/types.ts Types shared between the Worker and the React app
 src/            React app (pages/, components/, actions/, lib/)
 src/styles/ds/  Sandstone design system tokens + component CSS (ported as-is)
-migrations/     D1 schema (0002: dates, audit log, regions; 0003: three-section board, task fields, subtasks; 0004: milestones, dependencies; 0005: applicant tracking and CRM)
+migrations/     D1 schema (0002: dates, audit log, regions; 0003: three-section board, task fields, subtasks; 0004: milestones, dependencies; 0005: applicant tracking and CRM; 0006: CV tables shared with the careers site)
 seed/           Fictional demo data for local development
 ```

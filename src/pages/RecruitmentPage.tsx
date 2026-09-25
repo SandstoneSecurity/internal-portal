@@ -8,9 +8,13 @@ import {
   CircleAlert,
   CircleCheck,
   Columns3,
+  Download,
+  ExternalLink,
+  FileText,
   List as ListIcon,
   Mail,
   MessageSquare,
+  Paperclip,
   Phone,
   Plus,
   Search,
@@ -18,7 +22,7 @@ import {
   Trash2,
   UserPlus,
 } from "lucide-react";
-import { DISQUALIFY_REASONS, HIRED_STAGE, ROLE_STATUSES, STAGES, VERDICTS, type Candidate, type CandidateEvent, type Role } from "../../shared/types";
+import { DISQUALIFY_REASONS, HIRED_STAGE, ROLE_STATUSES, STAGES, VERDICTS, type Candidate, type CandidateEvent, type CandidateFile, type Role } from "../../shared/types";
 import { useActions } from "../actions/ActionHost";
 import { DragCard, type DropPoint } from "../components/DragCard";
 import { Badge } from "../components/ui/Badge";
@@ -26,7 +30,7 @@ import { Empty, RowMenu } from "../components/ui/Bits";
 import { Drawer } from "../components/ui/Overlay";
 import { Avatar } from "../components/ui/TaskBits";
 import { usePortal } from "../lib/DataProvider";
-import { friendlyDate, initialsOf, matches, relativeTime } from "../lib/format";
+import { fileSize, friendlyDate, initialsOf, matches, relativeTime } from "../lib/format";
 import { hueClass, type Hue } from "../lib/hues";
 import { DUR, list, row, tween } from "../lib/motion";
 
@@ -331,7 +335,7 @@ function CommentBox({ c }: { c: Candidate }) {
   );
 }
 
-const PROFILE_TABS = ["Overview", "Timeline", "Scorecards", "Comments"] as const;
+const PROFILE_TABS = ["Overview", "CV", "Timeline", "Scorecards", "Comments"] as const;
 
 function CandidateProfile({ c, role }: { c: Candidate; role: Role }) {
   const actions = useActions();
@@ -343,7 +347,7 @@ function CandidateProfile({ c, role }: { c: Candidate; role: Role }) {
   const next = c.stage < HIRED_STAGE ? c.stage + 1 : null;
   const hue = STAGE_HUE[c.stage]!;
   const verdicts = VERDICTS.map((v) => [v, evals.filter((e) => e.verdict === v).length] as const);
-  const tabCount: Record<string, number | undefined> = { Scorecards: evals.length, Comments: comments.length };
+  const tabCount: Record<string, number | undefined> = { CV: c.files.length || undefined, Scorecards: evals.length, Comments: comments.length };
 
   return (
     <motion.div key={c.id} className="pt-ats-profile" initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0, transition: tween(DUR.base) }}>
@@ -457,6 +461,16 @@ function CandidateProfile({ c, role }: { c: Candidate; role: Role }) {
               <dd className="pt-mono">{c.phone || <span className="pt-dim">—</span>}</dd>
               <dt>Location</dt>
               <dd>{c.location || <span className="pt-dim">—</span>}</dd>
+              <dt>CV</dt>
+              <dd>
+                {c.files[0] ? (
+                  <button className="pt-ats-link pt-ats-cvlink" onClick={() => setTab("CV")}>
+                    <Paperclip size={13} /> {c.files[0].filename} <span className="pt-dim">· {fileSize(c.files[0].size)}</span>
+                  </button>
+                ) : (
+                  <span className="pt-dim">None on file</span>
+                )}
+              </dd>
               <dt>Source</dt>
               <dd>{c.source || <span className="pt-dim">—</span>}</dd>
               <dt>Added</dt>
@@ -470,6 +484,7 @@ function CandidateProfile({ c, role }: { c: Candidate; role: Role }) {
             )}
           </>
         )}
+        {tab === "CV" && <CvPanel files={c.files} name={c.name} />}
         {tab === "Timeline" && (
           <ul className="pt-ats-timeline">
             {c.events.map((ev) => (
@@ -516,6 +531,75 @@ function CandidateProfile({ c, role }: { c: Candidate; role: Role }) {
         )}
       </div>
     </motion.div>
+  );
+}
+
+const fileUrl = (f: CandidateFile, download = false) => `/api/files/${f.id}${download ? "?download=1" : ""}`;
+const isPdf = (f: CandidateFile) => /^application\/pdf\b/i.test(f.mime);
+const canPreview = (f: CandidateFile) => isPdf(f) || /^image\/(png|jpeg|gif|webp)\b/i.test(f.mime);
+
+/** The CV shown in place, like a résumé tab in an ATS, with any older files listed underneath. */
+function CvPanel({ files, name }: { files: CandidateFile[]; name: string }) {
+  const [shownId, setShownId] = useState(files[0]?.id);
+  const shown = files.find((f) => f.id === shownId) ?? files[0];
+  if (!shown) {
+    return (
+      <div className="pt-ats-cv__none">
+        <FileText size={20} />
+        <p>No CV on file.</p>
+        <span className="pt-dim">CVs sent through the careers page appear here automatically.</span>
+      </div>
+    );
+  }
+  return (
+    <div className="pt-ats-cv">
+      <div className="pt-ats-cv__bar">
+        <FileText size={16} className="pt-ats-cv__icon" />
+        <span className="pt-ats-cv__name">
+          <span className="pt-ats-cv__file" title={shown.filename}>
+            {shown.filename}
+          </span>
+          <span className="pt-meta">
+            {fileSize(shown.size)} · received {relativeTime(shown.uploadedAt)}
+          </span>
+        </span>
+        <a className="sds-btn sds-btn--sm sds-btn--secondary" href={fileUrl(shown)} target="_blank" rel="noopener">
+          <ExternalLink size={14} /> Open
+        </a>
+        <a className="sds-btn sds-btn--sm sds-btn--ghost" href={fileUrl(shown, true)} download={shown.filename}>
+          <Download size={14} /> Download
+        </a>
+      </div>
+      {canPreview(shown) ? (
+        isPdf(shown) ? (
+          <iframe key={shown.id} className="pt-ats-cv__frame" src={`${fileUrl(shown)}#view=FitH&navpanes=0`} title={`CV for ${name}`} />
+        ) : (
+          <img className="pt-ats-cv__img" src={fileUrl(shown)} alt={`CV for ${name}`} />
+        )
+      ) : (
+        <div className="pt-ats-cv__none">
+          <p>This file type can’t be previewed here.</p>
+          <span className="pt-dim">Download it to open in Word or another app.</span>
+        </div>
+      )}
+      {files.length > 1 && (
+        <div>
+          <div className="pt-deps__label">All files</div>
+          <ul className="pt-ats-cv__list">
+            {files.map((f) => (
+              <li key={f.id}>
+                <button className={`pt-ats-link${f.id === shown.id ? " is-current" : ""}`} aria-current={f.id === shown.id} onClick={() => setShownId(f.id)}>
+                  <Paperclip size={13} /> {f.filename}
+                </button>
+                <span className="pt-meta">
+                  {fileSize(f.size)} · {relativeTime(f.uploadedAt)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -659,7 +743,10 @@ function JobView({ role }: { role: Role }) {
               >
                 <Avatar initials={initials(c.name)} size={34} />
                 <span className="pt-ats-row__main">
-                  <span className="pt-ats-row__name">{c.name}</span>
+                  <span className="pt-ats-row__name">
+                    {c.name}
+                    {c.files.length > 0 && <Paperclip size={12} className="pt-ats-row__clip" aria-label="CV on file" />}
+                  </span>
                   <span className="pt-ats-row__sub">{c.headline || c.lic}</span>
                 </span>
                 <span className="pt-ats-row__side">

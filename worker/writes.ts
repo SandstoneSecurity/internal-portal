@@ -921,6 +921,8 @@ writes.delete("/roles/:id", async (c) => {
   const db = c.env.DB;
   await db.batch([
     db.prepare(`DELETE FROM candidate_events WHERE candidate_id IN (SELECT id FROM candidates WHERE role_id = ?)`).bind(roleId),
+    db.prepare(`DELETE FROM careers_cv_chunks WHERE file_id IN (SELECT f.id FROM careers_cv_files f JOIN candidates c ON c.id = f.candidate_id WHERE c.role_id = ?)`).bind(roleId),
+    db.prepare(`DELETE FROM careers_cv_files WHERE candidate_id IN (SELECT id FROM candidates WHERE role_id = ?)`).bind(roleId),
     db.prepare(`DELETE FROM candidates WHERE role_id = ?`).bind(roleId),
     db.prepare(`DELETE FROM roles WHERE id = ?`).bind(roleId),
     audit(c, "delete", "role", String(roleId), `Deleted job — ${role.title}`),
@@ -1015,6 +1017,8 @@ writes.delete("/candidates/:id", async (c) => {
   const cand = await mustExist(c, "candidates", candId);
   await c.env.DB.batch([
     c.env.DB.prepare(`DELETE FROM candidate_events WHERE candidate_id = ?`).bind(candId),
+    c.env.DB.prepare(`DELETE FROM careers_cv_chunks WHERE file_id IN (SELECT id FROM careers_cv_files WHERE candidate_id = ?)`).bind(candId),
+    c.env.DB.prepare(`DELETE FROM careers_cv_files WHERE candidate_id = ?`).bind(candId),
     c.env.DB.prepare(`DELETE FROM candidates WHERE id = ?`).bind(candId),
     audit(c, "delete", "candidate", String(candId), `Deleted candidate ${cand.name}`),
   ]);
