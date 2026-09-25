@@ -497,7 +497,7 @@ export function Gantt({ columns, today }: { columns: OpsColumn[]; today: string 
             <span className="pt-gmile__shape" />
             <span className="pt-gbar__link" title="Drag to another task to make it wait on this" onPointerDown={(e) => beginLink(e, k.id)} />
           </div>
-          <span className="pt-gbar__name" style={{ left: left + 14 }}>
+          <span className="pt-gbar__name" style={{ left: left + 30 }}>
             {k.title}
             <em>{friendlyDate(span.due, today)}</em>
           </span>
@@ -529,7 +529,8 @@ export function Gantt({ columns, today }: { columns: OpsColumn[]; today: string 
           <span className="pt-gbar__h pt-gbar__h--end" onPointerDown={(e) => beginDrag(e, `t${k.id}`, base, "end", commit, open)} />
           <span className="pt-gbar__link" title="Drag to another task to make it wait on this" onPointerDown={(e) => beginLink(e, k.id)} />
         </div>
-        <span className="pt-gbar__name" style={{ left: left + width + 16 }}>
+        {/* Clear of the link dot that appears at the bar's end on hover. */}
+        <span className="pt-gbar__name" style={{ left: left + width + 26 }}>
           {k.title}
           {pv && (
             <em>

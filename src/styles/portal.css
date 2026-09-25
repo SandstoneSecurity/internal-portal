@@ -864,7 +864,8 @@ input[type="date"].pt-input { font-family: var(--font-mono); font-size: 13px; }
 .pt-grow { position: relative; z-index: 2; display: flex; border-bottom: var(--border-hair) solid var(--border-subtle); }
 .pt-grow:not(.pt-grow--head):hover { background: color-mix(in srgb, var(--text-primary) 2.5%, transparent); }
 .pt-grow__label {
-  position: sticky; left: 0; z-index: 3; flex: none; width: var(--gantt-label); min-width: 0;
+  /* Above every bar state (hover 3, drag 5) so bars scrolled under the task column never cover it. */
+  position: sticky; left: 0; z-index: 10; flex: none; width: var(--gantt-label); min-width: 0;
   display: flex; align-items: center; gap: 7px; padding: 0 12px 0 10px;
   background: var(--surface-raised); border-right: var(--border-hair) solid var(--border-default);
   font-size: 13px; color: var(--text-secondary);
