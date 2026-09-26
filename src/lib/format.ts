@@ -156,3 +156,26 @@ export function fileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+/**
+ * Link for a company's website, whether it was entered as a bare domain
+ * ("harbourline.com.au") or a full URL. Only http(s) links are produced, so a
+ * typed "javascript:" value can never become a live link.
+ */
+export function siteUrl(domain: string): string | null {
+  const d = domain.trim();
+  if (!d) return null;
+  const withScheme = /^https?:\/\//i.test(d) ? d : /^[a-z][a-z0-9+.-]*:/i.test(d) ? null : `https://${d}`;
+  if (!withScheme) return null;
+  try {
+    const u = new URL(withScheme);
+    return u.protocol === "http:" || u.protocol === "https:" ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The same website as people read it: "https://www.x.com.au/a/" → "x.com.au/a". */
+export function siteLabel(domain: string): string {
+  return domain.trim().replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "");
+}
