@@ -107,7 +107,6 @@ button { font: inherit; color: inherit; }
 .pt-iconbtn--outlined { border-color: var(--border-default); }
 .pt-iconbtn--inverse { color: var(--bark-200); }
 .pt-iconbtn--inverse:hover { background: rgba(246, 244, 240, 0.08); color: var(--sand-50); }
-.pt-iconbtn__dot { position: absolute; top: 7px; right: 7px; width: 6px; height: 6px; border-radius: var(--radius-pill); background: var(--brass-500); }
 
 .pt-kbd {
   display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px;
@@ -415,14 +414,6 @@ input[type="date"].pt-input { font-family: var(--font-mono); font-size: 13px; }
 .pt-palette__none { padding: 28px 18px; font: var(--type-small); color: var(--text-tertiary); }
 .pt-palette__foot { display: flex; gap: 16px; padding: 10px 18px; border-top: var(--border-hair) solid var(--border-subtle); background: var(--surface-sunken); font-size: 11px; color: var(--text-tertiary); }
 .pt-palette__foot span { display: inline-flex; align-items: center; gap: 6px; }
-
-/* ── Activity log ─────────────────────────────────────────────────────── */
-.pt-log__day { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-tertiary); padding: 18px 0 8px; border-bottom: var(--border-thick) solid var(--rule-strong); }
-.pt-log__day:first-child { padding-top: 0; }
-.pt-log__row { display: grid; grid-template-columns: 58px 1fr; gap: 12px; padding: 11px 0; border-bottom: var(--border-hair) solid var(--border-subtle); }
-.pt-log__time { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); padding-top: 2px; }
-.pt-log__summary { font-size: 13.5px; line-height: 1.45; }
-.pt-log__by { display: flex; gap: 8px; align-items: center; margin-top: 4px; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-tertiary); }
 
 /* ── Control ──────────────────────────────────────────────────────────── */
 /* Full bleed: the page content keeps its max width, but the survey field spans the whole scroll area (100cqw). */
@@ -800,8 +791,6 @@ input.pt-edit { text-overflow: ellipsis; }
   background: transparent; font: inherit; font-size: 13.5px; color: var(--text-primary);
 }
 .pt-subtask-add input:focus { border-bottom-color: var(--brass-500); border-bottom-style: solid; }
-.pt-task__activity { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.pt-task__activity li { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 13px; color: var(--text-secondary); }
 
 .pt-tl__h { font-size: 11px; font-weight: 600; letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--text-secondary); }
 

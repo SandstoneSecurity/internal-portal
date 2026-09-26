@@ -1,14 +1,13 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { Building2, History, LayoutDashboard, LogOut, MapPin, Moon, Plus, Route, Search, Sun, UserPlus, Users } from "lucide-react";
+import { Building2, LayoutDashboard, LogOut, MapPin, Moon, Plus, Route, Search, Sun, UserPlus, Users } from "lucide-react";
 import { useActions } from "../actions/ActionHost";
 import { usePortal } from "../lib/DataProvider";
 import { initialsOf, isoWeek, longDate } from "../lib/format";
 import { useHotkey } from "../lib/hotkeys";
 import { DUR, tween } from "../lib/motion";
 import { useTheme } from "../lib/theme";
-import { ActivityLog } from "./ActivityLog";
 import { CommandPalette } from "./CommandPalette";
 import { Kbd, ModKey } from "./ui/Bits";
 
@@ -21,7 +20,6 @@ const NAV = [
   { to: "/intelligence", label: "Intelligence", icon: MapPin },
 ] as const;
 
-const SEEN_KEY = "sandstone.audit.seen";
 
 function useHeading(pathname: string): { title: string; meta: string } {
   const d = usePortal();
@@ -51,14 +49,6 @@ export function Shell({ children }: { children: ReactNode }) {
   const actions = useActions();
   const { theme, toggle } = useTheme();
   const [palette, setPalette] = useState(false);
-  const [log, setLog] = useState(false);
-  const [seen, setSeen] = useState<number>(() => {
-    try {
-      return Number(localStorage.getItem(SEEN_KEY) ?? 0);
-    } catch {
-      return 0;
-    }
-  });
   const scroller = useRef<HTMLDivElement>(null);
   const heading = useHeading(pathname);
   const primary = actions.primaryFor(pathname);
@@ -70,17 +60,6 @@ export function Shell({ children }: { children: ReactNode }) {
   useEffect(() => {
     scroller.current?.scrollTo({ top: 0 });
   }, [pathname]);
-
-  const latestAudit = d.audit[0]?.id ?? 0;
-  const openLog = () => {
-    setLog(true);
-    setSeen(latestAudit);
-    try {
-      localStorage.setItem(SEEN_KEY, String(latestAudit));
-    } catch {
-      // Unseen dot just won't persist.
-    }
-  };
 
   const open = d.opsColumns.filter((c) => !c.done).reduce((n, c) => n + c.cards.length, 0);
   const late = d.opsColumns.flatMap((c) => c.cards).filter((c) => c.late).length;
@@ -164,10 +143,6 @@ export function Shell({ children }: { children: ReactNode }) {
               </button>
             )}
             <span className="pt-head__sep" />
-            <button className="pt-iconbtn" onClick={openLog} aria-label="Activity log" title="Activity log">
-              <History size={17} strokeWidth={1.75} />
-              {latestAudit > seen && <span className="pt-iconbtn__dot" />}
-            </button>
             <button
               className="pt-iconbtn"
               onClick={toggle}
@@ -193,8 +168,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
       </div>
 
-      <CommandPalette open={palette} onClose={() => setPalette(false)} onActivity={openLog} />
-      <ActivityLog open={log} onClose={() => setLog(false)} />
+      <CommandPalette open={palette} onClose={() => setPalette(false)} />
     </div>
   );
 }

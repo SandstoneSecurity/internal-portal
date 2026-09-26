@@ -92,7 +92,7 @@ export function money(n: number): string {
 
 export const pad2 = (n: number) => String(n).padStart(2, "0");
 
-/** Relative time for audit entries: "just now", "12 min ago", "3 h ago", "21 SEP 14:05". */
+/** Relative time: "just now", "12 min ago", "3 h ago", "21 SEP 14:05". */
 export function relativeTime(isoTs: string, now = Date.now()): string {
   const t = Date.parse(isoTs);
   if (Number.isNaN(t)) return isoTs;

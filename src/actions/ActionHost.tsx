@@ -410,8 +410,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
           title: `Delete ${card.ref}?`,
           body: (
             <>
-              “{card.title}”{card.subtasks.length ? ` and its ${card.subtasks.length} subtasks` : ""} will be removed from the board. The audit log keeps a
-              record of the deletion.
+              “{card.title}”{card.subtasks.length ? ` and its ${card.subtasks.length} subtasks` : ""} will be removed from the board.
             </>
           ),
           confirmLabel: "Delete task",
@@ -560,7 +559,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
       removeEmployee: (e) =>
         destroy({
           title: `Remove ${e.name}?`,
-          body: "Their personnel file and shift history will be deleted. The audit log keeps a record of the removal.",
+          body: "Their personnel file and shift history will be deleted.",
           confirmLabel: "Remove",
           path: `/employees/${e.id}`,
           toast: `${e.name} removed`,
@@ -621,7 +620,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
       closeClient: async (c) => {
         const ok = await destroy({
           title: `Delete ${c.org}?`,
-          body: "The company, its contacts, deals and activity will be deleted. The audit log keeps a record.",
+          body: "The company, its contacts, deals and activity will be deleted.",
           confirmLabel: "Delete company",
           path: `/clients/${c.id}`,
           toast: `${c.org} deleted`,
@@ -843,7 +842,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
       withdrawRole: async (r) => {
         const ok = await destroy({
           title: `Delete “${r.title}”?`,
-          body: "The job and every candidate in its pipeline will be deleted. The audit log keeps a record.",
+          body: "The job and every candidate in its pipeline will be deleted.",
           confirmLabel: "Delete job",
           path: `/roles/${r.id}`,
           toast: "Job deleted",
@@ -1006,7 +1005,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
       deleteCandidate: (c) =>
         destroy({
           title: `Delete ${c.name}?`,
-          body: "Their profile, timeline, comments and scorecards will be deleted. The audit log keeps a record.",
+          body: "Their profile, timeline, comments and scorecards will be deleted.",
           confirmLabel: "Delete candidate",
           path: `/candidates/${c.id}`,
           toast: `${c.name} deleted`,

@@ -13,7 +13,7 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
   lazy-loaded, capped at 30fps, pauses off-screen and stops for
   reduced-motion users.
 - **Backend:** a Cloudflare Worker (Hono) serving a JSON API: reads plus
-  validated writes (zod), each recorded in an audit log.
+  validated writes (zod).
 - **Data:** Cloudflare D1. Production starts empty; every figure on Control is
   computed from the records you keep (officers on shift, sites, open and
   past-due work, licences expiring in 90 days). `seed/seed.sql` holds the
@@ -91,10 +91,8 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
   fails.
 - **Command palette:** press `Ctrl K` / `⌘K` or `/`. From there you can jump
   to any page, person, account, work item, role or intelligence item, run any
-  action, switch theme, open the activity log or sign out. `N` starts the
+  action, switch theme or sign out. `N` starts the
   page's primary action.
-- **Activity log.** The clock icon in the header shows every change: who made
-  it, what it was, and when.
 - **Themes.** The default is limestone (day). Operations mode is the night
   theme for the control room; toggle it from the header or the palette. The
   choice is remembered per browser.
@@ -152,7 +150,7 @@ input returns `400 {error, fields}`.
 | GET | `/api/files/:id[?download=1]` | A candidate's CV, reassembled from its chunks and checked against its SHA-256 |
 | POST · DELETE | `/api/intel[/:id]` | Intelligence feed |
 
-Each write runs as one D1 batch together with its `audit_log` row.
+Writes that touch several rows run as one D1 batch, so they apply in full or not at all.
 
 Files are sent with `X-Content-Type-Options: nosniff` and
 `Cache-Control: private, no-store`. Only PDFs (which must start with `%PDF-`)
@@ -205,6 +203,6 @@ worker/         Cloudflare Worker (Hono): auth, reads (db.ts), writes (writes.ts
 shared/types.ts Types shared between the Worker and the React app
 src/            React app (pages/, components/, actions/, lib/)
 src/styles/ds/  Sandstone design system tokens + component CSS (ported as-is)
-migrations/     D1 schema (0002: dates, audit log, regions; 0003: three-section board, task fields, subtasks; 0004: milestones, dependencies; 0005: applicant tracking and CRM; 0006: CV tables shared with the careers site)
+migrations/     D1 schema (0002: dates, audit log, regions; 0003: three-section board, task fields, subtasks; 0004: milestones, dependencies; 0005: applicant tracking and CRM; 0006: CV tables shared with the careers site; 0007: drops the audit log, as the portal has one user)
 seed/           Fictional demo data for local development
 ```

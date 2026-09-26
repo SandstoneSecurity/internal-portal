@@ -252,16 +252,6 @@ export interface IntelItem {
   source: string;
 }
 
-export interface AuditEntry {
-  id: number;
-  at: string;
-  actor: string;
-  action: "create" | "update" | "delete" | "move";
-  entity: string;
-  entityId: string | null;
-  summary: string;
-}
-
 export interface PortalData {
   me: { email: string };
   /** Today's date in Sydney, ISO YYYY-MM-DD — the portal's reference "now". */
@@ -275,7 +265,6 @@ export interface PortalData {
   candidates: Candidate[];
   regions: Region[];
   feed: IntelItem[];
-  audit: AuditEntry[];
 }
 
 /** Recruitment pipeline stages, in order; Candidate.stage indexes this list. */

@@ -5,7 +5,7 @@ import { useActions } from "../actions/ActionHost";
 import { Badge } from "../components/ui/Badge";
 import { CountUp, Empty, Measure, SectionHead } from "../components/ui/Bits";
 import { usePortal } from "../lib/DataProvider";
-import { daysBetween, firstName, greeting, isoWeek, longDate, pad2, relativeTime, sydneyTime } from "../lib/format";
+import { daysBetween, firstName, greeting, isoWeek, longDate, pad2, sydneyTime } from "../lib/format";
 import { list, row } from "../lib/motion";
 import { registerKeys } from "../lib/selection";
 
@@ -177,24 +177,6 @@ export function ControlPage() {
               ))}
             </motion.div>
           )}
-
-          <div style={{ marginTop: 36 }}>
-            <SectionHead title="Recent changes" meta={d.audit.length ? `${d.audit.length} recorded` : undefined} />
-            {d.audit.length === 0 ? (
-              <div style={{ marginTop: 12 }}>
-                <Empty compact index="00" title="Changes you make will be recorded here." />
-              </div>
-            ) : (
-              <motion.div className="pt-reg" variants={list} initial="initial" animate="animate">
-                {d.audit.slice(0, 6).map((a) => (
-                  <motion.div key={a.id} variants={row} className="pt-reg__row" style={{ gridTemplateColumns: "96px minmax(0,1fr)", cursor: "default" }}>
-                    <span className="pt-reg__mono pt-dim">{relativeTime(a.at)}</span>
-                    <span className="pt-reg__text">{a.summary}</span>
-                  </motion.div>
-                ))}
-              </motion.div>
-            )}
-          </div>
         </div>
 
         <div style={{ display: "grid", gap: 24 }}>
