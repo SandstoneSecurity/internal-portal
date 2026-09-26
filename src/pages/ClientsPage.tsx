@@ -31,7 +31,7 @@ import { Empty, RowMenu } from "../components/ui/Bits";
 import { EditableText } from "../components/ui/EditableText";
 import { Avatar, CheckCircle } from "../components/ui/TaskBits";
 import { usePortal } from "../lib/DataProvider";
-import { aud, dueTone, friendlyDate, initialsOf, matches, money, relativeTime } from "../lib/format";
+import { aud, dueTone, friendlyDate, initialsOf, matches, money, relativeTime, siteLabel, siteUrl } from "../lib/format";
 import { hueClass, personHue, type Hue } from "../lib/hues";
 import { DUR, list, row, tween } from "../lib/motion";
 
@@ -183,7 +183,7 @@ function CompaniesIndex() {
                 <CompanyMark c={c} />
                 <span style={{ minWidth: 0 }}>
                   <span className="pt-crm-name">{c.org}</span>
-                  {c.domain && <span className="pt-crm-domain">{c.domain}</span>}
+                  {c.domain && <span className="pt-crm-domain">{siteLabel(c.domain)}</span>}
                 </span>
               </span>
               <span className="pt-crm-td pt-hide-sm" role="cell">
@@ -548,10 +548,15 @@ function CompanyRecord({ c }: { c: Client }) {
           <CompanyMark c={c} size={52} />
           <div style={{ minWidth: 0, flex: 1 }}>
             <EditableText wrap required className="pt-crm-title" value={c.org} maxLength={80} ariaLabel="Company name" onSave={(v) => void actions.patchClient(c, { org: v })} />
-            {c.domain ? (
-              <a className="pt-ats-link" href={`https://${c.domain}`} target="_blank" rel="noreferrer noopener">
-                {c.domain} <ExternalLink size={12} />
+            {c.domain && siteUrl(c.domain) ? (
+              <a className="pt-ats-link pt-crm-site" href={siteUrl(c.domain)!} target="_blank" rel="noreferrer noopener" title={c.domain}>
+                <span className="pt-crm-site__text">{siteLabel(c.domain)}</span>
+                <ExternalLink size={12} className="pt-crm-site__icon" />
               </a>
+            ) : c.domain ? (
+              <span className="pt-crm-site pt-crm-site__text pt-dim" title={c.domain}>
+                {siteLabel(c.domain)}
+              </span>
             ) : (
               <span className="pt-dim" style={{ fontSize: 12.5 }}>
                 No domain

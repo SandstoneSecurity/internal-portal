@@ -734,6 +734,7 @@ input[type="date"].pt-input { font-family: var(--font-mono); font-size: 13px; }
   border: 1px solid transparent; border-radius: var(--radius-sm); resize: none; overflow: hidden;
   transition: border-color var(--dur-fast) var(--ease-standard), background-color var(--dur-fast) var(--ease-standard);
 }
+input.pt-edit { text-overflow: ellipsis; }
 .pt-edit:hover { border-color: var(--border-default); }
 .pt-edit:focus { outline: none; border-color: var(--brass-500); background: var(--field-bg); }
 .pt-edit::placeholder { color: var(--text-tertiary); }
@@ -1211,7 +1212,12 @@ button.pt-ats-link { background: none; border: 0; padding: 0; font: inherit; fon
 .pt-crm-record { display: grid; grid-template-columns: 300px minmax(0, 1fr) 300px; gap: 18px; align-items: start; }
 .pt-crm-left, .pt-crm-right { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 12px; }
 .pt-crm-ident { display: flex; align-items: flex-start; gap: 12px; }
-.pt-crm-title { font-family: var(--font-display); font-size: var(--text-xl); line-height: 1.2; margin-left: -8px; width: calc(100% + 8px); }
+/* Editable text sits 9px in (1px border + 8px padding); pull it back so the words line up with the static text around it. */
+.pt-crm-title { font-family: var(--font-display); font-size: var(--text-xl); line-height: 1.2; margin-left: -9px; width: calc(100% + 9px); }
+/* Website under the name: one line inside the column, cut with an ellipsis; the full address is in the tooltip. */
+.pt-crm-site { display: flex; max-width: 100%; margin-top: 4px; font-size: 12.5px; }
+.pt-crm-site__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pt-crm-site__icon { flex: none; }
 .pt-crm-quick { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
 .pt-crm-quick__btn {
   display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 6px 0; border: 0; background: none; cursor: pointer;
@@ -1229,7 +1235,7 @@ button.pt-ats-link { background: none; border: 0; padding: 0; font: inherit; fon
 .pt-crm-section__head { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 600; letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--text-secondary); }
 .pt-crm-prop__label { font-size: 11.5px; color: var(--text-tertiary); margin-bottom: 2px; }
 .pt-crm-prop__value { font-size: 13.5px; color: var(--text-primary); }
-.pt-crm-edit { margin-left: -8px; width: calc(100% + 8px); padding: 3px 8px; font-size: 13.5px; }
+.pt-crm-edit { margin-left: -9px; width: calc(100% + 9px); padding: 3px 8px; font-size: 13.5px; }
 .pt-crm-static { font-size: 13.5px; }
 .pt-crm-middle { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .pt-crm-composer { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px 14px; background: var(--surface-raised); border: var(--border-hair) solid var(--border-default); border-top: 3px solid var(--hue); box-shadow: var(--shadow-sm); }
