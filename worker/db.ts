@@ -1,5 +1,4 @@
 import type {
-  AuditEntry,
   Candidate,
   CandidateEvent,
   CandidateFile,
@@ -536,22 +535,6 @@ export async function getFeed(db: D1Database, today: string): Promise<IntelItem[
   }));
 }
 
-export async function getAudit(db: D1Database, limit = 60): Promise<AuditEntry[]> {
-  const { results } = await db
-    .prepare(`SELECT id, at, actor, action, entity, entity_id, summary FROM audit_log ORDER BY id DESC LIMIT ?`)
-    .bind(limit)
-    .all<{ id: number; at: string; actor: string; action: string; entity: string; entity_id: string | null; summary: string }>();
-  return results.map((r) => ({
-    id: r.id,
-    at: r.at,
-    actor: r.actor,
-    action: r.action as AuditEntry["action"],
-    entity: r.entity,
-    entityId: r.entity_id,
-    summary: r.summary,
-  }));
-}
-
 function money(n: number): string {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
   if (n >= 1_000) return `$${Math.round(n / 1_000)}K`;
@@ -623,7 +606,7 @@ export function computeMetrics(
 
 export async function getPortal(db: D1Database, email: string, now = new Date()): Promise<PortalData> {
   const today = todaySydney(now);
-  const [employees, clients, deals, opsColumns, roles, candidates, regions, feed, audit] = await Promise.all([
+  const [employees, clients, deals, opsColumns, roles, candidates, regions, feed] = await Promise.all([
     getEmployees(db, today),
     getClients(db),
     getDeals(db),
@@ -632,7 +615,6 @@ export async function getPortal(db: D1Database, email: string, now = new Date())
     getCandidates(db, today),
     getRegions(db),
     getFeed(db, today),
-    getAudit(db),
   ]);
   return {
     me: { email },
@@ -646,6 +628,5 @@ export async function getPortal(db: D1Database, email: string, now = new Date())
     candidates,
     regions,
     feed,
-    audit,
   };
 }

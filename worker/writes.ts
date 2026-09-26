@@ -209,20 +209,6 @@ function param(c: Ctx, name = "id"): number {
   return n;
 }
 
-function audit(c: Ctx, action: "create" | "update" | "delete" | "move", entity: string, entityId: string | null, summary: string) {
-  return c.env.DB.prepare(
-    `INSERT INTO audit_log (at, actor, action, entity, entity_id, summary) VALUES (?, ?, ?, ?, ?, ?)`
-  ).bind(nowIso(), c.get("userEmail"), action, entity, entityId, summary);
-}
-
-/** Same statement as audit(), but takes the entity id from the preceding INSERT in the batch. */
-function auditLastInsert(c: Ctx, entity: string, summary: string) {
-  return c.env.DB.prepare(
-    `INSERT INTO audit_log (at, actor, action, entity, entity_id, summary)
-     VALUES (?, ?, 'create', ?, CAST(last_insert_rowid() AS TEXT), ?)`
-  ).bind(nowIso(), c.get("userEmail"), entity, summary);
-}
-
 async function mustExist(c: Ctx, table: string, rowId: number | string, key = "id"): Promise<Record<string, unknown>> {
   const row = await c.env.DB.prepare(`SELECT * FROM ${table} WHERE ${key} = ?`).bind(rowId).first();
   if (!row) throw new NotFound();
@@ -297,36 +283,6 @@ async function reorder(
   );
 }
 
-/** One-line audit summary for an edit, specific when a single field changed. */
-function describeWorkEdit(ref: string, v: Partial<z.output<typeof schemas.work>>): string {
-  const keys = Object.keys(v).filter((k) => k !== "columnId" && k !== "position" && !(k === "startDate" && v.milestone !== undefined));
-  if (keys.length === 2 && v.startDate !== undefined && v.dueDate !== undefined)
-    return v.startDate && v.dueDate ? `Rescheduled ${ref} to ${dayMonth(v.startDate)} – ${dayMonth(v.dueDate)}` : `Edited the dates on ${ref}`;
-  if (keys.length !== 1) return `Edited ${ref}`;
-  switch (keys[0]) {
-    case "title":
-      return `Renamed ${ref} to “${v.title}”`;
-    case "owner":
-      return v.owner ? `Assigned ${ref} to ${v.owner}` : `Unassigned ${ref}`;
-    case "dueDate":
-      return v.dueDate ? `Set ${ref} due ${dayMonth(v.dueDate)}` : `Cleared the due date on ${ref}`;
-    case "startDate":
-      return v.startDate ? `Set ${ref} to start ${dayMonth(v.startDate)}` : `Cleared the start date on ${ref}`;
-    case "priority":
-      return `Set ${ref} priority to ${v.priority}`;
-    case "description":
-      return `Updated the description of ${ref}`;
-    case "line":
-      return `Tagged ${ref} ${v.line}`;
-    case "site":
-      return `Set ${ref} client / site to ${v.site || "none"}`;
-    case "milestone":
-      return v.milestone ? `Made ${ref} a milestone` : `Made ${ref} a task`;
-    default:
-      return `Edited ${ref}`;
-  }
-}
-
 writes.post("/work", async (c) => {
   const v = await body(c, schemas.work);
   if (v.milestone) v.startDate = null;
@@ -375,7 +331,6 @@ writes.post("/work", async (c) => {
         order,
         v.milestone ? 1 : 0
       ),
-    auditLastInsert(c, "work", `Added ${v.milestone ? "milestone " : ""}${ref} — ${v.title}`),
   ]);
   return c.json({ id: (ins.results[0] as { id: number }).id, ref }, 201);
 });
@@ -400,9 +355,6 @@ writes.patch("/work/:id", async (c) => {
   const { sql, binds } = setClause(edits, WORK_COLUMNS);
   if (sql) stmts.push(db.prepare(`UPDATE ops_cards SET ${sql} WHERE id = ?`).bind(...binds, cardId));
 
-  const ref = String(card.ref);
-  let summary: string | null = sql ? describeWorkEdit(ref, v) : null;
-  let action: "update" | "move" = "update";
   const moving = v.columnId !== undefined && v.columnId !== card.column_id;
   if (moving || v.position !== undefined) {
     const target = v.columnId ?? (card.column_id as number);
@@ -411,26 +363,20 @@ writes.patch("/work/:id", async (c) => {
       const col = await mustExist(c, "ops_columns", target);
       const done = col.is_done === 1;
       stmts.push(db.prepare(`UPDATE ops_cards SET completed_at = ? WHERE id = ?`).bind(done ? nowIso() : null, cardId));
-      const moved = done ? `Completed ${ref}` : `Moved ${ref} to ${col.label}`;
-      summary = sql ? `${summary} and ${moved.charAt(0).toLowerCase()}${moved.slice(1)}` : moved;
-      action = sql ? "update" : "move";
     }
   }
   if (!stmts.length) return c.json({ ok: true });
-  // Reordering within a column is housekeeping, not a change worth logging.
-  if (summary) stmts.push(audit(c, action, "work", String(cardId), summary));
   await db.batch(stmts);
   return c.json({ ok: true });
 });
 
 writes.delete("/work/:id", async (c) => {
   const cardId = param(c);
-  const card = await mustExist(c, "ops_cards", cardId);
+  await mustExist(c, "ops_cards", cardId);
   await c.env.DB.batch([
     c.env.DB.prepare(`DELETE FROM ops_subtasks WHERE card_id = ?`).bind(cardId),
     c.env.DB.prepare(`DELETE FROM ops_dependencies WHERE card_id = ? OR depends_on_id = ?`).bind(cardId, cardId),
     c.env.DB.prepare(`DELETE FROM ops_cards WHERE id = ?`).bind(cardId),
-    audit(c, "delete", "work", String(cardId), `Deleted ${card.ref} — ${card.title}`),
   ]);
   return c.json({ ok: true });
 });
@@ -460,7 +406,6 @@ writes.post("/work/:id/dependencies", async (c) => {
   }
   await db.batch([
     db.prepare(`INSERT INTO ops_dependencies (card_id, depends_on_id, created_at) VALUES (?, ?, ?)`).bind(cardId, dependsOn, nowIso()),
-    audit(c, "update", "work", String(cardId), `${card.ref} now waits on ${before.ref}`),
   ]);
   return c.json({ ok: true }, 201);
 });
@@ -468,11 +413,8 @@ writes.post("/work/:id/dependencies", async (c) => {
 writes.delete("/work/:id/dependencies/:dependsOn", async (c) => {
   const cardId = param(c);
   const dependsOn = param(c, "dependsOn");
-  const card = await mustExist(c, "ops_cards", cardId);
-  const before = await c.env.DB.prepare(`SELECT ref FROM ops_cards WHERE id = ?`).bind(dependsOn).first<{ ref: string }>();
   const res = await c.env.DB.prepare(`DELETE FROM ops_dependencies WHERE card_id = ? AND depends_on_id = ?`).bind(cardId, dependsOn).run();
   if (!res.meta.changes) throw new NotFound();
-  await audit(c, "update", "work", String(cardId), `${card.ref} no longer waits on ${before?.ref ?? "a deleted task"}`).run();
   return c.json({ ok: true });
 });
 
@@ -484,7 +426,7 @@ writes.post("/work/:id/subtasks", async (c) => {
   const v = await body(c, schemas.subtask);
   checkDates(v.startDate, v.dueDate);
   const db = c.env.DB;
-  const card = await mustExist(c, "ops_cards", cardId);
+  await mustExist(c, "ops_cards", cardId);
   const order =
     (await db.prepare(`SELECT COALESCE(MAX(sort_order), 0) + 1 AS n FROM ops_subtasks WHERE card_id = ?`).bind(cardId).first<number>("n")) ?? 1;
   const now = nowIso();
@@ -495,7 +437,6 @@ writes.post("/work/:id/subtasks", async (c) => {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
       )
       .bind(cardId, v.title, v.done ? 1 : 0, v.owner, v.startDate, v.dueDate, order, now, v.done ? now : null),
-    audit(c, "create", "work", String(cardId), `Added subtask “${v.title}” to ${card.ref}`),
   ]);
   return c.json({ id: (ins.results[0] as { id: number }).id }, 201);
 });
@@ -513,17 +454,13 @@ writes.patch("/subtasks/:id", async (c) => {
   const stmts: D1PreparedStatement[] = [];
   const { sql, binds } = setClause(v, SUBTASK_COLUMNS);
   if (sql) stmts.push(db.prepare(`UPDATE ops_subtasks SET ${sql} WHERE id = ?`).bind(...binds, subId));
-  const title = v.title ?? String(sub.title);
-  let summary: string | null = sql ? `Edited subtask “${title}” on ${card.ref}` : null;
   if (v.done !== undefined && v.done !== (sub.done === 1)) {
     stmts.push(
       db.prepare(`UPDATE ops_subtasks SET done = ?, completed_at = ? WHERE id = ?`).bind(v.done ? 1 : 0, v.done ? nowIso() : null, subId)
     );
-    summary = `${v.done ? "Completed" : "Reopened"} subtask “${title}” on ${card.ref}`;
   }
   if (v.position !== undefined) stmts.push(...(await reorder(db, "ops_subtasks", "card_id", card.id as number, subId, v.position)));
   if (!stmts.length) return c.json({ ok: true });
-  if (summary) stmts.push(audit(c, "update", "work", String(card.id), summary));
   await db.batch(stmts);
   return c.json({ ok: true });
 });
@@ -531,10 +468,9 @@ writes.patch("/subtasks/:id", async (c) => {
 writes.delete("/subtasks/:id", async (c) => {
   const subId = param(c);
   const sub = await mustExist(c, "ops_subtasks", subId);
-  const card = await mustExist(c, "ops_cards", sub.card_id as number);
+  await mustExist(c, "ops_cards", sub.card_id as number);
   await c.env.DB.batch([
     c.env.DB.prepare(`DELETE FROM ops_subtasks WHERE id = ?`).bind(subId),
-    audit(c, "delete", "work", String(card.id), `Removed subtask “${sub.title}” from ${card.ref}`),
   ]);
   return c.json({ ok: true });
 });
@@ -575,7 +511,6 @@ writes.post("/employees", async (c) => {
          VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
       )
       .bind(r.name, r.role, r.licenceClass, r.licenceLabel, r.licenceExpiry, r.site, r.status, r.statusKind, r.since, r.firstAid || "—", r.mobile || "—", r.employmentType),
-    auditLastInsert(c, "employee", `Added ${v.name} to the register`),
   ]);
   return c.json({ id: (ins.results[0] as { id: number }).id }, 201);
 });
@@ -583,25 +518,22 @@ writes.post("/employees", async (c) => {
 writes.patch("/employees/:id", async (c) => {
   const empId = param(c);
   const v = await body(c, schemas.employee, true);
-  const emp = await mustExist(c, "employees", empId);
+  await mustExist(c, "employees", empId);
   const { sql, binds } = setClause(employeeRecord(v), EMPLOYEE_COLUMNS);
   if (!sql) return c.json({ ok: true });
-  const changed = v.status && v.status !== emp.status ? ` — now ${v.status}` : "";
   await c.env.DB.batch([
     c.env.DB.prepare(`UPDATE employees SET ${sql} WHERE id = ?`).bind(...binds, empId),
-    audit(c, "update", "employee", String(empId), `Updated personnel file for ${v.name ?? emp.name}${changed}`),
   ]);
   return c.json({ ok: true });
 });
 
 writes.delete("/employees/:id", async (c) => {
   const empId = param(c);
-  const emp = await mustExist(c, "employees", empId);
+  await mustExist(c, "employees", empId);
   const db = c.env.DB;
   await db.batch([
     db.prepare(`DELETE FROM employee_shifts WHERE employee_id = ?`).bind(empId),
     db.prepare(`DELETE FROM employees WHERE id = ?`).bind(empId),
-    audit(c, "delete", "employee", String(empId), `Removed ${emp.name} from the register`),
   ]);
   return c.json({ ok: true });
 });
@@ -609,7 +541,7 @@ writes.delete("/employees/:id", async (c) => {
 writes.post("/employees/:id/shifts", async (c) => {
   const empId = param(c);
   const v = await body(c, schemas.shift);
-  const emp = await mustExist(c, "employees", empId);
+  await mustExist(c, "employees", empId);
   const db = c.env.DB;
   await db.batch([
     db
@@ -618,7 +550,6 @@ writes.post("/employees/:id/shifts", async (c) => {
          VALUES (?, ?, ?, ?, (SELECT COALESCE(MIN(sort_order), 1) - 1 FROM employee_shifts WHERE employee_id = ?))`
       )
       .bind(empId, dayMonth(v.date), v.span.toUpperCase(), v.site.toUpperCase(), empId),
-    audit(c, "create", "shift", String(empId), `Rostered ${emp.name} · ${dayMonth(v.date)} ${v.span} at ${v.site}`),
   ]);
   return c.json({ ok: true }, 201);
 });
@@ -637,18 +568,6 @@ const CLIENT_COLUMNS = {
   phone: "phone",
   city: "city",
 };
-const PROPERTY_NAMES: Record<string, string> = {
-  org: "name",
-  sector: "industry",
-  sites: "sites",
-  valuePa: "annual value",
-  owner: "owner",
-  status: "lifecycle stage",
-  meta: "description",
-  domain: "domain",
-  phone: "phone",
-  city: "city",
-};
 
 writes.post("/clients", async (c) => {
   const v = await body(c, schemas.client);
@@ -660,7 +579,6 @@ writes.post("/clients", async (c) => {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
       )
       .bind(v.org, v.sector, v.sites, aud(v.valuePa), v.owner, v.status, kindFor(CLIENT_STATUSES, v.status), v.meta, v.domain, v.phone, v.city, nowIso()),
-    auditLastInsert(c, "client", `Created company ${v.org}`),
   ]);
   return c.json({ id: (ins.results[0] as { id: number }).id }, 201);
 });
@@ -668,7 +586,7 @@ writes.post("/clients", async (c) => {
 writes.patch("/clients/:id", async (c) => {
   const clientId = param(c);
   const v = await body(c, schemas.client, true);
-  const client = await mustExist(c, "clients", clientId);
+  await mustExist(c, "clients", clientId);
   const { sql, binds } = setClause(
     {
       ...v,
@@ -678,31 +596,21 @@ writes.patch("/clients/:id", async (c) => {
     CLIENT_COLUMNS
   );
   if (!sql) return c.json({ ok: true });
-  const keys = Object.keys(v);
-  const name = v.org ?? String(client.org);
-  const summary =
-    v.status && v.status !== client.status
-      ? `Moved ${name} to ${v.status}`
-      : keys.length === 1
-        ? `Updated ${PROPERTY_NAMES[keys[0]!] ?? "details"} for ${name}`
-        : `Updated ${name}`;
   await c.env.DB.batch([
     c.env.DB.prepare(`UPDATE clients SET ${sql} WHERE id = ?`).bind(...binds, clientId),
-    audit(c, "update", "client", String(clientId), summary),
   ]);
   return c.json({ ok: true });
 });
 
 writes.delete("/clients/:id", async (c) => {
   const clientId = param(c);
-  const client = await mustExist(c, "clients", clientId);
+  await mustExist(c, "clients", clientId);
   const db = c.env.DB;
   await db.batch([
     db.prepare(`DELETE FROM client_contacts WHERE client_id = ?`).bind(clientId),
     db.prepare(`DELETE FROM deals WHERE client_id = ?`).bind(clientId),
     db.prepare(`DELETE FROM client_activity WHERE client_id = ?`).bind(clientId),
     db.prepare(`DELETE FROM clients WHERE id = ?`).bind(clientId),
-    audit(c, "delete", "client", String(clientId), `Deleted company ${client.org}`),
   ]);
   return c.json({ ok: true });
 });
@@ -711,7 +619,7 @@ writes.delete("/clients/:id", async (c) => {
 writes.post("/clients/:id/contacts", async (c) => {
   const clientId = param(c);
   const v = await body(c, schemas.contact);
-  const client = await mustExist(c, "clients", clientId);
+  await mustExist(c, "clients", clientId);
   const db = c.env.DB;
   const [ins] = await db.batch([
     db
@@ -720,7 +628,6 @@ writes.post("/clients/:id/contacts", async (c) => {
          VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM client_contacts WHERE client_id = ?)) RETURNING id`
       )
       .bind(clientId, v.name, v.role, v.email, v.phone, clientId),
-    audit(c, "create", "client", String(clientId), `Added contact ${v.name}${v.role ? ` (${v.role})` : ""} to ${client.org}`),
   ]);
   return c.json({ id: (ins.results[0] as { id: number }).id }, 201);
 });
@@ -728,23 +635,21 @@ writes.post("/clients/:id/contacts", async (c) => {
 writes.patch("/contacts/:id", async (c) => {
   const contactId = param(c);
   const v = await body(c, schemas.contact, true);
-  const contact = await mustExist(c, "client_contacts", contactId);
+  await mustExist(c, "client_contacts", contactId);
   const { sql, binds } = setClause(v, { name: "name", role: "role", email: "email", phone: "phone" });
   if (!sql) return c.json({ ok: true });
   await c.env.DB.batch([
     c.env.DB.prepare(`UPDATE client_contacts SET ${sql} WHERE id = ?`).bind(...binds, contactId),
-    audit(c, "update", "client", String(contact.client_id), `Updated contact ${v.name ?? contact.name}`),
   ]);
   return c.json({ ok: true });
 });
 
 writes.delete("/contacts/:id", async (c) => {
   const contactId = param(c);
-  const contact = await mustExist(c, "client_contacts", contactId);
+  await mustExist(c, "client_contacts", contactId);
   await c.env.DB.batch([
     c.env.DB.prepare(`UPDATE client_activity SET contact_id = NULL WHERE contact_id = ?`).bind(contactId),
     c.env.DB.prepare(`DELETE FROM client_contacts WHERE id = ?`).bind(contactId),
-    audit(c, "delete", "client", String(contact.client_id), `Removed contact ${contact.name}`),
   ]);
   return c.json({ ok: true });
 });
@@ -754,12 +659,11 @@ const engagementCreate = schemas.engagementPatch.refine((v) => v.subject || v.bo
   message: "Add a subject or some detail",
   path: ["body"],
 });
-const KIND_VERB: Record<string, string> = { note: "Added a note", email: "Logged an email", call: "Logged a call", meeting: "Logged a meeting", task: "Created a task" };
 
 writes.post("/clients/:id/activity", async (c) => {
   const clientId = param(c);
   const v = await body(c, engagementCreate);
-  const client = await mustExist(c, "clients", clientId);
+  await mustExist(c, "clients", clientId);
   const db = c.env.DB;
   const at = v.at ?? nowIso();
   const [ins] = await db.batch([
@@ -769,7 +673,6 @@ writes.post("/clients/:id/activity", async (c) => {
          VALUES (?, ?, ?, (SELECT COALESCE(MIN(sort_order), 1) - 1 FROM client_activity WHERE client_id = ?), ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
       )
       .bind(clientId, shortDate(at.slice(0, 10)), v.body, clientId, v.kind, v.subject, at, c.get("userEmail"), v.outcome, v.dueDate, v.done ? 1 : 0, v.contactId ?? null),
-    audit(c, "create", "client", String(clientId), `${KIND_VERB[v.kind]} on ${client.org}${v.subject ? `: ${v.subject}` : ""}`),
   ]);
   return c.json({ id: (ins.results[0] as { id: number }).id }, 201);
 });
@@ -777,27 +680,23 @@ writes.post("/clients/:id/activity", async (c) => {
 writes.patch("/activity/:id", async (c) => {
   const actId = param(c);
   const v = await body(c, schemas.engagementPatch, true);
-  const act = await mustExist(c, "client_activity", actId);
+  await mustExist(c, "client_activity", actId);
   const { sql, binds } = setClause(
     { ...v, done: v.done === undefined ? undefined : v.done ? 1 : 0, contactId: v.contactId === undefined ? undefined : v.contactId },
     { subject: "subject", body: "body", outcome: "outcome", at: "at", dueDate: "due_date", done: "done", contactId: "contact_id" }
   );
   if (!sql) return c.json({ ok: true });
-  const label = String(act.subject || act.body).slice(0, 60);
-  const summary = v.done !== undefined && Object.keys(v).length === 1 ? `${v.done ? "Completed" : "Reopened"} task “${label}”` : `Edited ${act.kind} “${label}”`;
   await c.env.DB.batch([
     c.env.DB.prepare(`UPDATE client_activity SET ${sql} WHERE id = ?`).bind(...binds, actId),
-    audit(c, "update", "client", String(act.client_id), summary),
   ]);
   return c.json({ ok: true });
 });
 
 writes.delete("/activity/:id", async (c) => {
   const actId = param(c);
-  const act = await mustExist(c, "client_activity", actId);
+  await mustExist(c, "client_activity", actId);
   await c.env.DB.batch([
     c.env.DB.prepare(`DELETE FROM client_activity WHERE id = ?`).bind(actId),
-    audit(c, "delete", "client", String(act.client_id), `Deleted ${act.kind} “${String(act.subject || act.body).slice(0, 60)}”`),
   ]);
   return c.json({ ok: true });
 });
@@ -818,7 +717,6 @@ writes.post("/deals", async (c) => {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
       )
       .bind(v.clientId, v.name, v.amount, v.stage, v.closeDate, v.owner || String(client.owner_initials), order, now, CLOSED.has(v.stage) ? now : null),
-    audit(c, "create", "client", String(v.clientId), `Created deal “${v.name}” (${aud(v.amount)}) for ${client.org}`),
   ];
   // A company with an open deal is at least an opportunity.
   if (client.status === "Lead" && !CLOSED.has(v.stage))
@@ -848,24 +746,20 @@ writes.patch("/deals/:id", async (c) => {
     ids.forEach((rowId, i) => stmts.push(db.prepare(`UPDATE deals SET sort_order = ? WHERE id = ?`).bind(i + 1, rowId)));
   }
   if (!stmts.length) return c.json({ ok: true });
-  const clientId = v.clientId ?? (deal.client_id as number);
-  const name = v.name ?? String(deal.name);
-  if (stageChanged) {
-    stmts.push(audit(c, "move", "client", String(clientId), `Moved deal “${name}” to ${v.stage}`));
-    // Winning a deal makes the company a customer.
-    if (v.stage === "Closed won")
-      stmts.push(db.prepare(`UPDATE clients SET status = 'Customer', status_kind = 'secure' WHERE id = ? AND status != 'Customer'`).bind(clientId));
-  } else if (sql) stmts.push(audit(c, "update", "client", String(clientId), `Updated deal “${name}”`));
+  // Winning a deal makes the company a customer.
+  if (stageChanged && v.stage === "Closed won") {
+    const clientId = v.clientId ?? (deal.client_id as number);
+    stmts.push(db.prepare(`UPDATE clients SET status = 'Customer', status_kind = 'secure' WHERE id = ? AND status != 'Customer'`).bind(clientId));
+  }
   await db.batch(stmts);
   return c.json({ ok: true });
 });
 
 writes.delete("/deals/:id", async (c) => {
   const dealId = param(c);
-  const deal = await mustExist(c, "deals", dealId);
+  await mustExist(c, "deals", dealId);
   await c.env.DB.batch([
     c.env.DB.prepare(`DELETE FROM deals WHERE id = ?`).bind(dealId),
-    audit(c, "delete", "client", String(deal.client_id), `Deleted deal “${deal.name}”`),
   ]);
   return c.json({ ok: true });
 });
@@ -895,7 +789,6 @@ writes.post("/roles", async (c) => {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM roles)) RETURNING id`
       )
       .bind(v.title, meta, v.status, kindFor(ROLE_STATUSES, v.status), v.department, v.location, v.employmentType, v.openings, v.description, v.hiringManager, nowIso()),
-    auditLastInsert(c, "role", `Created job — ${v.title}${v.status === "Published" ? " (published)" : ""}`),
   ]);
   return c.json({ id: (ins.results[0] as { id: number }).id }, 201);
 });
@@ -903,21 +796,18 @@ writes.post("/roles", async (c) => {
 writes.patch("/roles/:id", async (c) => {
   const roleId = param(c);
   const v = await body(c, schemas.role, true);
-  const role = await mustExist(c, "roles", roleId);
+  await mustExist(c, "roles", roleId);
   const { sql, binds } = setClause({ ...v, statusKind: v.status ? kindFor(ROLE_STATUSES, v.status) : undefined }, ROLE_COLUMNS);
   if (!sql) return c.json({ ok: true });
-  const title = v.title ?? String(role.title);
-  const summary = v.status && v.status !== role.status ? `${v.status === "Published" ? "Published" : `Set to ${v.status}:`} ${title}` : `Updated job — ${title}`;
   await c.env.DB.batch([
     c.env.DB.prepare(`UPDATE roles SET ${sql} WHERE id = ?`).bind(...binds, roleId),
-    audit(c, "update", "role", String(roleId), summary),
   ]);
   return c.json({ ok: true });
 });
 
 writes.delete("/roles/:id", async (c) => {
   const roleId = param(c);
-  const role = await mustExist(c, "roles", roleId);
+  await mustExist(c, "roles", roleId);
   const db = c.env.DB;
   await db.batch([
     db.prepare(`DELETE FROM candidate_events WHERE candidate_id IN (SELECT id FROM candidates WHERE role_id = ?)`).bind(roleId),
@@ -925,7 +815,6 @@ writes.delete("/roles/:id", async (c) => {
     db.prepare(`DELETE FROM careers_cv_files WHERE candidate_id IN (SELECT id FROM candidates WHERE role_id = ?)`).bind(roleId),
     db.prepare(`DELETE FROM candidates WHERE role_id = ?`).bind(roleId),
     db.prepare(`DELETE FROM roles WHERE id = ?`).bind(roleId),
-    audit(c, "delete", "role", String(roleId), `Deleted job — ${role.title}`),
   ]);
   return c.json({ ok: true });
 });
@@ -943,7 +832,7 @@ function candidateEvent(c: Ctx, candidateId: number | "newest", kind: string, bo
 
 writes.post("/candidates", async (c) => {
   const v = await body(c, schemas.candidate);
-  const role = await mustExist(c, "roles", v.roleId);
+  await mustExist(c, "roles", v.roleId);
   const db = c.env.DB;
   const [ins] = await db.batch([
     db
@@ -954,8 +843,6 @@ writes.post("/candidates", async (c) => {
                  ?, ?, ?, ?, 0, '', ?) RETURNING id`
       )
       .bind(v.roleId, v.stage, v.name, v.licence.toUpperCase(), v.licenceOk ? 1 : 0, v.source, todaySydney(), v.roleId, v.email, v.phone, v.location, v.headline, nowIso()),
-    // Audit first: it reads last_insert_rowid(), which the event insert would overwrite.
-    auditLastInsert(c, "candidate", `Added candidate ${v.name} for ${role.title}`),
     candidateEvent(c, "newest", "created", `Added to ${STAGES[v.stage]}${v.source ? ` · source: ${v.source}` : ""}`),
   ]);
   return c.json({ id: (ins.results[0] as { id: number }).id }, 201);
@@ -994,33 +881,22 @@ writes.patch("/candidates/:id", async (c) => {
     }
   );
   if (!sql) return c.json({ ok: true });
-  const name = v.name ?? String(cand.name);
   const stmts: D1PreparedStatement[] = [c.env.DB.prepare(`UPDATE candidates SET ${sql} WHERE id = ?`).bind(...binds, candId)];
-  let summary = `Updated candidate ${name}`;
-  let action: "update" | "move" = "update";
-  if (stageChanged) {
-    stmts.push(candidateEvent(c, candId, "stage", `Moved to ${STAGES[v.stage!]}`));
-    summary = `Moved ${name} to ${STAGES[v.stage!]}`;
-    action = "move";
-  }
-  if (dqChanged) {
+  if (stageChanged) stmts.push(candidateEvent(c, candId, "stage", `Moved to ${STAGES[v.stage!]}`));
+  if (dqChanged)
     stmts.push(candidateEvent(c, candId, v.disqualified ? "disqualified" : "requalified", v.disqualified ? v.disqualifyReason ?? "" : ""));
-    summary = v.disqualified ? `Disqualified ${name}${v.disqualifyReason ? ` — ${v.disqualifyReason}` : ""}` : `Requalified ${name}`;
-  }
-  stmts.push(audit(c, action, "candidate", String(candId), summary));
   await c.env.DB.batch(stmts);
   return c.json({ ok: true });
 });
 
 writes.delete("/candidates/:id", async (c) => {
   const candId = param(c);
-  const cand = await mustExist(c, "candidates", candId);
+  await mustExist(c, "candidates", candId);
   await c.env.DB.batch([
     c.env.DB.prepare(`DELETE FROM candidate_events WHERE candidate_id = ?`).bind(candId),
     c.env.DB.prepare(`DELETE FROM careers_cv_chunks WHERE file_id IN (SELECT id FROM careers_cv_files WHERE candidate_id = ?)`).bind(candId),
     c.env.DB.prepare(`DELETE FROM careers_cv_files WHERE candidate_id = ?`).bind(candId),
     c.env.DB.prepare(`DELETE FROM candidates WHERE id = ?`).bind(candId),
-    audit(c, "delete", "candidate", String(candId), `Deleted candidate ${cand.name}`),
   ]);
   return c.json({ ok: true });
 });
@@ -1028,10 +904,9 @@ writes.delete("/candidates/:id", async (c) => {
 writes.post("/candidates/:id/comments", async (c) => {
   const candId = param(c);
   const v = await body(c, schemas.comment);
-  const cand = await mustExist(c, "candidates", candId);
+  await mustExist(c, "candidates", candId);
   await c.env.DB.batch([
     candidateEvent(c, candId, "comment", v.body),
-    audit(c, "create", "candidate", String(candId), `Commented on ${cand.name}`),
   ]);
   return c.json({ ok: true }, 201);
 });
@@ -1039,10 +914,9 @@ writes.post("/candidates/:id/comments", async (c) => {
 writes.post("/candidates/:id/evaluations", async (c) => {
   const candId = param(c);
   const v = await body(c, schemas.evaluation);
-  const cand = await mustExist(c, "candidates", candId);
+  await mustExist(c, "candidates", candId);
   await c.env.DB.batch([
     candidateEvent(c, candId, "evaluation", v.body, v.score, v.verdict),
-    audit(c, "create", "candidate", String(candId), `Evaluated ${cand.name}: ${v.verdict} (${v.score}/5)`),
   ]);
   return c.json({ ok: true }, 201);
 });
@@ -1053,7 +927,6 @@ writes.delete("/candidate-events/:id", async (c) => {
   if (ev.kind !== "comment" && ev.kind !== "evaluation") throw new BadRequest("Only comments and evaluations can be deleted.");
   await c.env.DB.batch([
     c.env.DB.prepare(`DELETE FROM candidate_events WHERE id = ?`).bind(evId),
-    audit(c, "delete", "candidate", String(ev.candidate_id), `Deleted a ${ev.kind}`),
   ]);
   return c.json({ ok: true });
 });
@@ -1078,17 +951,15 @@ writes.post("/intel", async (c) => {
          VALUES (?, ?, ?, ?, ?, ?, ?, 0) RETURNING id`
       )
       .bind(time, v.severity, kindFor(INTEL_SEVERITIES, v.severity), v.regionKey, v.headline, v.source, nowIso(now)),
-    auditLastInsert(c, "intel", `Logged ${v.severity.toLowerCase()} item — ${region}`),
   ]);
   return c.json({ id: (ins.results[0] as { id: number }).id }, 201);
 });
 
 writes.delete("/intel/:id", async (c) => {
   const itemId = param(c);
-  const item = await mustExist(c, "intel_feed", itemId);
+  await mustExist(c, "intel_feed", itemId);
   await c.env.DB.batch([
     c.env.DB.prepare(`DELETE FROM intel_feed WHERE id = ?`).bind(itemId),
-    audit(c, "delete", "intel", String(itemId), `Removed ${String(item.severity).toLowerCase()} item from the feed`),
   ]);
   return c.json({ ok: true });
 });

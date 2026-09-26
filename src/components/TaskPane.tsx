@@ -4,7 +4,7 @@ import { Check, Diamond, Link2, Plus, Trash2, X } from "lucide-react";
 import { PRIORITIES, SERVICE_LINES, type OpsCard, type OpsColumn, type OpsSubtask } from "../../shared/types";
 import { useActions } from "../actions/ActionHost";
 import { usePortalData } from "../lib/DataProvider";
-import { dueTone, friendlyDate, initialsOf, relativeTime } from "../lib/format";
+import { dueTone, friendlyDate, relativeTime } from "../lib/format";
 import { LINE_HUE, PRIORITY_HUE, PROGRESS_HUE, PROGRESS_LABEL, columnHue, hueClass } from "../lib/hues";
 import { indexBoard, type CardInfo } from "../lib/board";
 import { DUR, tween } from "../lib/motion";
@@ -229,7 +229,6 @@ export function TaskPane({ id, onClose }: { id: number | null; onClose: () => vo
   const open = id !== null && !!card && !!column;
   const done = !!column?.done;
   const subsDone = card?.subtasks.filter((s) => s.done).length ?? 0;
-  const activity = (data?.audit ?? []).filter((a) => a.entity === "work" && a.entityId === String(id));
 
   return (
     <Drawer
@@ -436,25 +435,6 @@ export function TaskPane({ id, onClose }: { id: number | null; onClose: () => vo
           </section>
 
           <Dependencies card={card} columns={columns} today={today} />
-
-          <section className="pt-task__section">
-            <h3 className="pt-task__h">Activity</h3>
-            {activity.length === 0 ? (
-              <p className="pt-dim" style={{ fontSize: 13 }}>
-                Changes to this task will be listed here.
-              </p>
-            ) : (
-              <ul className="pt-task__activity">
-                {activity.slice(0, 12).map((a) => (
-                  <li key={a.id}>
-                    <Avatar initials={initialsOf(a.actor)} size={20} title={a.actor} />
-                    <span>{a.summary}</span>
-                    <span className="pt-meta">{relativeTime(a.at)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
         </div>
       )}
     </Drawer>

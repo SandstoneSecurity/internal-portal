@@ -4,7 +4,6 @@ import {
   ArrowRight,
   Briefcase,
   Building2,
-  History,
   LayoutDashboard,
   LogOut,
   MapPin,
@@ -35,7 +34,7 @@ interface Command {
 
 const MAX_PER_GROUP = 6;
 
-export function CommandPalette({ open, onClose, onActivity }: { open: boolean; onClose: () => void; onActivity: () => void }) {
+export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const data = usePortal();
   const actions = useActions();
   const navigate = useNavigate();
@@ -67,7 +66,6 @@ export function CommandPalette({ open, onClose, onActivity }: { open: boolean; o
       { id: "act-cli", group: "Actions", label: "Create company", icon: <Plus size={15} />, run: actions.newClient, keywords: "client customer account" },
       { id: "act-deal", group: "Actions", label: "Create deal", icon: <Plus size={15} />, run: () => actions.newDeal(), keywords: "opportunity pipeline proposal" },
       { id: "act-int", group: "Actions", label: "Log an intelligence item", icon: <Plus size={15} />, run: () => actions.logIntel(), keywords: "incident report breach advisory" },
-      { id: "act-log", group: "Actions", label: "Open activity log", icon: <History size={15} />, run: onActivity, keywords: "audit history changes" },
       {
         id: "act-theme",
         group: "Actions",
@@ -94,7 +92,7 @@ export function CommandPalette({ open, onClose, onActivity }: { open: boolean; o
     for (const f of data.feed)
       cmds.push({ id: `int-${f.id}`, group: "Intelligence", label: f.headline, hint: `${f.sev} · ${f.region}`, icon: <MapPin size={15} />, keywords: f.source, run: go(`/intelligence?item=${f.id}`) });
     return cmds;
-  }, [data, actions, navigate, theme, toggle, onActivity]);
+  }, [data, actions, navigate, theme, toggle]);
 
   const results = useMemo(() => {
     const hits = q.trim()
