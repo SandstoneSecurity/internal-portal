@@ -209,7 +209,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
       { name: "domain", label: "Company domain", max: 120, placeholder: "e.g. harbourline.com.au", mono: true },
       { name: "sector", label: "Industry", half: true, max: 60, placeholder: "e.g. Hospitality" },
       { name: "status", label: "Lifecycle stage", type: "select", options: statusOpts(CLIENT_STATUSES), required: true, half: true },
-      { name: "owner", label: "Company owner (initials)", type: "initials", half: true },
+      { name: "owner", label: "Owner (initials)", type: "initials", half: true, placeholder: "WC" },
       { name: "city", label: "City", half: true, max: 60 },
       { name: "phone", label: "Phone", half: true, mono: true, max: 30 },
       { name: "sites", label: "Sites", type: "number", half: true, mono: true },
