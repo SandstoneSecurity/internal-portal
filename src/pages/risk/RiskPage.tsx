@@ -11,6 +11,7 @@ import { hueClass } from "../../lib/hues";
 import { list, row } from "../../lib/motion";
 import { DOMAIN_HUE, RATING_HUE, buildModel, compactAud, frequencyLabel, meanOf } from "../../lib/riskModel";
 import { ClientRisk } from "./ClientRisk";
+import { CrimeStatus } from "./CrimeProfile";
 import { SiteWorkspace } from "./SiteWorkspace";
 
 const TOP_TABS = ["Clients", "Library"] as const;
@@ -79,6 +80,8 @@ function Portfolio() {
         </dl>
       </header>
 
+      <CrimeStatus />
+
       <Tabs id="risk-top" tabs={TOP_TABS} value={tab} onChange={(t) => setParams(t === "Clients" ? {} : { tab: t })} counts={{ Clients: d.clients.length, Library: THREATS.length }} />
 
       {tab === "Clients" ? (
@@ -94,7 +97,7 @@ function Portfolio() {
             </button>
           </div>
           {d.clients.length === 0 ? (
-            <Empty title="No clients yet." body="Threat models belong to a client. Create the company in Clients, then add its sites here." />
+            <Empty title="No clients yet." body="Threat modelling starts with a client. Create the company in Clients, then add its sites here." />
           ) : (
             <div className="pt-risk-ledger" role="table" aria-label="Clients by expected annual loss">
               <div className="pt-risk-ledger__row pt-risk-ledger__row--head" role="row">

@@ -10,6 +10,7 @@ import { usePortal } from "../../lib/DataProvider";
 import { hueClass, type Hue } from "../../lib/hues";
 import { DOMAIN_HUE, RATING_HUE, compactAud, frequencyLabel, meanOf, useClientModel } from "../../lib/riskModel";
 import { AttackPaths } from "./AttackPaths";
+import { SiteCrimeProfile } from "./CrimeProfile";
 import { kindLabel, ScenarioPicker } from "./ClientRisk";
 import { PlanView, ZONE_HUE } from "./PlanView";
 
@@ -74,7 +75,7 @@ export function SiteWorkspace({ clientId, siteId }: { clientId: number; siteId: 
             <span>{[site.address, site.suburb, site.state, site.postcode].filter(Boolean).join(", ") || "Address not set"}</span>
             <span>{site.occupants} people</span>
             <span>{site.hours}</span>
-            <span>Crime ×{site.crimeFactor}</span>
+            <span>{site.lga && d.crime.rates[site.lga] ? `${site.lga} LGA` : `Crime ×${site.crimeFactor} (manual)`}</span>
           </div>
         </div>
         <div className="pt-risk-head__actions">
@@ -169,6 +170,7 @@ export function SiteWorkspace({ clientId, siteId }: { clientId: number; siteId: 
             <Inspector el={sel} clientId={clientId} rows={m.rows} aimed={aimed} onClose={() => setSelected(null)} zones={elements.filter((e) => e.kind === "zone")} />
           ) : (
             <>
+              <SiteCrimeProfile site={site} onEdit={() => t.editSite(site)} />
               <SectionHead title="This site" />
               <dl className="pt-risk-insp__facts">
                 <dt>Expected loss</dt>

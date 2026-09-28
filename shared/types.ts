@@ -1,3 +1,4 @@
+import type { CrimeData } from "./crime";
 export type StatusKind = "secure" | "advisory" | "breach" | "info" | "neutral";
 
 export interface Metric {
@@ -276,6 +277,7 @@ export interface PortalData {
   tmScenarios: TmScenario[];
   tmControls: TmControl[];
   tmIncidents: TmIncident[];
+  crime: CrimeData;
 }
 
 // ── Threat modelling ────────────────────────────────────────────────────────
@@ -302,6 +304,8 @@ export interface ClientSite {
   kind: string;
   occupants: number;
   crimeFactor: number;
+  /** NSW Local Government Area, as BOCSAR names it; '' if not set. */
+  lga: string;
   hours: string;
   notes: string;
   createdAt: string;

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { requireAccess, type AccessEnv, type AuthVariables } from "./auth";
 import { getPortal } from "./db";
+import { crime, scheduledRefresh } from "./crime";
 import { files } from "./files";
 import { threats } from "./threats";
 import { handleApiError, writes } from "./writes";
@@ -33,9 +34,16 @@ app.get("/api/me", (c) => c.json({ email: c.get("userEmail") }));
 app.get("/api/portal", async (c) => c.json(await getPortal(c.env.DB, c.get("userEmail"))));
 app.route("/api", files);
 app.route("/api", threats);
+app.route("/api", crime);
 app.route("/api", writes);
 app.all("/api/*", (c) => c.json({ error: "Not found." }, 404));
 
 app.get("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 
-export default app;
+export default {
+  fetch: app.fetch,
+  // Keeps the NSW crime statistics current (see worker/crime.ts for the cadence).
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(scheduledRefresh(env.DB).then((r) => console.log(`crime statistics: ${r}`)));
+  },
+};

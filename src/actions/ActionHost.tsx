@@ -32,7 +32,7 @@ import { useConfirm } from "../components/ui/Confirm";
 import { FormDrawer, type FieldSpec, type FormSpec, type FormValues } from "../components/ui/FormDrawer";
 import { useToast } from "../components/ui/Toast";
 import { TaskPane } from "../components/TaskPane";
-import { siteFields, siteInitial } from "./threatFields";
+import { guessArea, siteFields, siteInitial } from "./threatFields";
 
 const opts = (list: readonly string[]) => list.map((v) => ({ value: v, label: v }));
 const statusOpts = (t: readonly (readonly [string, string])[]) => t.map(([l]) => ({ value: l, label: l }));
@@ -94,7 +94,7 @@ export interface Actions {
   /** Adds a site to a client, asking which client when none is given. */
   addSite: (o?: { clientId?: number }) => void;
   /** The page's primary action (header button, "N" shortcut). */
-  primaryFor: (pathname: string) => { label: string; run: () => void } | null;
+  primaryFor: (pathname: string, search?: string) => { label: string; run: () => void } | null;
 }
 
 export type WorkPatch = Partial<Pick<OpsCard, "title" | "site" | "line" | "description" | "priority" | "startDate" | "dueDate" | "milestone">> & {
@@ -514,7 +514,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
           },
           submit: async (v) => {
             const r = await send("POST", "/employees", v);
-            await done("Employee added", String(v.name), `/employees?id=${r.id}`);
+            await done("Employee added", String(v.name), `/people?view=employees&id=${r.id}`);
           },
         }),
 
@@ -802,7 +802,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
           initial: { title: "", department: "Ops", location: "", employmentType: "Full time", openings: 1, status: "Published", hiringManager: "", description: "" },
           submit: async (v) => {
             const r = await send("POST", "/roles", v);
-            await done("Job created", String(v.title), `/recruitment?role=${r.id}`);
+            await done("Job created", String(v.title), `/people?view=recruitment&role=${r.id}`);
           },
         }),
 
@@ -852,7 +852,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
           path: `/roles/${r.id}`,
           toast: "Job deleted",
         });
-        if (ok) navigate("/recruitment");
+        if (ok) navigate("/people?view=recruitment");
         return ok;
       },
 
@@ -876,7 +876,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
           },
           submit: async (v) => {
             const r = await send("POST", "/candidates", { ...v, roleId: Number(v.roleId), stage: Number(v.stage) });
-            await done("Candidate added", String(v.name), `/recruitment?role=${v.roleId}&candidate=${r.id}`);
+            await done("Candidate added", String(v.name), `/people?view=recruitment&role=${v.roleId}&candidate=${r.id}`);
           },
         }),
 
@@ -1052,26 +1052,27 @@ export function ActionProvider({ children }: { children: ReactNode }) {
           return;
         }
         setSpec({
-          eyebrow: "Threat models",
+          eyebrow: "Threat Modelling",
           title: "Add site",
           submitLabel: "Add site",
-          fields: siteFields(o?.clientId ? undefined : clients),
+          fields: siteFields(o?.clientId ? undefined : clients, d?.crime.areas ?? []),
           initial: siteInitial(undefined, o?.clientId ? undefined : clients[0]!.id),
           submit: async (v) => {
             const clientId = o?.clientId ?? Number(v.clientId);
             const { clientId: _omit, ...site } = v;
+            if (!site.lga) site.lga = guessArea(d?.crime.areas ?? [], site.suburb);
             const r = await send("POST", `/clients/${clientId}/sites`, site);
             await done("Site added", String(v.name), `/risk?client=${clientId}&site=${r.id}`);
           },
         });
       },
 
-      primaryFor: (pathname) => {
+      primaryFor: (pathname, search = "") => {
+        if (pathname === "/people")
+          return new URLSearchParams(search).get("view") === "recruitment" ? { label: "Create job", run: () => a.postRole() } : { label: "Add employee", run: () => a.addEmployee() };
         const map: Record<string, { label: string; run: () => void }> = {
           "/": { label: "Raise work", run: () => a.raiseWork() },
           "/operations": { label: "Raise work", run: () => a.raiseWork() },
-          "/recruitment": { label: "Create job", run: () => a.postRole() },
-          "/employees": { label: "Add employee", run: () => a.addEmployee() },
           "/clients": { label: "Create company", run: () => a.newClient() },
           "/intelligence": { label: "Log an item", run: () => a.logIntel() },
           "/risk": { label: "Add site", run: () => a.addSite() },

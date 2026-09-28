@@ -25,6 +25,7 @@ const schemas = {
     kind: z.enum(SITE_KINDS.map(([k]) => k) as [string, ...string[]]).default("office"),
     occupants: z.coerce.number().int().min(0).max(100_000).default(0),
     crimeFactor: z.coerce.number().min(0.2, "Between 0.2 and 5").max(5, "Between 0.2 and 5").default(1),
+    lga: optText(80),
     hours: optText(40),
     notes: optText(1000),
   }),
@@ -83,7 +84,7 @@ const schemas = {
   }),
 };
 
-const SITE_COLUMNS = { name: "name", address: "address", suburb: "suburb", state: "state", postcode: "postcode", kind: "kind", occupants: "occupants", crimeFactor: "crime_factor", hours: "hours", notes: "notes" };
+const SITE_COLUMNS = { name: "name", address: "address", suburb: "suburb", state: "state", postcode: "postcode", kind: "kind", occupants: "occupants", crimeFactor: "crime_factor", lga: "lga", hours: "hours", notes: "notes" };
 const LEVEL_COLUMNS = { name: "name", order: "sort_order", heightM: "height_m", widthM: "width_m" };
 const ELEMENT_COLUMNS = { kind: "kind", name: "name", subtype: "subtype", value: "value", criticality: "criticality", levelId: "level_id", zoneId: "zone_id", x: "x", y: "y", w: "w", h: "h", notes: "notes" };
 const SCENARIO_COLUMNS = {
@@ -145,10 +146,10 @@ threats.post("/clients/:id/sites", async (c) => {
   const [ins] = await db.batch([
     db
       .prepare(
-        `INSERT INTO client_sites (client_id, name, address, suburb, state, postcode, kind, occupants, crime_factor, hours, notes, sort_order, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
+        `INSERT INTO client_sites (client_id, name, address, suburb, state, postcode, kind, occupants, crime_factor, lga, hours, notes, sort_order, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
       )
-      .bind(clientId, v.name, v.address, v.suburb, v.state, v.postcode, v.kind, v.occupants, v.crimeFactor, v.hours || "Business hours", v.notes, order, nowIso()),
+      .bind(clientId, v.name, v.address, v.suburb, v.state, v.postcode, v.kind, v.occupants, v.crimeFactor, v.lga, v.hours || "Business hours", v.notes, order, nowIso()),
     // Every site starts with a ground floor to hang a plan on.
     db.prepare(`INSERT INTO site_levels (site_id, name, sort_order) VALUES ((SELECT MAX(id) FROM client_sites), 'Ground floor', 0)`),
   ]);

@@ -1,8 +1,9 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { Building2, LayoutDashboard, ShieldHalf, LogOut, MapPin, Moon, Plus, Route, Search, Sun, UserPlus, Users } from "lucide-react";
+import { Building2, LayoutDashboard, ShieldHalf, LogOut, MapPin, Moon, Plus, Route, Search, Sun, Users } from "lucide-react";
 import { useActions } from "../actions/ActionHost";
+import { peopleView } from "../pages/PeoplePage";
 import { usePortal } from "../lib/DataProvider";
 import { initialsOf, isoWeek, longDate } from "../lib/format";
 import { useHotkey } from "../lib/hotkeys";
@@ -14,15 +15,14 @@ import { Kbd, ModKey } from "./ui/Bits";
 const NAV = [
   { to: "/", label: "Control", icon: LayoutDashboard },
   { to: "/operations", label: "Operations", icon: Route },
-  { to: "/recruitment", label: "Recruitment", icon: UserPlus },
-  { to: "/employees", label: "Employees", icon: Users },
+  { to: "/people", label: "People", icon: Users },
   { to: "/clients", label: "Clients", icon: Building2 },
-  { to: "/risk", label: "Threat models", icon: ShieldHalf },
+  { to: "/risk", label: "Threat Modelling", icon: ShieldHalf },
   { to: "/intelligence", label: "Intelligence", icon: MapPin },
 ] as const;
 
 
-function useHeading(pathname: string): { title: string; meta: string } {
+function useHeading(pathname: string, search: string): { title: string; meta: string } {
   const d = usePortal();
   const open = d.opsColumns.filter((c) => !c.done).reduce((n, c) => n + c.cards.length, 0);
   const late = d.opsColumns.flatMap((c) => c.cards).filter((c) => c.late).length;
@@ -36,10 +36,12 @@ function useHeading(pathname: string): { title: string; meta: string } {
   const map: Record<string, { title: string; meta: string }> = {
     "/": { title: "Control", meta: `${longDate(d.today)} · week ${isoWeek(d.today)}` },
     "/operations": { title: "Operations", meta: `Order book · ${open} open · ${late} past due` },
-    "/recruitment": { title: "Recruitment", meta: `${openJobs} published ${openJobs === 1 ? "job" : "jobs"} · ${candidates} candidates` },
-    "/employees": { title: "Employees", meta: `Licensed personnel register · ${d.employees.length} on file · ${onShift} on shift · ${expiring} licences due` },
+    "/people":
+      peopleView(search) === "recruitment"
+        ? { title: "People", meta: `Recruitment · ${openJobs} published ${openJobs === 1 ? "job" : "jobs"} · ${candidates} candidates` }
+        : { title: "People", meta: `Licensed personnel register · ${d.employees.length} on file · ${onShift} on shift · ${expiring} licences due` },
     "/clients": { title: "Clients", meta: `${d.clients.length} companies · ${active} customers · ${openDeals.length} open deals` },
-    "/risk": { title: "Threat models", meta: `${d.sites.length} ${d.sites.length === 1 ? "site" : "sites"} · ${new Set(d.tmScenarios.map((x) => x.clientId)).size} clients modelled · physical, personnel & cyber` },
+    "/risk": { title: "Threat Modelling", meta: `${d.sites.length} ${d.sites.length === 1 ? "site" : "sites"} · ${new Set(d.tmScenarios.map((x) => x.clientId)).size} clients modelled · physical, personnel & cyber` },
     "/intelligence": { title: "Intelligence", meta: `Monitored activity across New South Wales · ${d.feed.length} items · ${breaches} breach` },
   };
   return map[pathname] ?? map["/"]!;
@@ -47,13 +49,13 @@ function useHeading(pathname: string): { title: string; meta: string } {
 
 export function Shell({ children }: { children: ReactNode }) {
   const d = usePortal();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const actions = useActions();
   const { theme, toggle } = useTheme();
   const [palette, setPalette] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
-  const heading = useHeading(pathname);
-  const primary = actions.primaryFor(pathname);
+  const heading = useHeading(pathname, search);
+  const primary = actions.primaryFor(pathname, search);
 
   useHotkey("mod+k", () => setPalette((p) => !p));
   useHotkey("/", () => setPalette(true));
@@ -68,8 +70,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const breaches = d.feed.filter((f) => f.kind === "breach").length;
   const counts: Record<string, { n: number; alert?: boolean } | undefined> = {
     "/operations": open ? { n: open, alert: late > 0 } : undefined,
-    "/recruitment": d.candidates.length ? { n: d.candidates.length } : undefined,
-    "/employees": d.employees.length ? { n: d.employees.length } : undefined,
+    "/people": d.employees.length ? { n: d.employees.length } : undefined,
     "/clients": d.clients.length ? { n: d.clients.length } : undefined,
     "/risk": d.sites.length ? { n: d.sites.length } : undefined,
     "/intelligence": breaches ? { n: breaches, alert: true } : undefined,

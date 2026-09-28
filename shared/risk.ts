@@ -104,8 +104,14 @@ export interface SiteProfile {
   id: number;
   kind: SiteKind;
   occupants: number;
-  /** Local crime relative to the state average (1 = average). */
+  /** Local crime relative to the state average (1 = average), set by hand. */
   crimeFactor: number;
+  /**
+   * Per-threat factors from recorded crime at the site's location (LGA rate ÷
+   * state rate). When present they replace the hand-set crime factor; threats
+   * with no measuring offence (terrorism, protest, cyber) take 1.
+   */
+  locationFactors?: Partial<Record<string, number>>;
 }
 
 export interface ScenarioInput {
@@ -170,8 +176,9 @@ const merge = (base: Range, o?: Partial<Range> | null): Range | null => {
 /** How many exposure units a scenario has: sites count once, staff in hundreds. */
 export function exposureUnits(threat: ThreatDef, site: SiteProfile | null, org: OrgProfile): number {
   const kindFactor = site ? threat.kindFactor?.[site.kind] ?? 1 : 1;
-  if (threat.exposure === "site") return site ? kindFactor * site.crimeFactor : 0;
-  if (threat.exposure === "staff100") return ((site ? site.occupants : org.staff) / 100) * kindFactor;
+  const location = site?.locationFactors ? site.locationFactors[threat.key] ?? 1 : null;
+  if (threat.exposure === "site") return site ? kindFactor * (location ?? site.crimeFactor) : 0;
+  if (threat.exposure === "staff100") return ((site ? site.occupants : org.staff) / 100) * kindFactor * (location ?? 1);
   return 1;
 }
 

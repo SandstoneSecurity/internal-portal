@@ -242,6 +242,7 @@ INSERT INTO intel_feed (id, time_label, severity, severity_kind, region_key, hea
 UPDATE clients SET staff = 140, revenue = 60000000, history_years = 3 WHERE id = 4;
 UPDATE clients SET staff = 60, revenue = 18000000 WHERE id = 1;
 
+
 INSERT INTO client_sites (id, client_id, name, address, suburb, state, postcode, kind, occupants, crime_factor, hours, notes, sort_order, created_at) VALUES
 (1, 4, 'Port Kembla yard', '1 Old Port Road', 'Port Kembla', 'NSW', '2505', 'warehouse', 90, 1.3, '24/7', 'Bonded store, container yard and workshop.', 1, datetime('now', '-400 days')),
 (2, 4, 'Unanderra depot', '18 Five Islands Road', 'Unanderra', 'NSW', '2526', 'industrial', 25, 1.1, 'Business hours', '', 2, datetime('now', '-300 days')),
@@ -327,3 +328,7 @@ INSERT INTO tm_incidents (client_id, site_id, threat_key, occurred_on, loss, des
 (4, 1, 'equipment-theft', date('now', '-130 days'), 12000, 'Workshop tools.', datetime('now')),
 (4, 1, 'trespass', date('now', '-60 days'), 0, 'Two people found in the container yard at 2am.', datetime('now')),
 (4, NULL, 'phishing', date('now', '-240 days'), 4000, 'Payroll officer credentials phished; reset within hours.', datetime('now'));
+
+-- Council areas (LGAs) for the demo sites; their crime profiles apply once BOCSAR data is loaded.
+UPDATE client_sites SET lga = 'Wollongong' WHERE id IN (1, 2);
+UPDATE client_sites SET lga = 'Sydney' WHERE id = 3;

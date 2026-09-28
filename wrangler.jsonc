@@ -20,6 +20,9 @@
     "ACCESS_AUD": "b095b00e7dc4bac9c56ff33de48ad091290e0c41e0c2726185eb41b7031f4180",
     "ALLOWED_EMAILS": "william@sandstonesecurity.com"
   },
+  // Refreshes BOCSAR crime statistics. Most runs just check freshness and stop:
+  // a real download happens weekly, or every six hours while it's failing.
+  "triggers": { "crons": ["*/10 * * * *"] },
   "d1_databases": [
     {
       "binding": "DB",
