@@ -2,6 +2,12 @@ import type {
   Candidate,
   CandidateEvent,
   CandidateFile,
+  ClientSite,
+  SiteLevel,
+  TmControl,
+  TmElement,
+  TmIncident,
+  TmScenario,
   CandidateEventKind,
   Client,
   ClientContact,
@@ -108,7 +114,8 @@ export async function getClients(db: D1Database): Promise<Client[]> {
   const [{ results: rows }, { results: contactRows }, { results: activityRows }] = await Promise.all([
     db
       .prepare(
-        `SELECT id, org, sector, sites, value_pa, owner_initials, status, status_kind, meta, domain, phone, city, created_at
+        `SELECT id, org, sector, sites, value_pa, owner_initials, status, status_kind, meta, domain, phone, city, created_at,
+                staff, revenue, history_years
          FROM clients ORDER BY org COLLATE NOCASE`
       )
       .all<{
@@ -125,6 +132,9 @@ export async function getClients(db: D1Database): Promise<Client[]> {
         phone: string;
         city: string;
         created_at: string | null;
+        staff: number;
+        revenue: number;
+        history_years: number;
       }>(),
     db
       .prepare(`SELECT id, client_id, name, role, email, phone FROM client_contacts ORDER BY client_id, sort_order, id`)
@@ -196,6 +206,9 @@ export async function getClients(db: D1Database): Promise<Client[]> {
       lastActivity: activity.find((a) => a.kind !== "task" || a.done)?.at.slice(0, 10) ?? null,
       contacts: contactsByClient.get(r.id) ?? [],
       activity,
+      staff: r.staff,
+      revenue: r.revenue,
+      historyYears: r.history_years,
     };
   });
 }
@@ -604,9 +617,122 @@ export function computeMetrics(
   ];
 }
 
+// ── Threat modelling ────────────────────────────────────────────────────────
+export async function getThreatModels(db: D1Database) {
+  const [sites, levels, elements, scenarios, controls, incidents] = await Promise.all([
+    db
+      .prepare(
+        `SELECT id, client_id, name, address, suburb, state, postcode, kind, occupants, crime_factor, hours, notes, created_at
+         FROM client_sites ORDER BY client_id, sort_order, id`
+      )
+      .all<{ id: number; client_id: number; name: string; address: string; suburb: string; state: string; postcode: string; kind: string; occupants: number; crime_factor: number; hours: string; notes: string; created_at: string }>(),
+    db
+      .prepare(`SELECT id, site_id, name, sort_order, height_m, width_m, plan_file_id, plan_w, plan_h FROM site_levels ORDER BY site_id, sort_order, id`)
+      .all<{ id: number; site_id: number; name: string; sort_order: number; height_m: number; width_m: number; plan_file_id: number | null; plan_w: number | null; plan_h: number | null }>(),
+    db
+      .prepare(`SELECT id, site_id, level_id, kind, name, subtype, value, criticality, zone_id, x, y, w, h, notes FROM tm_elements ORDER BY site_id, id`)
+      .all<{ id: number; site_id: number; level_id: number | null; kind: string; name: string; subtype: string; value: number; criticality: number; zone_id: number | null; x: number | null; y: number | null; w: number | null; h: number | null; notes: string }>(),
+    db
+      .prepare(
+        `SELECT id, client_id, site_id, threat_key, element_id, name, domain, rate_low, rate_typical, rate_high, loss_low, loss_typical, loss_high, notes
+         FROM tm_scenarios ORDER BY client_id, id`
+      )
+      .all<{ id: number; client_id: number; site_id: number | null; threat_key: string; element_id: number | null; name: string; domain: string; rate_low: number | null; rate_typical: number | null; rate_high: number | null; loss_low: number | null; loss_typical: number | null; loss_high: number | null; notes: string }>(),
+    db
+      .prepare(`SELECT id, client_id, site_id, control_key, status, capex, opex, effectiveness, notes FROM tm_controls ORDER BY client_id, id`)
+      .all<{ id: number; client_id: number; site_id: number | null; control_key: string; status: string; capex: number; opex: number; effectiveness: number; notes: string }>(),
+    db
+      .prepare(`SELECT id, client_id, site_id, threat_key, occurred_on, loss, description FROM tm_incidents ORDER BY occurred_on DESC, id DESC`)
+      .all<{ id: number; client_id: number; site_id: number | null; threat_key: string; occurred_on: string; loss: number; description: string }>(),
+  ]);
+  const levelsBySite = new Map<number, SiteLevel[]>();
+  for (const l of levels.results) {
+    const list = levelsBySite.get(l.site_id) ?? [];
+    list.push({
+      id: l.id,
+      siteId: l.site_id,
+      name: l.name,
+      order: l.sort_order,
+      heightM: l.height_m,
+      widthM: l.width_m,
+      plan: l.plan_file_id ? { fileId: l.plan_file_id, w: l.plan_w ?? 0, h: l.plan_h ?? 0 } : null,
+    });
+    levelsBySite.set(l.site_id, list);
+  }
+  const statuses = new Set(["In place", "Planned", "Proposed"]);
+  return {
+    sites: sites.results.map(
+      (r): ClientSite => ({
+        id: r.id,
+        clientId: r.client_id,
+        name: r.name,
+        address: r.address,
+        suburb: r.suburb,
+        state: r.state,
+        postcode: r.postcode,
+        kind: r.kind,
+        occupants: r.occupants,
+        crimeFactor: r.crime_factor,
+        hours: r.hours,
+        notes: r.notes,
+        createdAt: r.created_at,
+        levels: levelsBySite.get(r.id) ?? [],
+      })
+    ),
+    tmElements: elements.results.map(
+      (r): TmElement => ({
+        id: r.id,
+        siteId: r.site_id,
+        levelId: r.level_id,
+        kind: r.kind === "zone" || r.kind === "entry" ? r.kind : "asset",
+        name: r.name,
+        subtype: r.subtype,
+        value: r.value,
+        criticality: r.criticality,
+        zoneId: r.zone_id,
+        x: r.x,
+        y: r.y,
+        w: r.w,
+        h: r.h,
+        notes: r.notes,
+      })
+    ),
+    tmScenarios: scenarios.results.map(
+      (r): TmScenario => ({
+        id: r.id,
+        clientId: r.client_id,
+        siteId: r.site_id,
+        threatKey: r.threat_key,
+        elementId: r.element_id,
+        name: r.name,
+        domain: r.domain,
+        rate: { low: r.rate_low, typical: r.rate_typical, high: r.rate_high },
+        loss: { low: r.loss_low, typical: r.loss_typical, high: r.loss_high },
+        notes: r.notes,
+      })
+    ),
+    tmControls: controls.results.map(
+      (r): TmControl => ({
+        id: r.id,
+        clientId: r.client_id,
+        siteId: r.site_id,
+        controlKey: r.control_key,
+        status: (statuses.has(r.status) ? r.status : "Proposed") as TmControl["status"],
+        capex: r.capex,
+        opex: r.opex,
+        effectiveness: r.effectiveness,
+        notes: r.notes,
+      })
+    ),
+    tmIncidents: incidents.results.map(
+      (r): TmIncident => ({ id: r.id, clientId: r.client_id, siteId: r.site_id, threatKey: r.threat_key, occurredOn: r.occurred_on, loss: r.loss, description: r.description })
+    ),
+  };
+}
+
 export async function getPortal(db: D1Database, email: string, now = new Date()): Promise<PortalData> {
   const today = todaySydney(now);
-  const [employees, clients, deals, opsColumns, roles, candidates, regions, feed] = await Promise.all([
+  const [employees, clients, deals, opsColumns, roles, candidates, regions, feed, models] = await Promise.all([
     getEmployees(db, today),
     getClients(db),
     getDeals(db),
@@ -615,6 +741,7 @@ export async function getPortal(db: D1Database, email: string, now = new Date())
     getCandidates(db, today),
     getRegions(db),
     getFeed(db, today),
+    getThreatModels(db),
   ]);
   return {
     me: { email },
@@ -628,5 +755,6 @@ export async function getPortal(db: D1Database, email: string, now = new Date())
     candidates,
     regions,
     feed,
+    ...models,
   };
 }

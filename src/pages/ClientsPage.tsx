@@ -1,6 +1,6 @@
 import { LayoutGroup, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowDown,
   ArrowLeft,
@@ -514,6 +514,7 @@ const TIMELINE_TABS = ["Activity", "Notes", "Emails", "Calls", "Tasks", "Meeting
 const TAB_KIND: Record<string, EngagementKind | undefined> = { Notes: "note", Emails: "email", Calls: "call", Tasks: "task", Meetings: "meeting" };
 
 function CompanyRecord({ c }: { c: Client }) {
+  const sites = usePortal().sites.filter((x) => x.clientId === c.id);
   const d = usePortal();
   const actions = useActions();
   const set = useSet();
@@ -720,6 +721,27 @@ function CompanyRecord({ c }: { c: Client }) {
             </div>
           ))}
           {deals.length === 0 && <p className="pt-dim" style={{ fontSize: 12.5, margin: 0 }}>No deals yet.</p>}
+        </div>
+
+        <div className="pt-crm-section">
+          <div className="pt-crm-section__head">
+            <span>Sites ({sites.length})</span>
+            <button className="pt-addlink" onClick={() => actions.addSite({ clientId: c.id })}>
+              + Add
+            </button>
+          </div>
+          {sites.map((s) => (
+            <Link key={s.id} className="pt-crm-sitelink" to={`/risk?client=${c.id}&site=${s.id}`}>
+              <span className="pt-crm-deal__name">{s.name}</span>
+              <span className="pt-meta">{[s.suburb, s.state].filter(Boolean).join(" ") || "Address not set"} · threat model</span>
+            </Link>
+          ))}
+          {sites.length === 0 && <p className="pt-dim" style={{ fontSize: 12.5, margin: 0 }}>No sites yet. Add one to model its threats.</p>}
+          {(sites.length > 0 || d.tmScenarios.some((x) => x.clientId === c.id)) && (
+            <Link className="pt-addlink" to={`/risk?client=${c.id}`}>
+              Risk profile →
+            </Link>
+          )}
         </div>
       </aside>
     </div>

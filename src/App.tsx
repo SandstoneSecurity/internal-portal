@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from "motion/react";
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { ActionProvider } from "./actions/ActionHost";
 import { Shell } from "./components/Shell";
@@ -10,6 +11,9 @@ import { EmployeesPage } from "./pages/EmployeesPage";
 import { IntelligencePage } from "./pages/IntelligencePage";
 import { OperationsPage } from "./pages/OperationsPage";
 import { RecruitmentPage } from "./pages/RecruitmentPage";
+
+// The threat-modelling workspace is large and only some visits need it.
+const RiskPage = lazy(() => import("./pages/risk/RiskPage").then((m) => ({ default: m.RiskPage })));
 
 function Boot() {
   return (
@@ -59,6 +63,14 @@ export function App() {
               <Route path="/recruitment" element={<RecruitmentPage />} />
               <Route path="/employees" element={<EmployeesPage />} />
               <Route path="/clients" element={<ClientsPage />} />
+              <Route
+                path="/risk"
+                element={
+                  <Suspense fallback={<div className="pt-skeleton" style={{ height: 420 }} />}>
+                    <RiskPage />
+                  </Suspense>
+                }
+              />
               <Route path="/intelligence" element={<IntelligencePage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

@@ -32,6 +32,7 @@ import { useConfirm } from "../components/ui/Confirm";
 import { FormDrawer, type FieldSpec, type FormSpec, type FormValues } from "../components/ui/FormDrawer";
 import { useToast } from "../components/ui/Toast";
 import { TaskPane } from "../components/TaskPane";
+import { siteFields, siteInitial } from "./threatFields";
 
 const opts = (list: readonly string[]) => list.map((v) => ({ value: v, label: v }));
 const statusOpts = (t: readonly (readonly [string, string])[]) => t.map(([l]) => ({ value: l, label: l }));
@@ -88,6 +89,10 @@ export interface Actions {
   deleteCandidate: (c: Candidate) => Promise<boolean>;
   logIntel: (o?: { regionKey?: string }) => void;
   deleteIntel: (i: IntelItem) => Promise<boolean>;
+  /** Opens any form in the side drawer. */
+  openForm: (spec: FormSpec) => void;
+  /** Adds a site to a client, asking which client when none is given. */
+  addSite: (o?: { clientId?: number }) => void;
   /** The page's primary action (header button, "N" shortcut). */
   primaryFor: (pathname: string) => { label: string; run: () => void } | null;
 }
@@ -1038,6 +1043,29 @@ export function ActionProvider({ children }: { children: ReactNode }) {
           toast: "Item removed",
         }),
 
+      openForm: (spec) => setSpec(spec),
+
+      addSite: (o) => {
+        const clients = [...(d?.clients ?? [])].sort((x, y) => x.org.localeCompare(y.org));
+        if (!clients.length) {
+          toast({ title: "Add a company first", desc: "Sites belong to a client. Create the company in Clients.", kind: "advisory" });
+          return;
+        }
+        setSpec({
+          eyebrow: "Threat models",
+          title: "Add site",
+          submitLabel: "Add site",
+          fields: siteFields(o?.clientId ? undefined : clients),
+          initial: siteInitial(undefined, o?.clientId ? undefined : clients[0]!.id),
+          submit: async (v) => {
+            const clientId = o?.clientId ?? Number(v.clientId);
+            const { clientId: _omit, ...site } = v;
+            const r = await send("POST", `/clients/${clientId}/sites`, site);
+            await done("Site added", String(v.name), `/risk?client=${clientId}&site=${r.id}`);
+          },
+        });
+      },
+
       primaryFor: (pathname) => {
         const map: Record<string, { label: string; run: () => void }> = {
           "/": { label: "Raise work", run: () => a.raiseWork() },
@@ -1046,6 +1074,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
           "/employees": { label: "Add employee", run: () => a.addEmployee() },
           "/clients": { label: "Create company", run: () => a.newClient() },
           "/intelligence": { label: "Log an item", run: () => a.logIntel() },
+          "/risk": { label: "Add site", run: () => a.addSite() },
         };
         return map[pathname] ?? null;
       },

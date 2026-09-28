@@ -87,6 +87,43 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
     Negotiation → Closed won or lost) with stage totals, win probabilities
     and a weighted forecast. Dragging a deal to Closed won makes the company
     a Customer, and an open deal lifts a Lead to Opportunity.
+- **Threat models (risk quantification across physical, personnel and cyber):**
+  - **Portfolio:** every client ranked by expected annual loss, with its mix
+    by domain, its 1-in-10-year loss and its top risk.
+  - **Risk profile per client:**
+    - Expected loss a year, with and without controls, and the 1-in-10 and
+      1-in-100-year losses.
+    - A loss exceedance curve (the chance a year's losses pass each dollar
+      amount) for no controls, controls in place, and with planned and
+      proposed controls.
+    - A 5×5 likelihood × consequence matrix and loss by domain.
+  - **Register:** every scenario with how often it happens, the loss per
+    event (range and most likely), the chance a year, the rating, and the
+    expected loss before and after controls. Open a row to override the rate
+    or loss, or to aim it at an asset.
+  - **Controls:** status (In place, Planned, Proposed), cost, how well it's
+    implemented, the loss it removes each year and its return on security
+    investment (ROSI). "Best value next" ranks library controls by loss
+    removed per dollar.
+  - **Incidents:** real incidents calibrate the model. Each scenario's
+    frequency moves from the library's reference rate towards the client's
+    own history (Gamma–Poisson credibility; the reference rate counts as
+    three years of evidence).
+  - **Sites:** several per client, each with levels.
+    - **Plan:** upload a floor plan per level (PNG, JPEG or WebP; export PDFs
+      as an image first). Drag out zones, click to place assets and entry
+      points, drag to move them. Dropping an asset into a zone files it
+      there.
+    - **3D:** the plan's dark linework is raised into walls. Levels stack
+      with adjustable spacing, and assets are pins coloured by their worst
+      rating. Orbit, zoom and click to inspect.
+    - **Attack paths:** derived rather than hand-drawn, running threat →
+      entry point → zone → asset. Physical threats use physical entries and
+      cyber threats use network and remote access. Line weight is expected
+      loss, and each threat shows the controls in place as barriers.
+  - **Library:** 29 threats and 43 controls. Each threat has a reference
+    rate, a loss range by organisation size, and the evidence behind them;
+    each control has what it reduces and by how much.
 - **Drag and drop** updates the screen at once and rolls back if the save
   fails.
 - **Command palette:** press `Ctrl K` / `⌘K` or `/`. From there you can jump
@@ -99,6 +136,58 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
 - **Fonts** (Jost, Newsreader, Sandstone Text, Sandstone Mono) are
   self-hosted from `src/styles/ds/fonts/`, so there are no third-party font
   requests.
+
+## Risk quantification: method and sources
+
+The engine (`shared/risk.ts`) follows FAIR (Factor Analysis of Information Risk):
+
+- **Frequency:** a PERT range (low, most likely, high) of events a year. The
+  library rate is scaled by exposure: per site × site-type factor × local
+  crime factor, per 100 staff, or per organisation.
+- **Loss per event:** a PERT range in AUD, chosen by organisation size (ABS
+  bands: small under 20 staff, medium 20–199, large 200+). It is capped at an
+  asset's value for theft and damage.
+- **Controls:** each cuts a threat's frequency and/or loss by a fraction,
+  scaled by implementation quality. Several controls combine
+  multiplicatively. Site controls act at their site; organisation controls
+  act everywhere.
+- **Simulation:** 4,000 simulated years with a fixed seed, so results are
+  repeatable. Expected losses are also computed exactly.
+- **Calibration:** posterior rate = (λ₀·3 + incidents) ÷ (3 + years of
+  history).
+- **Ratings:** likelihood is the chance of at least one event a year.
+  Consequence compares a typical event with revenue when it's known, and
+  otherwise with dollar bands.
+
+Each threat's rate and loss are labelled **anchored** (derived from a cited
+Australian figure, with the arithmetic shown in the library) or
+**estimated** (an analyst starting point for incident data to recalibrate).
+Anchors:
+
+- **ASD Annual Cyber Threat Report 2024–25:**
+  - 84,700+ cybercrime reports.
+  - Average cost per business report: $56,600 small, $97,200 medium,
+    $202,700 large. Cyber loss curves are fitted so their mean equals these
+    averages.
+  - Business email compromise is 15% of business cybercrime.
+- **OAIC Notifiable Data Breaches, 2025:** 1,205 notifications, 59% malicious.
+- **IBM Cost of a Data Breach 2025 (Australia):** average AUD 4.22M.
+- **NSW BOCSAR, 12 months to September 2025:** 7,971 non-dwelling break and
+  enters. Divided by ≈320,000 NSW employing businesses (from ABS Counts of
+  Australian Businesses, June 2025: 999,161 employing nationally), this gives
+  ≈0.025 a year per business.
+- **Safe Work Australia:**
+  - Assault claims ≈5,300 a year, or ≈0.036 per 100 workers.
+  - 17,600 serious mental-health claims in 2023–24; the median mental-health
+    claim is $67,400, against $16,300 across all serious claims.
+- **PwC Global Economic Crime and Fraud Survey 2020 (Australia):** 35% of
+  organisations hit by fraud in 24 months.
+- **ASIO:** the national terrorism threat level is PROBABLE.
+- **Retail crime:** ARA/NRA and Griffith University retail crime figures.
+
+Control costs are indicative Sydney prices, to be replaced with quotes when
+applying a control. The library is data in `shared/threatLibrary.ts`: to
+update a figure, change it there, cite the source and run the engine tests.
 
 ## Local development
 
@@ -149,6 +238,16 @@ input returns `400 {error, fields}`.
 | DELETE | `/api/candidate-events/:id` | Delete a comment or scorecard |
 | GET | `/api/files/:id[?download=1]` | A candidate's CV, reassembled from its chunks and checked against its SHA-256 |
 | POST · DELETE | `/api/intel[/:id]` | Intelligence feed |
+| POST | `/api/clients/:id/sites` | Add a site (it starts with a ground floor) |
+| PATCH · DELETE | `/api/sites/:id` | Edit or delete a site and everything modelled at it |
+| POST · PATCH · DELETE | `/api/sites/:id/levels`, `/api/levels/:id` | Levels (stack order, height, plan width in metres) |
+| PUT · DELETE | `/api/levels/:id/plan?w=&h=&name=` | Floor plan, as the raw image body (PNG, JPEG or WebP, up to 8 MB, checked by its bytes) |
+| GET | `/api/plans/:id` | A floor plan image |
+| POST · PATCH · DELETE | `/api/sites/:id/elements`, `/api/elements/:id` | Zones, assets and entry points (positions as fractions of the plan) |
+| POST · PATCH · DELETE | `/api/clients/:id/scenarios`, `/api/scenarios/:id` | Scenarios (library `threatKey` or `custom`; rate and loss overrides) |
+| POST | `/api/clients/:id/scenarios/bulk` | Several library threats at once; duplicates skipped |
+| POST · PATCH · DELETE | `/api/clients/:id/controls`, `/api/tm-controls/:id` | Controls applied (status, costs, effectiveness) |
+| POST · PATCH · DELETE | `/api/clients/:id/incidents`, `/api/incidents/:id` | Observed incidents |
 
 Writes that touch several rows run as one D1 batch, so they apply in full or not at all.
 
@@ -199,10 +298,11 @@ could be left on in production.
 ## Project layout
 
 ```
-worker/         Cloudflare Worker (Hono): auth, reads (db.ts), writes (writes.ts), files (files.ts)
+worker/         Cloudflare Worker (Hono): auth, reads (db.ts), writes (writes.ts), files (files.ts), threat models (threats.ts)
+shared/threatLibrary.ts, shared/risk.ts  Threat and control library; quantification engine
 shared/types.ts Types shared between the Worker and the React app
 src/            React app (pages/, components/, actions/, lib/)
 src/styles/ds/  Sandstone design system tokens + component CSS (ported as-is)
-migrations/     D1 schema (0002: dates, audit log, regions; 0003: three-section board, task fields, subtasks; 0004: milestones, dependencies; 0005: applicant tracking and CRM; 0006: CV tables shared with the careers site; 0007: drops the audit log, as the portal has one user)
+migrations/     D1 schema (0002: dates, audit log, regions; 0003: three-section board, task fields, subtasks; 0004: milestones, dependencies; 0005: applicant tracking and CRM; 0006: CV tables shared with the careers site; 0007: drops the audit log, as the portal has one user; 0008: threat modelling)
 seed/           Fictional demo data for local development
 ```

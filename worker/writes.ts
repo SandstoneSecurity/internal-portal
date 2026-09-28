@@ -19,16 +19,17 @@ import {
 } from "../shared/types";
 import type { AuthVariables } from "./auth";
 import { dayMonth, nowIso, shortDate, todaySydney } from "./dates";
+import { deleteThreatModel } from "./threatCleanup";
 
-type Env = { Bindings: { DB: D1Database }; Variables: AuthVariables };
-type Ctx = Context<Env>;
+export type Env = { Bindings: { DB: D1Database }; Variables: AuthVariables };
+export type Ctx = Context<Env>;
 
 const labels = <T extends readonly (readonly [string, string])[]>(t: T) =>
   t.map(([l]) => l) as unknown as [T[number][0], ...T[number][0][]];
 
-const text = (max: number) => z.string().trim().min(1, "Required").max(max, `At most ${max} characters`);
-const optText = (max: number) => z.string().trim().max(max, `At most ${max} characters`).default("");
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date (YYYY-MM-DD)");
+export const text = (max: number) => z.string().trim().min(1, "Required").max(max, `At most ${max} characters`);
+export const optText = (max: number) => z.string().trim().max(max, `At most ${max} characters`).default("");
+export const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date (YYYY-MM-DD)");
 const initials = z
   .string()
   .trim()
@@ -99,6 +100,9 @@ export const schemas = {
     domain: optText(120),
     phone: optText(30),
     city: optText(60),
+    staff: z.coerce.number().int().min(0).max(1_000_000).default(0),
+    revenue: z.coerce.number().int().min(0).max(1_000_000_000_000).default(0),
+    historyYears: z.coerce.number().int().min(0).max(50).default(0),
   }),
   contact: z.object({
     name: text(80),
@@ -168,7 +172,7 @@ export const schemas = {
   }),
 };
 
-class BadRequest extends Error {
+export class BadRequest extends Error {
   constructor(
     message: string,
     readonly fields: Record<string, string> = {}
@@ -177,7 +181,7 @@ class BadRequest extends Error {
   }
 }
 
-async function body<S extends z.ZodTypeAny>(c: Ctx, schema: S, partial = false): Promise<z.output<S>> {
+export async function body<S extends z.ZodTypeAny>(c: Ctx, schema: S, partial = false): Promise<z.output<S>> {
   let json: unknown;
   try {
     json = await c.req.json();
@@ -203,22 +207,22 @@ async function body<S extends z.ZodTypeAny>(c: Ctx, schema: S, partial = false):
   return parsed.data as z.output<S>;
 }
 
-function param(c: Ctx, name = "id"): number {
+export function param(c: Ctx, name = "id"): number {
   const n = Number(c.req.param(name));
   if (!Number.isInteger(n) || n <= 0) throw new BadRequest(`Invalid ${name}.`);
   return n;
 }
 
-async function mustExist(c: Ctx, table: string, rowId: number | string, key = "id"): Promise<Record<string, unknown>> {
+export async function mustExist(c: Ctx, table: string, rowId: number | string, key = "id"): Promise<Record<string, unknown>> {
   const row = await c.env.DB.prepare(`SELECT * FROM ${table} WHERE ${key} = ?`).bind(rowId).first();
   if (!row) throw new NotFound();
   return row;
 }
 
-class NotFound extends Error {}
+export class NotFound extends Error {}
 
 /** Builds "SET a = ?, b = ?" from a partial record, mapping API keys to columns. */
-function setClause(values: Record<string, unknown>, columns: Record<string, string>) {
+export function setClause(values: Record<string, unknown>, columns: Record<string, string>) {
   const sets: string[] = [];
   const binds: unknown[] = [];
   for (const [k, col] of Object.entries(columns)) {
@@ -567,6 +571,9 @@ const CLIENT_COLUMNS = {
   domain: "domain",
   phone: "phone",
   city: "city",
+  staff: "staff",
+  revenue: "revenue",
+  historyYears: "history_years",
 };
 
 writes.post("/clients", async (c) => {
@@ -575,10 +582,10 @@ writes.post("/clients", async (c) => {
   const [ins] = await db.batch([
     db
       .prepare(
-        `INSERT INTO clients (org, sector, sites, value_pa, owner_initials, status, status_kind, meta, domain, phone, city, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
+        `INSERT INTO clients (org, sector, sites, value_pa, owner_initials, status, status_kind, meta, domain, phone, city, created_at, staff, revenue, history_years)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
       )
-      .bind(v.org, v.sector, v.sites, aud(v.valuePa), v.owner, v.status, kindFor(CLIENT_STATUSES, v.status), v.meta, v.domain, v.phone, v.city, nowIso()),
+      .bind(v.org, v.sector, v.sites, aud(v.valuePa), v.owner, v.status, kindFor(CLIENT_STATUSES, v.status), v.meta, v.domain, v.phone, v.city, nowIso(), v.staff, v.revenue, v.historyYears),
   ]);
   return c.json({ id: (ins.results[0] as { id: number }).id }, 201);
 });
@@ -610,6 +617,7 @@ writes.delete("/clients/:id", async (c) => {
     db.prepare(`DELETE FROM client_contacts WHERE client_id = ?`).bind(clientId),
     db.prepare(`DELETE FROM deals WHERE client_id = ?`).bind(clientId),
     db.prepare(`DELETE FROM client_activity WHERE client_id = ?`).bind(clientId),
+    ...deleteThreatModel(db, "client_id = ?", clientId),
     db.prepare(`DELETE FROM clients WHERE id = ?`).bind(clientId),
   ]);
   return c.json({ ok: true });

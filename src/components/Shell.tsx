@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { Building2, LayoutDashboard, LogOut, MapPin, Moon, Plus, Route, Search, Sun, UserPlus, Users } from "lucide-react";
+import { Building2, LayoutDashboard, ShieldHalf, LogOut, MapPin, Moon, Plus, Route, Search, Sun, UserPlus, Users } from "lucide-react";
 import { useActions } from "../actions/ActionHost";
 import { usePortal } from "../lib/DataProvider";
 import { initialsOf, isoWeek, longDate } from "../lib/format";
@@ -17,6 +17,7 @@ const NAV = [
   { to: "/recruitment", label: "Recruitment", icon: UserPlus },
   { to: "/employees", label: "Employees", icon: Users },
   { to: "/clients", label: "Clients", icon: Building2 },
+  { to: "/risk", label: "Threat models", icon: ShieldHalf },
   { to: "/intelligence", label: "Intelligence", icon: MapPin },
 ] as const;
 
@@ -38,6 +39,7 @@ function useHeading(pathname: string): { title: string; meta: string } {
     "/recruitment": { title: "Recruitment", meta: `${openJobs} published ${openJobs === 1 ? "job" : "jobs"} · ${candidates} candidates` },
     "/employees": { title: "Employees", meta: `Licensed personnel register · ${d.employees.length} on file · ${onShift} on shift · ${expiring} licences due` },
     "/clients": { title: "Clients", meta: `${d.clients.length} companies · ${active} customers · ${openDeals.length} open deals` },
+    "/risk": { title: "Threat models", meta: `${d.sites.length} ${d.sites.length === 1 ? "site" : "sites"} · ${new Set(d.tmScenarios.map((x) => x.clientId)).size} clients modelled · physical, personnel & cyber` },
     "/intelligence": { title: "Intelligence", meta: `Monitored activity across New South Wales · ${d.feed.length} items · ${breaches} breach` },
   };
   return map[pathname] ?? map["/"]!;
@@ -69,6 +71,7 @@ export function Shell({ children }: { children: ReactNode }) {
     "/recruitment": d.candidates.length ? { n: d.candidates.length } : undefined,
     "/employees": d.employees.length ? { n: d.employees.length } : undefined,
     "/clients": d.clients.length ? { n: d.clients.length } : undefined,
+    "/risk": d.sites.length ? { n: d.sites.length } : undefined,
     "/intelligence": breaches ? { n: breaches, alert: true } : undefined,
   };
   const onShift = d.employees.filter((e) => e.status === "On shift").length;
