@@ -29,6 +29,19 @@ export function offencesFor(threatKey: string, siteKind: string): OffenceKey[] {
   switch (threatKey) {
     case "break-in":
       return siteKind === "residential" ? ["bne-dwelling", "bne-nondwelling"] : ["bne-nondwelling"];
+    case "home-invasion":
+      return ["bne-dwelling"];
+    case "ram-raid":
+      return ["bne-nondwelling"];
+    case "cargo-theft":
+    case "metal-theft":
+      return ["other-theft", "bne-nondwelling"];
+    case "parcel-theft":
+      return ["other-theft"];
+    case "theft-from-vehicles":
+      return ["steal-mv"];
+    case "squatting":
+      return ["trespass"];
     case "retail-theft":
       return ["retail"];
     case "robbery":

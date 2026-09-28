@@ -134,11 +134,23 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
 
     Rates are per resident, so business districts read high; factors are held
     between ×0.25 and ×6. Each site shows its crime profile. Threats without
-    a matching offence (protest, terrorism, cyber) take ×1. The manual crime
-    factor applies only where no LGA data applies.
-  - **Library:** 29 threats and 43 controls. Each threat has a reference
+    a matching offence (protest, terrorism, hazards, cyber) take ×1. The
+    manual crime factor scales only crime-driven threats, and only where no
+    LGA data applies.
+  - **Library:** 71 threats and 66 controls. Each threat has a reference
     rate, a loss range by organisation size, and the evidence behind them;
     each control has what it reduces and by how much.
+    - Physical: property and violent crime, disorder, unauthorised access,
+      threats and hoaxes, espionage, terrorism and hazards.
+    - Personnel: violence and aggression, psychosocial harm, insider threat,
+      integrity, vetting, safety, travel and targeted threats.
+    - Cyber: fraud, account compromise, intrusion, extortion, data breach,
+      third parties, availability and sabotage.
+  - **Adding threats:** one searchable list, filtered by domain. Each
+    threat is priced for the client (size, and each site's type and
+    location), ranked by expected cost, with a chip for each site where it
+    applies. "Select recommended" picks the threats that make up 80% of the
+    expected cost.
 - **Drag and drop** updates the screen at once and rolls back if the save
   fails.
 - **Command palette:** press `Ctrl K` / `⌘K` or `/`. From there you can jump

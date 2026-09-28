@@ -30,7 +30,7 @@ export const siteFields = (clients?: { id: number; org: string }[], areas: strin
     type: "number",
     step: 0.1,
     half: true,
-    hint: "Used only where no LGA crime statistics apply (outside NSW, or before they load). 1 = average.",
+    hint: "Scales crime-driven threats (break-ins, theft, damage) where no LGA crime statistics apply: outside NSW, or before they load. 1 = average.",
   },
   { name: "notes", label: "Notes", type: "textarea", max: 1000 },
 ];

@@ -11,7 +11,8 @@ import { hueClass, type Hue } from "../../lib/hues";
 import { DOMAIN_HUE, RATING_HUE, compactAud, frequencyLabel, meanOf, useClientModel } from "../../lib/riskModel";
 import { AttackPaths } from "./AttackPaths";
 import { SiteCrimeProfile } from "./CrimeProfile";
-import { kindLabel, ScenarioPicker } from "./ClientRisk";
+import { kindLabel } from "./ClientRisk";
+import { ScenarioPicker } from "./ScenarioPicker";
 import { PlanView, ZONE_HUE } from "./PlanView";
 
 const Site3D = lazy(() => import("./Site3D"));

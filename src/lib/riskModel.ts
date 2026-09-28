@@ -55,6 +55,8 @@ export interface ClientModel {
   client: Client;
   org: OrgProfile;
   sites: ClientSite[];
+  /** Each site as the engine sees it: type, occupants and location factors. */
+  profiles: Map<number, SiteProfile>;
   elements: TmElement[];
   incidents: TmIncident[];
   controls: AppliedControl[];
@@ -135,6 +137,7 @@ export function buildModel(d: PortalData, clientId: number, trials = 4000): Clie
     client,
     org,
     sites,
+    profiles,
     elements,
     incidents,
     controls,
