@@ -28,6 +28,7 @@ import type {
 } from "../shared/types";
 import { DEAL_STAGES, ENGAGEMENT_KINDS, PRIORITIES, STAGES } from "../shared/types";
 import { addDays, dayMonth, daysBetween, shortDate, todaySydney } from "./dates";
+import { getCrime } from "./crime";
 
 export function asKind(v: string): StatusKind {
   return (["secure", "advisory", "breach", "info", "neutral"] as const).includes(v as StatusKind)
@@ -622,10 +623,10 @@ export async function getThreatModels(db: D1Database) {
   const [sites, levels, elements, scenarios, controls, incidents] = await Promise.all([
     db
       .prepare(
-        `SELECT id, client_id, name, address, suburb, state, postcode, kind, occupants, crime_factor, hours, notes, created_at
+        `SELECT id, client_id, name, address, suburb, state, postcode, kind, occupants, crime_factor, lga, hours, notes, created_at
          FROM client_sites ORDER BY client_id, sort_order, id`
       )
-      .all<{ id: number; client_id: number; name: string; address: string; suburb: string; state: string; postcode: string; kind: string; occupants: number; crime_factor: number; hours: string; notes: string; created_at: string }>(),
+      .all<{ id: number; client_id: number; name: string; address: string; suburb: string; state: string; postcode: string; kind: string; occupants: number; crime_factor: number; lga: string; hours: string; notes: string; created_at: string }>(),
     db
       .prepare(`SELECT id, site_id, name, sort_order, height_m, width_m, plan_file_id, plan_w, plan_h FROM site_levels ORDER BY site_id, sort_order, id`)
       .all<{ id: number; site_id: number; name: string; sort_order: number; height_m: number; width_m: number; plan_file_id: number | null; plan_w: number | null; plan_h: number | null }>(),
@@ -673,6 +674,7 @@ export async function getThreatModels(db: D1Database) {
         kind: r.kind,
         occupants: r.occupants,
         crimeFactor: r.crime_factor,
+        lga: r.lga,
         hours: r.hours,
         notes: r.notes,
         createdAt: r.created_at,
@@ -732,7 +734,7 @@ export async function getThreatModels(db: D1Database) {
 
 export async function getPortal(db: D1Database, email: string, now = new Date()): Promise<PortalData> {
   const today = todaySydney(now);
-  const [employees, clients, deals, opsColumns, roles, candidates, regions, feed, models] = await Promise.all([
+  const [employees, clients, deals, opsColumns, roles, candidates, regions, feed, models, crime] = await Promise.all([
     getEmployees(db, today),
     getClients(db),
     getDeals(db),
@@ -742,6 +744,7 @@ export async function getPortal(db: D1Database, email: string, now = new Date())
     getRegions(db),
     getFeed(db, today),
     getThreatModels(db),
+    getCrime(db),
   ]);
   return {
     me: { email },
@@ -756,5 +759,6 @@ export async function getPortal(db: D1Database, email: string, now = new Date())
     regions,
     feed,
     ...models,
+    crime,
   };
 }

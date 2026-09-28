@@ -55,7 +55,7 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
       make that task wait on this one, or use the Dependencies section in the
       task panel. Arrows join linked tasks; a dashed red arrow means the
       dependent starts before its predecessor is due. Loops are refused.
-- **Recruitment (applicant tracking, in the style of Workable):**
+- **People → Recruitment (applicant tracking, in the style of Workable):**
   - **Jobs list:** each job shows its state (Draft, Published, On hold,
     Closed) and candidate counts for all seven pipeline stages. Those stages
     are Sourced, Applied, Phone screen, Licence check, Interview, Offer and
@@ -87,7 +87,7 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
     Negotiation → Closed won or lost) with stage totals, win probabilities
     and a weighted forecast. Dragging a deal to Closed won makes the company
     a Customer, and an open deal lifts a Lead to Opportunity.
-- **Threat models (risk quantification across physical, personnel and cyber):**
+- **Threat Modelling (risk quantification across physical, personnel and cyber):**
   - **Portfolio:** every client ranked by expected annual loss, with its mix
     by domain, its 1-in-10-year loss and its top risk.
   - **Risk profile per client:**
@@ -121,6 +121,21 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
       entry point → zone → asset. Physical threats use physical entries and
       cyber threats use network and remote access. Line weight is expected
       loss, and each threat shows the controls in place as barriers.
+  - **Location (NSW):** give a site its council area (LGA) and its
+    crime-driven threats are sized from BOCSAR's recorded crime rates for
+    that LGA against the NSW rate, per offence:
+    - **Break-in:** non-dwelling break and enter (dwelling break and enter
+      for residential sites).
+    - **Retail theft:** steal from retail store.
+    - **Robbery:** all robbery kinds combined.
+    - **Vandalism and arson:** malicious damage to property.
+    - **Vehicle theft:** motor vehicle theft.
+    - **Staff assault:** non-domestic assault.
+
+    Rates are per resident, so business districts read high; factors are held
+    between ×0.25 and ×6. Each site shows its crime profile. Threats without
+    a matching offence (protest, terrorism, cyber) take ×1. The manual crime
+    factor applies only where no LGA data applies.
   - **Library:** 29 threats and 43 controls. Each threat has a reference
     rate, a loss range by organisation size, and the evidence behind them;
     each control has what it reduces and by how much.
@@ -188,6 +203,31 @@ Anchors:
 Control costs are indicative Sydney prices, to be replaced with quotes when
 applying a control. The library is data in `shared/threatLibrary.ts`: to
 update a figure, change it there, cite the source and run the engine tests.
+
+## NSW crime statistics
+
+`worker/crime.ts` loads BOCSAR's **Local area rankings** workbook, which has
+rates per 100,000 by LGA.
+
+- **Automatic:** a cron trigger checks every 10 minutes and downloads weekly,
+  or every six hours while a download is failing. Changing the parser version
+  forces an immediate retry.
+- **Manual:** use **Refresh from BOCSAR**, or **Upload workbook** with a copy
+  downloaded from BOCSAR.
+- **Parsing:** the parser reads the xlsx directly (zip + XML) and finds the
+  LGA column and the rate column for each offence from the header rows. It
+  handles wide layouts (per-offence column groups, several years; the latest
+  year wins) and long layouts (one row per LGA and offence). If there is no
+  NSW row, it derives the NSW rate from counts.
+- **Diagnostics:** every attempt records the sheets, header rows and matched
+  columns in `crime_meta.detail`, so a change in BOCSAR's layout can be
+  diagnosed.
+
+## People
+
+Employees and Recruitment are one module, **People**, at
+`/people?view=employees|recruitment`. The old `/employees` and
+`/recruitment` addresses redirect, keeping their parameters.
 
 ## Local development
 
@@ -298,11 +338,11 @@ could be left on in production.
 ## Project layout
 
 ```
-worker/         Cloudflare Worker (Hono): auth, reads (db.ts), writes (writes.ts), files (files.ts), threat models (threats.ts)
-shared/threatLibrary.ts, shared/risk.ts  Threat and control library; quantification engine
+worker/         Cloudflare Worker (Hono): auth, reads (db.ts), writes (writes.ts), files (files.ts), threat modelling (threats.ts)
+shared/threatLibrary.ts, shared/risk.ts, shared/crime.ts  Threat and control library; quantification engine; NSW crime location factors
 shared/types.ts Types shared between the Worker and the React app
 src/            React app (pages/, components/, actions/, lib/)
 src/styles/ds/  Sandstone design system tokens + component CSS (ported as-is)
-migrations/     D1 schema (0002: dates, audit log, regions; 0003: three-section board, task fields, subtasks; 0004: milestones, dependencies; 0005: applicant tracking and CRM; 0006: CV tables shared with the careers site; 0007: drops the audit log, as the portal has one user; 0008: threat modelling)
+migrations/     D1 schema (0002: dates, audit log, regions; 0003: three-section board, task fields, subtasks; 0004: milestones, dependencies; 0005: applicant tracking and CRM; 0006: CV tables shared with the careers site; 0007: drops the audit log, as the portal has one user; 0008: threat modelling; 0009: NSW crime statistics and site LGAs)
 seed/           Fictional demo data for local development
 ```

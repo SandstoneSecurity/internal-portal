@@ -56,10 +56,10 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     const cmds: Command[] = [
       { id: "nav-control", group: "Jump to", label: "Control", icon: <LayoutDashboard size={15} />, run: go("/"), keywords: "home dashboard" },
       { id: "nav-ops", group: "Jump to", label: "Operations", icon: <Route size={15} />, run: go("/operations"), keywords: "board work timeline" },
-      { id: "nav-rec", group: "Jump to", label: "Recruitment", icon: <UserPlus size={15} />, run: go("/recruitment"), keywords: "roles candidates hiring" },
-      { id: "nav-emp", group: "Jump to", label: "Employees", icon: <Users size={15} />, run: go("/employees"), keywords: "staff officers register" },
+      { id: "nav-rec", group: "Jump to", label: "People · Recruitment", icon: <UserPlus size={15} />, run: go("/people?view=recruitment"), keywords: "roles candidates hiring jobs" },
+      { id: "nav-emp", group: "Jump to", label: "People · Employees", icon: <Users size={15} />, run: go("/people?view=employees"), keywords: "staff officers register personnel" },
       { id: "nav-cli", group: "Jump to", label: "Clients", icon: <Building2 size={15} />, run: go("/clients"), keywords: "accounts crm" },
-      { id: "nav-risk", group: "Jump to", label: "Threat models", icon: <ShieldHalf size={15} />, run: go("/risk"), keywords: "risk threat model sites library quantification" },
+      { id: "nav-risk", group: "Jump to", label: "Threat Modelling", icon: <ShieldHalf size={15} />, run: go("/risk"), keywords: "risk threat model sites library quantification" },
       { id: "nav-int", group: "Jump to", label: "Intelligence", icon: <MapPin size={15} />, run: go("/intelligence"), keywords: "feed map incidents" },
       { id: "act-work", group: "Actions", label: "Raise work", icon: <Plus size={15} />, run: () => actions.raiseWork(), keywords: "new task item op" },
       { id: "act-role", group: "Actions", label: "Create job", icon: <Plus size={15} />, run: actions.postRole, keywords: "job vacancy role post" },
@@ -80,7 +80,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       { id: "act-out", group: "Actions", label: "Sign out", icon: <LogOut size={15} />, run: () => (window.location.href = "/cdn-cgi/access/logout"), keywords: "logout" },
     ];
     for (const e of data.employees)
-      cmds.push({ id: `emp-${e.id}`, group: "Employees", label: e.name, hint: `${e.role} · ${e.status}`, icon: <Users size={15} />, keywords: `${e.site} ${e.cls}`, run: go(`/employees?id=${e.id}`) });
+      cmds.push({ id: `emp-${e.id}`, group: "Employees", label: e.name, hint: `${e.role} · ${e.status}`, icon: <Users size={15} />, keywords: `${e.site} ${e.cls}`, run: go(`/people?view=employees&id=${e.id}`) });
     for (const c of data.clients)
       cmds.push({ id: `cli-${c.id}`, group: "Clients", label: c.org, hint: `${c.sector} · ${c.status}`, icon: <Building2 size={15} />, keywords: c.meta, run: go(`/clients?id=${c.id}`) });
     for (const s of data.sites)
@@ -97,9 +97,9 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       for (const k of col.cards)
         cmds.push({ id: `op-${k.id}`, group: "Work items", label: `${k.ref} — ${k.title}`, hint: col.label, icon: <Route size={15} />, keywords: `${k.site} ${k.line} ${k.who}`, run: go(`/operations?card=${k.id}`) });
     for (const r of data.roles)
-      cmds.push({ id: `role-${r.id}`, group: "Jobs", label: r.title, hint: `${r.status} · ${r.location || r.department}`, icon: <Briefcase size={15} />, keywords: `${r.meta} ${r.department}`, run: go(`/recruitment?role=${r.id}`) });
+      cmds.push({ id: `role-${r.id}`, group: "Jobs", label: r.title, hint: `${r.status} · ${r.location || r.department}`, icon: <Briefcase size={15} />, keywords: `${r.meta} ${r.department}`, run: go(`/people?view=recruitment&role=${r.id}`) });
     for (const c of data.candidates)
-      cmds.push({ id: `cand-${c.id}`, group: "Candidates", label: c.name, hint: c.headline || c.lic, icon: <UserPlus size={15} />, keywords: `${c.email} ${c.source} ${c.location}`, run: go(`/recruitment?role=${c.roleId}&candidate=${c.id}`) });
+      cmds.push({ id: `cand-${c.id}`, group: "Candidates", label: c.name, hint: c.headline || c.lic, icon: <UserPlus size={15} />, keywords: `${c.email} ${c.source} ${c.location}`, run: go(`/people?view=recruitment&role=${c.roleId}&candidate=${c.id}`) });
     for (const x of data.deals)
       cmds.push({ id: `deal-${x.id}`, group: "Deals", label: x.name, hint: x.stage, icon: <Building2 size={15} />, keywords: data.clients.find((c) => c.id === x.clientId)?.org, run: go(`/clients?view=deals&deal=${x.id}`) });
     for (const f of data.feed)

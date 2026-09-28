@@ -7,10 +7,9 @@ import { usePortalData } from "./lib/DataProvider";
 import { page } from "./lib/motion";
 import { ClientsPage } from "./pages/ClientsPage";
 import { ControlPage } from "./pages/ControlPage";
-import { EmployeesPage } from "./pages/EmployeesPage";
 import { IntelligencePage } from "./pages/IntelligencePage";
 import { OperationsPage } from "./pages/OperationsPage";
-import { RecruitmentPage } from "./pages/RecruitmentPage";
+import { PeoplePage, PeopleRedirect } from "./pages/PeoplePage";
 
 // The threat-modelling workspace is large and only some visits need it.
 const RiskPage = lazy(() => import("./pages/risk/RiskPage").then((m) => ({ default: m.RiskPage })));
@@ -60,8 +59,9 @@ export function App() {
             <Routes location={location}>
               <Route path="/" element={<ControlPage />} />
               <Route path="/operations" element={<OperationsPage />} />
-              <Route path="/recruitment" element={<RecruitmentPage />} />
-              <Route path="/employees" element={<EmployeesPage />} />
+              <Route path="/people" element={<PeoplePage />} />
+              <Route path="/recruitment" element={<PeopleRedirect view="recruitment" />} />
+              <Route path="/employees" element={<PeopleRedirect view="employees" />} />
               <Route path="/clients" element={<ClientsPage />} />
               <Route
                 path="/risk"

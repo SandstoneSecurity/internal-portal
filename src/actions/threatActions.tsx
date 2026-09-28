@@ -9,8 +9,9 @@ import { useToast } from "../components/ui/Toast";
 import { ApiError, send } from "../lib/api";
 import { usePortalData } from "../lib/DataProvider";
 import { compactAud, frequencyLabel, meanOf } from "../lib/riskModel";
+import { OFFENCE_LABEL, threatLocation } from "../../shared/crime";
 import { useActions } from "./ActionHost";
-import { SUBTYPES, siteFields, siteInitial } from "./threatFields";
+import { SUBTYPES, guessArea, siteFields, siteInitial } from "./threatFields";
 
 const num = (v: unknown): number | null => (v === "" || v === undefined || v === null ? null : Number(v));
 const KIND_LABEL: Record<TmElementKind, string> = { zone: "zone", asset: "asset", entry: "entry point" };
@@ -96,10 +97,10 @@ export function useThreatActions() {
           eyebrow: "Site",
           title: s.name,
           submitLabel: "Save site",
-          fields: siteFields(),
+          fields: siteFields(undefined, d.crime.areas),
           initial: siteInitial(s),
           submit: async (v) => {
-            await send("PATCH", `/sites/${s.id}`, v);
+            await send("PATCH", `/sites/${s.id}`, { ...v, lga: v.lga || guessArea(d.crime.areas, v.suburb) });
             await done("Site saved", String(v.name));
           },
           danger: { label: "Delete site", run: () => t.deleteSite(s) },
@@ -265,6 +266,31 @@ export function useThreatActions() {
         }
       },
 
+      refreshCrime: async () => {
+        try {
+          const r = await send<{ lgas: number; period: string }>("POST", "/crime/refresh");
+          await done("Crime statistics refreshed", `${r.lgas} NSW LGAs · ${r.period}`);
+        } catch (err) {
+          fail(err);
+        }
+      },
+
+      uploadCrime: async (file: File) => {
+        try {
+          const res = await fetch(`/api/crime/import?name=${encodeURIComponent(file.name)}`, {
+            method: "PUT",
+            credentials: "same-origin",
+            headers: { "X-Sandstone-Portal": "1", "Content-Type": "application/octet-stream" },
+            body: file,
+          });
+          const j = (await res.json().catch(() => ({}))) as { error?: string; lgas?: number; period?: string };
+          if (!res.ok) throw new ApiError(j.error ?? `Import failed (${res.status}).`, res.status);
+          await done("Crime statistics imported", `${j.lgas} NSW LGAs · ${j.period}`);
+        } catch (err) {
+          fail(err);
+        }
+      },
+
       /** One library threat, optionally aimed at an asset. */
       addScenario: async (clientId: number, body: { threatKey: string; siteId: number | null; elementId?: number | null }) => {
         try {
@@ -300,6 +326,8 @@ export function useThreatActions() {
         const threat = r.s.threat;
         const assets = sc.siteId ? d.tmElements.filter((e) => e.siteId === sc.siteId && e.kind === "asset") : [];
         const ref = r.s.referenceRate;
+        const site = sc.siteId ? d.sites.find((x) => x.id === sc.siteId) : undefined;
+        const loc = site && threat ? threatLocation(d.crime, site.lga, threat.key, site.kind) : null;
         actions.openForm({
           eyebrow: threat ? `${DOMAIN_LABEL[threat.domain]} · ${threat.category}` : "Custom scenario",
           title: r.s.name,
@@ -307,6 +335,14 @@ export function useThreatActions() {
           intro: threat ? (
             <>
               Library reference: {frequencyLabel(meanOf(ref))} ({EXPOSURE_LABEL[threat.exposure]} × exposure), {compactAud(meanOf(threat.loss.small))}–{compactAud(meanOf(threat.loss.large))} per event by size. Leave a box blank to keep the library or calibrated value.
+              {loc && site && (
+                <>
+                  {" "}
+                  Location: {site.lga} records {OFFENCE_LABEL[loc.offence].toLowerCase()} at {Math.round(loc.lgaRate).toLocaleString()} per 100,000 against {Math.round(loc.nswRate).toLocaleString()} for NSW, so this site
+                  runs at ×{loc.factor.toFixed(2)}
+                  {loc.raw !== loc.factor ? ` (×${loc.raw.toFixed(1)} held to the model's range)` : ""}.
+                </>
+              )}
             </>
           ) : undefined,
           fields: [

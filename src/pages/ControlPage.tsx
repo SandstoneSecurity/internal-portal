@@ -51,7 +51,7 @@ export function ControlPage() {
     work: [open.length ? late.length / open.length : 0, "breach"],
     licences: [d.employees.length ? expiring.length / d.employees.length : 0, "advisory"],
   };
-  const target: Record<string, string> = { shift: "/employees", sites: "/clients", work: "/operations", licences: "/employees" };
+  const target: Record<string, string> = { shift: "/people?view=employees", sites: "/clients", work: "/operations", licences: "/people?view=employees" };
 
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -199,8 +199,8 @@ export function ControlPage() {
                     style={{ cursor: "pointer" }}
                     role="link"
                     tabIndex={0}
-                    onClick={() => navigate(`/employees?id=${e.id}`)}
-                    onKeyDown={(ev) => registerKeys(ev, () => navigate(`/employees?id=${e.id}`))}
+                    onClick={() => navigate(`/people?view=employees&id=${e.id}`)}
+                    onKeyDown={(ev) => registerKeys(ev, () => navigate(`/people?view=employees&id=${e.id}`))}
                   >
                     <span style={{ flex: 1 }}>{e.name}</span>
                     <span className="pt-mono pt-dim">{e.cls}</span>
@@ -212,7 +212,7 @@ export function ControlPage() {
               })
             )}
             <div className="pt-panel__foot">
-              <button onClick={() => navigate("/employees")} className="sds-btn sds-btn--sm sds-btn--secondary">
+              <button onClick={() => navigate("/people?view=employees")} className="sds-btn sds-btn--sm sds-btn--secondary">
                 Open employee register
               </button>
             </div>

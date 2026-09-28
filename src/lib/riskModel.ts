@@ -14,7 +14,8 @@ import {
   type Simulation,
   type SiteProfile,
 } from "../../shared/risk";
-import { CONTROL_BY_KEY, DOMAINS, THREAT_BY_KEY, type Domain, type Range, type SiteKind } from "../../shared/threatLibrary";
+import { CONTROL_BY_KEY, DOMAINS, THREATS, THREAT_BY_KEY, type Domain, type Range, type SiteKind } from "../../shared/threatLibrary";
+import { threatLocation, type CrimeData } from "../../shared/crime";
 import type { Client, ClientSite, PortalData, RangeOverride, TmControl, TmElement, TmIncident } from "../../shared/types";
 import type { Hue } from "./hues";
 import { usePortal } from "./DataProvider";
@@ -74,7 +75,9 @@ export function buildModel(d: PortalData, clientId: number, trials = 4000): Clie
   const org: OrgProfile = { staff: client.staff, revenue: client.revenue, historyYears: client.historyYears };
   const sites = d.sites.filter((s) => s.clientId === clientId);
   const siteIds = new Set(sites.map((s) => s.id));
-  const profiles = new Map<number, SiteProfile>(sites.map((s) => [s.id, { id: s.id, kind: s.kind as SiteKind, occupants: s.occupants, crimeFactor: s.crimeFactor }]));
+  const profiles = new Map<number, SiteProfile>(
+    sites.map((s) => [s.id, { id: s.id, kind: s.kind as SiteKind, occupants: s.occupants, crimeFactor: s.crimeFactor, locationFactors: siteLocationFactors(d.crime, s) }])
+  );
   const elements = d.tmElements.filter((e) => siteIds.has(e.siteId));
   const elementById = new Map(elements.map((e) => [e.id, e]));
   const incidents = d.tmIncidents.filter((i) => i.clientId === clientId);
@@ -145,6 +148,17 @@ export function buildModel(d: PortalData, clientId: number, trials = 4000): Clie
     recommendations: recommend(resolved, controls, 8),
     totals,
   };
+}
+
+/** Per-threat location factors for a site with an LGA and loaded crime statistics; undefined falls back to the hand-set factor. */
+export function siteLocationFactors(crime: CrimeData, s: ClientSite): Record<string, number> | undefined {
+  if (!s.lga || !crime.rates[s.lga] || !crime.rates.NSW) return undefined;
+  const out: Record<string, number> = {};
+  for (const t of THREATS) {
+    const loc = threatLocation(crime, s.lga, t.key, s.kind);
+    if (loc) out[t.key] = loc.factor;
+  }
+  return out;
 }
 
 export function useClientModel(clientId: number | null): ClientModel | null {
