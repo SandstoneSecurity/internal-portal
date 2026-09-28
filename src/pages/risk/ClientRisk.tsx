@@ -1,9 +1,9 @@
 import { motion } from "motion/react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Building, Layers, Plus } from "lucide-react";
+import { ArrowLeft, Building, Layers, Plus, Search, X } from "lucide-react";
 import { CONSEQUENCE, CONTROL_STATUSES, LIKELIHOOD, pertMean, type RatedScenario } from "../../../shared/risk";
-import { CONTROL_BY_KEY, DOMAINS, DOMAIN_LABEL, SITE_KINDS, SIZE_LABEL, THREAT_BY_KEY, sizeBand, threatsFor, type Domain, type SiteKind } from "../../../shared/threatLibrary";
+import { CONTROLS, CONTROL_BY_KEY, DOMAINS, DOMAIN_LABEL, SITE_KINDS, SIZE_LABEL, THREAT_BY_KEY, sizeBand, type ControlDef, type Domain } from "../../../shared/threatLibrary";
 import type { TmControl } from "../../../shared/types";
 import { useActions } from "../../actions/ActionHost";
 import { useThreatActions } from "../../actions/threatActions";
@@ -15,6 +15,7 @@ import { hueClass } from "../../lib/hues";
 import { list, row } from "../../lib/motion";
 import { DOMAIN_HUE, RATING_HUE, STATUS_HUE, compactAud, frequencyLabel, pct, useClientModel, type ClientModel } from "../../lib/riskModel";
 import { DomainBars, ExceedanceChart, HeatMap, RangeBar } from "./charts";
+import { ScenarioPicker } from "./ScenarioPicker";
 
 const TABS = ["Overview", "Register", "Sites", "Controls", "Incidents"] as const;
 type Tab = (typeof TABS)[number];
@@ -312,82 +313,6 @@ function Register({ m }: { m: ClientModel }) {
   );
 }
 
-/** Library picker: suggests the threats that fit each site's type and the organisation. */
-export function ScenarioPicker({ m, open, onClose, siteId }: { m: ClientModel; open: boolean; onClose: () => void; siteId?: number }) {
-  const t = useThreatActions();
-  const have = useMemo(() => new Set(m.rows.map((r) => `${r.s.threat?.key}@${r.s.siteId ?? ""}`)), [m.rows]);
-  const groups = useMemo(
-    () => [
-      { siteId: null as number | null, label: "Organisation-wide", sub: "Cyber, fraud and people risks that follow the organisation", threats: threatsFor(null) },
-      ...m.sites.map((s) => ({ siteId: s.id as number | null, label: s.name, sub: kindLabel(s.kind), threats: threatsFor(s.kind as SiteKind) })),
-    ].filter((g) => siteId === undefined || g.siteId === siteId || g.siteId === null),
-    [m.sites, siteId]
-  );
-  const [picked, setPicked] = useState<Set<string>>(new Set());
-  const key = (threatKey: string, siteId: number | null) => `${threatKey}@${siteId ?? ""}`;
-  const toggle = (k: string) => setPicked((p) => (p.has(k) ? new Set([...p].filter((x) => x !== k)) : new Set([...p, k])));
-  const suggestAll = () => setPicked(new Set(groups.flatMap((g) => g.threats.map((th) => key(th.key, g.siteId)).filter((k) => !have.has(k)))));
-  const submit = async () => {
-    const items = [...picked].map((k) => {
-      const [threatKey, site] = k.split("@");
-      return { threatKey: threatKey!, siteId: site ? Number(site) : null };
-    });
-    await t.addScenarios(m.client.id, items);
-    setPicked(new Set());
-    onClose();
-  };
-  return (
-    <Modal open={open} onClose={onClose} label="Add threats from the library" className="pt-risk-picker">
-      <header className="pt-risk-picker__head">
-        <div>
-          <div className="pt-eyebrow">Threat library</div>
-          <h2>Add threats to {m.client.org}</h2>
-        </div>
-        <button className="sds-btn sds-btn--sm sds-btn--secondary" onClick={suggestAll}>
-          Select all that apply
-        </button>
-      </header>
-      <div className="pt-risk-picker__body">
-        {groups.map((g) => (
-          <section key={g.label} className="pt-risk-picker__group">
-            <div className="pt-risk-picker__glabel">
-              <b>{g.label}</b>
-              <span className="pt-meta">{g.sub}</span>
-            </div>
-            <div className="pt-risk-picker__grid">
-              {g.threats.map((th) => {
-                const k = key(th.key, g.siteId);
-                const already = have.has(k);
-                return (
-                  <label key={k} className={`pt-risk-pick ${hueClass(DOMAIN_HUE[th.domain])}${already ? " is-have" : ""}`}>
-                    <input type="checkbox" checked={already || picked.has(k)} disabled={already} onChange={() => toggle(k)} />
-                    <span className="pt-risk-pick__box" aria-hidden />
-                    <span className="pt-risk-pick__name">
-                      {th.name}
-                      <span className="pt-meta">{already ? "modelled" : `${DOMAIN_LABEL[th.domain]} · ${th.category}`}</span>
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </section>
-        ))}
-        {m.sites.length === 0 && <p className="pt-risk-note">Add a site to model break-ins, violence, protest and other threats that happen at a place.</p>}
-      </div>
-      <footer className="pt-risk-picker__foot">
-        <span className="pt-meta">{picked.size} selected</span>
-        <span style={{ flex: 1 }} />
-        <button className="sds-btn sds-btn--md sds-btn--ghost" onClick={onClose}>
-          Cancel
-        </button>
-        <button className="sds-btn sds-btn--md sds-btn--primary" disabled={!picked.size} onClick={() => void submit()}>
-          Add {picked.size || ""} {picked.size === 1 ? "scenario" : "scenarios"}
-        </button>
-      </footer>
-    </Modal>
-  );
-}
-
 function Sites({ m }: { m: ClientModel }) {
   const actions = useActions();
   const [, setParams] = useSearchParams();
@@ -520,26 +445,41 @@ function ControlPicker({ m, open, onClose }: { m: ClientModel; open: boolean; on
   const t = useThreatActions();
   const threatKeys = new Set(m.rows.map((r) => r.s.threat?.key));
   const [domain, setDomain] = useState<Domain | "all">("all");
-  const defs = [...CONTROL_BY_KEY.values()].filter((c) => domain === "all" || c.domain === domain);
+  const [q, setQ] = useState("");
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const relevance = (c: ControlDef) => c.mitigates.filter((x) => threatKeys.has(x.threat)).length;
+  const defs = CONTROLS.filter((c) => domain === "all" || c.domain === domain)
+    .filter((c) => words.every((w) => `${c.name} ${c.description} ${c.standard ?? ""}`.toLowerCase().includes(w)))
+    .sort((a, b) => relevance(b) - relevance(a));
   return (
-    <Modal open={open} onClose={onClose} label="Apply a control" className="pt-risk-picker">
-      <header className="pt-risk-picker__head">
-        <div>
+    <Modal open={open} onClose={onClose} label="Apply a control" className="pt-tp">
+      <header className="pt-tp__head">
+        <div className="pt-tp__title">
           <div className="pt-eyebrow">Control library</div>
           <h2>Apply a control</h2>
+          <p>Controls that reduce this client's modelled threats come first.</p>
         </div>
-        <span className="pt-seg" role="radiogroup" aria-label="Domain">
+        <button className="pt-iconbtn" onClick={onClose} aria-label="Close">
+          <X size={16} />
+        </button>
+      </header>
+      <div className="pt-tp__tools">
+        <label className="pt-filter pt-tp__search">
+          <Search size={14} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search controls: CCTV, MFA, training…" aria-label="Search controls" />
+        </label>
+        <span className="pt-seg pt-tp__domains" role="radiogroup" aria-label="Domain">
           {(["all", ...DOMAINS] as const).map((k) => (
             <button key={k} type="button" role="radio" aria-checked={domain === k} className={`pt-seg__btn ${hueClass(k === "all" ? "slate" : DOMAIN_HUE[k])}`} onClick={() => setDomain(k)}>
               {k === "all" ? "All" : DOMAIN_LABEL[k]}
             </button>
           ))}
         </span>
-      </header>
-      <div className="pt-risk-picker__body">
+      </div>
+      <div className="pt-tp__body">
         <ul className="pt-risk-cpick">
           {defs.map((c) => {
-            const relevant = c.mitigates.filter((x) => threatKeys.has(x.threat));
+            const relevant = relevance(c);
             return (
               <li key={c.key} className={hueClass(DOMAIN_HUE[c.domain])}>
                 <button
@@ -555,14 +495,15 @@ function ControlPicker({ m, open, onClose }: { m: ClientModel; open: boolean; on
                     <span className="pt-meta">
                       {c.scope === "site" ? "per site" : "organisation-wide"} · {compactAud(c.capex / 5 + c.opex)} a year
                     </span>
-                  </span>
-                  <span className="pt-risk-cpick__rel">
-                    {relevant.length ? `reduces ${relevant.length} modelled ${relevant.length === 1 ? "threat" : "threats"}` : <span className="pt-dim">no modelled threats</span>}
+                    <span className="pt-risk-cpick__rel">
+                      {relevant ? `Reduces ${relevant} modelled ${relevant === 1 ? "threat" : "threats"}` : <span className="pt-dim">No modelled threats</span>}
+                    </span>
                   </span>
                 </button>
               </li>
             );
           })}
+          {defs.length === 0 && <li className="pt-tp__none">No controls match.</li>}
         </ul>
       </div>
     </Modal>

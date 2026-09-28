@@ -7,6 +7,7 @@
  *
  * Pure functions, no DOM: runs in the browser and in tests.
  */
+import { offencesFor } from "./crime";
 import {
   CONTROL_BY_KEY,
   THREAT_BY_KEY,
@@ -104,12 +105,12 @@ export interface SiteProfile {
   id: number;
   kind: SiteKind;
   occupants: number;
-  /** Local crime relative to the state average (1 = average), set by hand. */
+  /** Local crime relative to the state average (1 = average), set by hand; scales crime-driven threats only. */
   crimeFactor: number;
   /**
    * Per-threat factors from recorded crime at the site's location (LGA rate ÷
-   * state rate). When present they replace the hand-set crime factor; threats
-   * with no measuring offence (terrorism, protest, cyber) take 1.
+   * state rate). Where present they replace the hand-set crime factor; threats
+   * with no measuring offence (terrorism, protest, hazards, cyber) take 1.
    */
   locationFactors?: Partial<Record<string, number>>;
 }
@@ -176,8 +177,10 @@ const merge = (base: Range, o?: Partial<Range> | null): Range | null => {
 /** How many exposure units a scenario has: sites count once, staff in hundreds. */
 export function exposureUnits(threat: ThreatDef, site: SiteProfile | null, org: OrgProfile): number {
   const kindFactor = site ? threat.kindFactor?.[site.kind] ?? 1 : 1;
-  const location = site?.locationFactors ? site.locationFactors[threat.key] ?? 1 : null;
-  if (threat.exposure === "site") return site ? kindFactor * (location ?? site.crimeFactor) : 0;
+  const location = site?.locationFactors?.[threat.key];
+  // The hand-set crime factor stands in for missing statistics, so it only scales threats that recorded crime measures.
+  const crime = site && offencesFor(threat.key, site.kind).length ? site.crimeFactor : 1;
+  if (threat.exposure === "site") return site ? kindFactor * (location ?? crime) : 0;
   if (threat.exposure === "staff100") return ((site ? site.occupants : org.staff) / 100) * kindFactor * (location ?? 1);
   return 1;
 }
