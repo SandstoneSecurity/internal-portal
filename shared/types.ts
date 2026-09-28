@@ -92,6 +92,12 @@ export interface Client {
   lastActivity: string | null;
   contacts: ClientContact[];
   activity: Engagement[];
+  /** Organisation profile for threat modelling. */
+  staff: number;
+  /** Annual revenue in AUD, 0 when unknown. */
+  revenue: number;
+  /** Years of incident history the logged incidents cover (0 = none recorded). */
+  historyYears: number;
 }
 
 /** Deal pipeline stages with win probability, in order. */
@@ -265,6 +271,103 @@ export interface PortalData {
   candidates: Candidate[];
   regions: Region[];
   feed: IntelItem[];
+  sites: ClientSite[];
+  tmElements: TmElement[];
+  tmScenarios: TmScenario[];
+  tmControls: TmControl[];
+  tmIncidents: TmIncident[];
+}
+
+// ── Threat modelling ────────────────────────────────────────────────────────
+export interface SiteLevel {
+  id: number;
+  siteId: number;
+  name: string;
+  order: number;
+  heightM: number;
+  /** Real-world width the floor plan spans, in metres. */
+  widthM: number;
+  plan: { fileId: number; w: number; h: number } | null;
+}
+
+export interface ClientSite {
+  id: number;
+  clientId: number;
+  name: string;
+  address: string;
+  suburb: string;
+  state: string;
+  postcode: string;
+  /** SiteKind from threatLibrary. */
+  kind: string;
+  occupants: number;
+  crimeFactor: number;
+  hours: string;
+  notes: string;
+  createdAt: string;
+  levels: SiteLevel[];
+}
+
+export type TmElementKind = "zone" | "asset" | "entry";
+
+export interface TmElement {
+  id: number;
+  siteId: number;
+  levelId: number | null;
+  kind: TmElementKind;
+  name: string;
+  /** Asset type, zone class or entry type. */
+  subtype: string;
+  value: number;
+  criticality: number;
+  zoneId: number | null;
+  /** Position on the floor plan as fractions (0–1); zones also have a size. */
+  x: number | null;
+  y: number | null;
+  w: number | null;
+  h: number | null;
+  notes: string;
+}
+
+export interface RangeOverride {
+  low: number | null;
+  typical: number | null;
+  high: number | null;
+}
+
+export interface TmScenario {
+  id: number;
+  clientId: number;
+  siteId: number | null;
+  threatKey: string;
+  elementId: number | null;
+  name: string;
+  domain: string;
+  rate: RangeOverride;
+  loss: RangeOverride;
+  notes: string;
+}
+
+export interface TmControl {
+  id: number;
+  clientId: number;
+  siteId: number | null;
+  controlKey: string;
+  status: "In place" | "Planned" | "Proposed";
+  capex: number;
+  opex: number;
+  effectiveness: number;
+  notes: string;
+}
+
+export interface TmIncident {
+  id: number;
+  clientId: number;
+  siteId: number | null;
+  threatKey: string;
+  occurredOn: string;
+  loss: number;
+  description: string;
 }
 
 /** Recruitment pipeline stages, in order; Candidate.stage indexes this list. */

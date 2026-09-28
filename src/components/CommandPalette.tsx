@@ -10,6 +10,7 @@ import {
   Moon,
   Plus,
   Route,
+  ShieldHalf,
   Search,
   Sun,
   UserPlus,
@@ -58,6 +59,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       { id: "nav-rec", group: "Jump to", label: "Recruitment", icon: <UserPlus size={15} />, run: go("/recruitment"), keywords: "roles candidates hiring" },
       { id: "nav-emp", group: "Jump to", label: "Employees", icon: <Users size={15} />, run: go("/employees"), keywords: "staff officers register" },
       { id: "nav-cli", group: "Jump to", label: "Clients", icon: <Building2 size={15} />, run: go("/clients"), keywords: "accounts crm" },
+      { id: "nav-risk", group: "Jump to", label: "Threat models", icon: <ShieldHalf size={15} />, run: go("/risk"), keywords: "risk threat model sites library quantification" },
       { id: "nav-int", group: "Jump to", label: "Intelligence", icon: <MapPin size={15} />, run: go("/intelligence"), keywords: "feed map incidents" },
       { id: "act-work", group: "Actions", label: "Raise work", icon: <Plus size={15} />, run: () => actions.raiseWork(), keywords: "new task item op" },
       { id: "act-role", group: "Actions", label: "Create job", icon: <Plus size={15} />, run: actions.postRole, keywords: "job vacancy role post" },
@@ -65,6 +67,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       { id: "act-emp", group: "Actions", label: "Add employee", icon: <Plus size={15} />, run: actions.addEmployee, keywords: "officer staff hire" },
       { id: "act-cli", group: "Actions", label: "Create company", icon: <Plus size={15} />, run: actions.newClient, keywords: "client customer account" },
       { id: "act-deal", group: "Actions", label: "Create deal", icon: <Plus size={15} />, run: () => actions.newDeal(), keywords: "opportunity pipeline proposal" },
+      { id: "act-site", group: "Actions", label: "Add site", icon: <Plus size={15} />, run: () => actions.addSite(), keywords: "threat model floor plan location" },
       { id: "act-int", group: "Actions", label: "Log an intelligence item", icon: <Plus size={15} />, run: () => actions.logIntel(), keywords: "incident report breach advisory" },
       {
         id: "act-theme",
@@ -80,6 +83,16 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       cmds.push({ id: `emp-${e.id}`, group: "Employees", label: e.name, hint: `${e.role} · ${e.status}`, icon: <Users size={15} />, keywords: `${e.site} ${e.cls}`, run: go(`/employees?id=${e.id}`) });
     for (const c of data.clients)
       cmds.push({ id: `cli-${c.id}`, group: "Clients", label: c.org, hint: `${c.sector} · ${c.status}`, icon: <Building2 size={15} />, keywords: c.meta, run: go(`/clients?id=${c.id}`) });
+    for (const s of data.sites)
+      cmds.push({
+        id: `site-${s.id}`,
+        group: "Sites",
+        label: s.name,
+        hint: `${data.clients.find((c) => c.id === s.clientId)?.org ?? ""} · threat model`,
+        icon: <ShieldHalf size={15} />,
+        keywords: `${s.suburb} ${s.address} ${s.kind}`,
+        run: go(`/risk?client=${s.clientId}&site=${s.id}`),
+      });
     for (const col of data.opsColumns)
       for (const k of col.cards)
         cmds.push({ id: `op-${k.id}`, group: "Work items", label: `${k.ref} — ${k.title}`, hint: col.label, icon: <Route size={15} />, keywords: `${k.site} ${k.line} ${k.who}`, run: go(`/operations?card=${k.id}`) });

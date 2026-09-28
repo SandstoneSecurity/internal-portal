@@ -16,6 +16,8 @@ export interface FieldSpec {
   half?: boolean;
   mono?: boolean;
   max?: number;
+  /** Number fields: the smallest step; a fraction brings up the decimal keypad. */
+  step?: number;
 }
 
 export type FormValues = Record<string, string | number | boolean>;
@@ -190,7 +192,8 @@ export function FormDrawer({ spec, onClose }: { spec: FormSpec | null; onClose: 
                           {...common}
                           className={cls}
                           type={f.type === "date" ? "date" : f.type === "number" ? "number" : "text"}
-                          inputMode={f.type === "number" ? "numeric" : undefined}
+                          inputMode={f.type === "number" ? (f.step && f.step < 1 ? "decimal" : "numeric") : undefined}
+                          step={f.type === "number" ? f.step ?? "any" : undefined}
                           maxLength={f.type === "initials" ? 3 : f.max}
                           placeholder={f.placeholder}
                           value={String(v ?? "")}

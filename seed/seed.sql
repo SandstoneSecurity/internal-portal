@@ -16,6 +16,16 @@ DELETE FROM ops_dependencies;
 DELETE FROM ops_subtasks;
 DELETE FROM ops_cards;
 DELETE FROM ops_columns;
+DELETE FROM tm_incidents;
+DELETE FROM tm_controls;
+DELETE FROM tm_scenarios;
+UPDATE tm_elements SET zone_id = NULL;
+DELETE FROM tm_elements;
+UPDATE site_levels SET plan_file_id = NULL;
+DELETE FROM site_file_chunks;
+DELETE FROM site_files;
+DELETE FROM site_levels;
+DELETE FROM client_sites;
 DELETE FROM client_activity;
 DELETE FROM deals;
 DELETE FROM client_contacts;
@@ -227,3 +237,93 @@ INSERT INTO intel_feed (id, time_label, severity, severity_kind, region_key, hea
 (7, '28 AUG', 'Advisory', 'advisory', 'wag', 'Cluster of vehicle break-ins, Bomen industrial precinct. Mobile patrol frequency increased.', 'NSW Police media', 7),
 (8, '27 AUG', 'Info', 'info', 'bhq', 'Mine site contractor inductions resume 7 September; two officers to re-induct.', 'Client notice', 8),
 (9, '26 AUG', 'Info', 'info', 'tam', 'Regional saleyards precinct upgrade — expression of interest window opens for site security tender.', 'Tender watch', 9);
+
+-- Threat models: a logistics yard with three years of incident history, and a CBD office tower.
+UPDATE clients SET staff = 140, revenue = 60000000, history_years = 3 WHERE id = 4;
+UPDATE clients SET staff = 60, revenue = 18000000 WHERE id = 1;
+
+INSERT INTO client_sites (id, client_id, name, address, suburb, state, postcode, kind, occupants, crime_factor, hours, notes, sort_order, created_at) VALUES
+(1, 4, 'Port Kembla yard', '1 Old Port Road', 'Port Kembla', 'NSW', '2505', 'warehouse', 90, 1.3, '24/7', 'Bonded store, container yard and workshop.', 1, datetime('now', '-400 days')),
+(2, 4, 'Unanderra depot', '18 Five Islands Road', 'Unanderra', 'NSW', '2526', 'industrial', 25, 1.1, 'Business hours', '', 2, datetime('now', '-300 days')),
+(3, 1, 'Kent Street tower', '363 Kent Street', 'Sydney', 'NSW', '2000', 'office', 420, 1.2, '6am–10pm', 'Lobby, 22 office floors, B1–B3 parking.', 1, datetime('now', '-500 days'));
+
+INSERT INTO site_levels (id, site_id, name, sort_order, height_m, width_m) VALUES
+(1, 1, 'Ground floor', 0, 6, 120),
+(2, 1, 'Mezzanine', 1, 3.6, 120),
+(3, 2, 'Ground floor', 0, 5, 60),
+(4, 3, 'Lobby', 0, 5.4, 48),
+(5, 3, 'Level 1', 1, 3.8, 48);
+
+INSERT INTO tm_elements (id, site_id, level_id, kind, name, subtype, value, criticality, zone_id, x, y, w, h, notes, created_at) VALUES
+(1, 1, 1, 'zone', 'Gatehouse', 'Reception', 0, 3, NULL, 0.04, 0.72, 0.16, 0.22, '', datetime('now', '-300 days')),
+(2, 1, 1, 'zone', 'Container yard', 'Operational', 0, 3, NULL, 0.24, 0.08, 0.46, 0.84, '', datetime('now', '-300 days')),
+(3, 1, 1, 'zone', 'Bonded store', 'Secure', 0, 5, NULL, 0.74, 0.08, 0.22, 0.46, '', datetime('now', '-300 days')),
+(4, 1, 1, 'zone', 'Workshop', 'Restricted', 0, 3, NULL, 0.74, 0.60, 0.22, 0.32, '', datetime('now', '-300 days')),
+(5, 1, 1, 'asset', 'Bonded goods', 'stock', 1200000, 5, 3, 0.85, 0.30, NULL, NULL, 'Tobacco and spirits under bond.', datetime('now', '-300 days')),
+(6, 1, 1, 'asset', 'Forklift fleet', 'equipment', 450000, 4, 2, 0.46, 0.55, NULL, NULL, '', datetime('now', '-300 days')),
+(7, 1, 1, 'asset', 'Tools & plant', 'equipment', 120000, 3, 4, 0.84, 0.76, NULL, NULL, '', datetime('now', '-300 days')),
+(8, 1, 2, 'asset', 'Server room', 'it', 200000, 4, NULL, 0.18, 0.30, NULL, NULL, '', datetime('now', '-300 days')),
+(9, 1, 1, 'entry', 'Main gate', 'Gate', 0, 4, 1, 0.12, 0.93, NULL, NULL, '', datetime('now', '-300 days')),
+(10, 1, 1, 'entry', 'Roller door 4', 'Roller door', 0, 3, 3, 0.74, 0.42, NULL, NULL, '', datetime('now', '-300 days')),
+(11, 1, 1, 'entry', 'Rail siding gate', 'Gate', 0, 3, 2, 0.30, 0.08, NULL, NULL, '', datetime('now', '-300 days')),
+(12, 1, 1, 'entry', 'Workshop door', 'Door', 0, 2, 4, 0.74, 0.70, NULL, NULL, '', datetime('now', '-300 days')),
+(13, 1, NULL, 'entry', 'Vendor remote access', 'Remote access', 0, 4, NULL, NULL, NULL, NULL, NULL, 'Forklift telematics vendor VPN.', datetime('now', '-300 days')),
+(14, 3, 4, 'zone', 'Lobby', 'Public', 0, 2, NULL, 0.08, 0.30, 0.50, 0.60, '', datetime('now', '-300 days')),
+(15, 3, 4, 'zone', 'Security control room', 'Secure', 0, 5, NULL, 0.64, 0.30, 0.28, 0.30, '', datetime('now', '-300 days')),
+(16, 3, 4, 'asset', 'Building management system', 'it', 350000, 5, 15, 0.78, 0.44, NULL, NULL, '', datetime('now', '-300 days')),
+(17, 3, 4, 'asset', 'Concierge & lobby staff', 'people', 0, 4, 14, 0.33, 0.62, NULL, NULL, '', datetime('now', '-300 days')),
+(18, 3, 4, 'entry', 'Kent St entrance', 'Door', 0, 4, 14, 0.30, 0.90, NULL, NULL, '', datetime('now', '-300 days')),
+(19, 3, 4, 'entry', 'Car park ramp', 'Car park', 0, 3, 14, 0.06, 0.60, NULL, NULL, '', datetime('now', '-300 days'));
+
+INSERT INTO tm_scenarios (client_id, site_id, threat_key, element_id, created_at) VALUES
+(4, 1, 'break-in', 5, datetime('now', '-300 days')),
+(4, 1, 'equipment-theft', 7, datetime('now', '-300 days')),
+(4, 1, 'vehicle-theft', NULL, datetime('now', '-300 days')),
+(4, 1, 'vandalism', NULL, datetime('now', '-300 days')),
+(4, 1, 'trespass', NULL, datetime('now', '-300 days')),
+(4, 1, 'arson', NULL, datetime('now', '-300 days')),
+(4, 1, 'protest', NULL, datetime('now', '-300 days')),
+(4, 1, 'ot-compromise', NULL, datetime('now', '-300 days')),
+(4, 1, 'lone-worker', NULL, datetime('now', '-300 days')),
+(4, 2, 'break-in', NULL, datetime('now', '-300 days')),
+(4, 2, 'equipment-theft', NULL, datetime('now', '-300 days')),
+(4, NULL, 'bec', NULL, datetime('now', '-300 days')),
+(4, NULL, 'ransomware', NULL, datetime('now', '-300 days')),
+(4, NULL, 'phishing', NULL, datetime('now', '-300 days')),
+(4, NULL, 'data-breach', NULL, datetime('now', '-300 days')),
+(4, NULL, 'internal-fraud', NULL, datetime('now', '-300 days')),
+(4, NULL, 'insider-exfiltration', NULL, datetime('now', '-300 days')),
+(4, NULL, 'supply-chain', NULL, datetime('now', '-300 days')),
+(4, NULL, 'bullying', NULL, datetime('now', '-300 days')),
+(1, 3, 'trespass', NULL, datetime('now', '-300 days')),
+(1, 3, 'occupational-violence', NULL, datetime('now', '-300 days')),
+(1, 3, 'protest', NULL, datetime('now', '-300 days')),
+(1, 3, 'crowded-place-attack', NULL, datetime('now', '-300 days')),
+(1, 3, 'ot-compromise', 16, datetime('now', '-300 days')),
+(1, 3, 'device-theft', NULL, datetime('now', '-300 days')),
+(1, NULL, 'bec', NULL, datetime('now', '-300 days')),
+(1, NULL, 'ransomware', NULL, datetime('now', '-300 days')),
+(1, NULL, 'accidental-disclosure', NULL, datetime('now', '-300 days'));
+
+INSERT INTO tm_controls (client_id, site_id, control_key, status, capex, opex, effectiveness, notes, created_at) VALUES
+(4, 1, 'intrusion-alarm', 'In place', 9000, 1800, 1, '', datetime('now', '-300 days')),
+(4, 1, 'cctv', 'In place', 28000, 3500, 0.8, 'Two cameras on the yard offline since June.', datetime('now', '-300 days')),
+(4, 1, 'perimeter', 'In place', 60000, 1500, 1, '', datetime('now', '-300 days')),
+(4, 1, 'mobile-patrol', 'Planned', 0, 14000, 1, '', datetime('now', '-300 days')),
+(4, 1, 'ot-segmentation', 'Proposed', 8000, 1500, 1, '', datetime('now', '-300 days')),
+(4, NULL, 'e8-mfa', 'In place', 2000, 3000, 1, '', datetime('now', '-300 days')),
+(4, NULL, 'e8-backups', 'In place', 3000, 3000, 1, '', datetime('now', '-300 days')),
+(4, NULL, 'email-security', 'In place', 0, 3000, 1, '', datetime('now', '-300 days')),
+(4, NULL, 'screening', 'In place', 0, 4000, 1, '', datetime('now', '-300 days')),
+(4, NULL, 'awareness', 'Proposed', 0, 4000, 1, '', datetime('now', '-300 days')),
+(1, 3, 'access-control', 'In place', 0, 4000, 1, '', datetime('now', '-300 days')),
+(1, 3, 'static-guard', 'In place', 0, 130000, 1, 'Concierge officer 6am–10pm.', datetime('now', '-300 days')),
+(1, 3, 'cctv', 'In place', 0, 3000, 1, '', datetime('now', '-300 days')),
+(1, NULL, 'e8-mfa', 'Planned', 2000, 2000, 1, '', datetime('now', '-300 days'));
+
+INSERT INTO tm_incidents (client_id, site_id, threat_key, occurred_on, loss, description, created_at) VALUES
+(4, 1, 'break-in', date('now', '-590 days'), 22000, 'Roller door 4 forced; two pallets of spirits taken.', datetime('now')),
+(4, 1, 'equipment-theft', date('now', '-330 days'), 38000, 'Telehandler taken from the yard overnight.', datetime('now')),
+(4, 1, 'equipment-theft', date('now', '-130 days'), 12000, 'Workshop tools.', datetime('now')),
+(4, 1, 'trespass', date('now', '-60 days'), 0, 'Two people found in the container yard at 2am.', datetime('now')),
+(4, NULL, 'phishing', date('now', '-240 days'), 4000, 'Payroll officer credentials phished; reset within hours.', datetime('now'));
