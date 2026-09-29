@@ -95,7 +95,8 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
     - A setup checklist on each client, showing what the model still needs
       and the next step.
     - "i" hints beside every figure and column that explain it in plain
-      English.
+      English: a small square brass-edged button whose popover carries a
+      title and points back at it.
     - A Guide drawer with the steps, how to read the numbers, how to build
       a site model (with keyboard shortcuts), where the figures come from,
       and a glossary. Definitions live once, in `src/pages/risk/Guide.tsx`.
@@ -119,9 +120,21 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
     own history (Gamma–Poisson credibility; the reference rate counts as
     three years of evidence).
   - **Sites:** several per client, each with levels.
-    - **Plan:** upload a floor plan per level as a PDF, PNG, JPEG or WebP.
-      A PDF's first page is rendered at 3,200 px (pdf.js, loaded only when
-      needed), so architects' vector drawings stay sharp.
+    - **Plan:** upload a floor plan as a PDF, PNG, JPEG or WebP. PDF pages
+      are rendered at 3,200 px (pdf.js, loaded only when needed), so
+      architects' vector drawings stay sharp.
+      - **Several levels in one drawing** (`src/lib/planImport.ts`): each
+        PDF page, and each separate plan drawn side by side on a sheet,
+        becomes a candidate level.
+        - Names and bottom-to-top order come from the drawing's titles
+          ("GROUND FLOOR PLAN", "LEVEL 1", "BASEMENT 2", "MEZZANINE"). A
+          title matching an existing level fills that level.
+        - A review dialog shows thumbnails, names, order and what was
+          found; each plan is cropped, scaled from its doors and given its
+          walls.
+        - Separate buildings on one site plan (a gatehouse beside a
+          warehouse) stay one level; so do elevations and sections, which
+          are offered unticked.
       - **Scale:** measure a wall of known length, or accept the scale that
         wall detection suggests from door widths. Lengths read "≈" until the
         scale is set.
@@ -171,7 +184,9 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
     - **Staff assault:** non-domestic assault.
 
     Rates are per resident, so business districts read high; factors are held
-    between ×0.25 and ×6. Each site shows its crime profile. Threats without
+    between ×0.25 and ×6. Each site shows its crime profile: the council
+    area and period on one line, then each offence as a bar either side of
+    the NSW rate (clay above, eucalypt below). Threats without
     a matching offence (protest, terrorism, hazards, cyber) take ×1. The
     manual crime factor scales only crime-driven threats, and only where no
     LGA data applies.

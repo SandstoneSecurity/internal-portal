@@ -255,7 +255,14 @@ export function GuideDrawer() {
                 <li>Aim a threat at a specific asset from the asset's inspector to cap losses at what it's worth.</li>
                 <li>Log real incidents as they happen. After a few years the model reflects the client, not the national average.</li>
                 <li>
-                  Look for <span className="pt-hint pt-hint--static">i</span> beside figures: hover or tap for what they mean.
+                  Look for{" "}
+                  <span className="pt-hint pt-hint--static" aria-label="the info mark">
+                    <svg viewBox="0 0 16 16" aria-hidden>
+                      <rect x="7" y="3.2" width="2" height="2" />
+                      <rect x="7" y="6.6" width="2" height="6.2" />
+                    </svg>
+                  </span>{" "}
+                  beside figures: hover or tap for what they mean.
                 </li>
               </ul>
             </Section>
@@ -293,7 +300,7 @@ export function GuideDrawer() {
           <>
             <Section title="1. Get the plan in">
               <p>
-                Upload the floor plan for each level as a PDF, PNG or JPEG. Architects' PDFs are best: they're vector drawings, rendered sharp. For a multi-page PDF the first page is used, so upload each floor's page to its own level.
+                Upload the drawing as a PDF, PNG or JPEG. Architects' PDFs are best: they're vector drawings, rendered sharp. If it shows more than one level (a page per floor, or floors drawn side by side), you're offered a level for each, named and ordered from the titles on the drawing ("Ground floor", "Level 1") with their walls already found. Separate buildings on one site plan stay together.
               </p>
             </Section>
             <Section title="2. Set the scale">

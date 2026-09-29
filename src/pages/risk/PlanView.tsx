@@ -42,6 +42,7 @@ import { useThreatActions } from "../../actions/threatActions";
 import { hueClass, type Hue } from "../../lib/hues";
 import type { GeometryApi } from "../../lib/useGeometry";
 import { DetectPanel, type Proposal } from "./DetectPanel";
+import { PlanImport, type ImportSource } from "./PlanImport";
 import { GuideButton, Term } from "./Guide";
 
 export type Tool = "select" | "wall" | "door" | "window" | "measure" | "camera" | "zone" | "asset" | "entry";
@@ -165,7 +166,8 @@ export function PlanView({
   const [detecting, setDetecting] = useState(false);
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [over, setOver] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [importing, setImporting] = useState<ImportSource | null>(null);
+  const busy = importing !== null;
   const viewport = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLDivElement>(null);
   const covCanvas = useRef<HTMLCanvasElement>(null);
@@ -627,11 +629,10 @@ export function PlanView({
   };
   const elPos = (el: TmElement) => (drag?.kind === "el" && drag.id === el.id ? { x: drag.x, y: drag.y } : { x: el.x ?? 0, y: el.y ?? 0 });
 
+  // Uploads go through the importer: a drawing with several levels offers to split them.
   const upload = async (fl: File | undefined) => {
     if (!fl || !level) return;
-    setBusy(true);
-    await t.uploadPlan(level, fl);
-    setBusy(false);
+    setImporting({ kind: "file", file: fl });
   };
 
   // Walls as drawn while an end or the whole wall is being dragged.
@@ -770,6 +771,11 @@ export function PlanView({
 
       {detecting && plan && level && (
         <DetectPanel
+          onSplit={() => {
+            setDetecting(false);
+            setProposal(null);
+            setImporting({ kind: "plan", url: `/api/plans/${plan.fileId}`, name: level.name });
+          }}
           level={level}
           frame={f}
           geo={geo}
@@ -956,6 +962,8 @@ export function PlanView({
         </div>
         <ScaleBar ppm={ppm} note={!!scaleNote} />
       </div>
+
+      {importing && level && <PlanImport site={site} level={level} source={importing} onClose={() => setImporting(null)} />}
 
       <div className="pt-pl-foot">
         <span className="pt-pl-layers">

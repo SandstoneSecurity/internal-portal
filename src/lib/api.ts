@@ -48,3 +48,14 @@ export async function send<T = { ok: true; id?: number; ref?: string }>(
   });
   return parse<T>(res);
 }
+
+/** Uploads a floor plan image as the raw body; the Worker checks its bytes. */
+export async function putPlan(levelId: number, blob: Blob, w: number, h: number, name: string): Promise<{ fileId: number; w: number; h: number }> {
+  const res = await fetch(`/api/levels/${levelId}/plan?w=${w}&h=${h}&name=${encodeURIComponent(name)}`, {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: { "X-Sandstone-Portal": "1", "Content-Type": blob.type },
+    body: blob,
+  });
+  return parse(res);
+}

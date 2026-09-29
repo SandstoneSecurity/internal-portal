@@ -410,8 +410,10 @@ export function ModelSummary({ level, frame, geo, cameras, zones, entries, onMea
   const windows = geo.openings.length - doors;
   return (
     <>
-      <SectionHead title="Building model" meta={level.name} />
+      <SectionHead title="Building model" />
       <dl className="pt-risk-insp__facts">
+        <dt>Level</dt>
+        <dd>{level.name}</dd>
         <dt>Scale</dt>
         <dd>
           {level.scaleSet ? (
