@@ -28,6 +28,9 @@ export const MAX_PAGES = 12;
 /** Resolution the sheet is read at for finding plans and walls. */
 const READ_EDGE = 2200;
 
+/** Where pdf.js finds its image decoders, colour profiles and standard fonts (copied there at build; see vite.config.ts). */
+const PDFJS_ASSETS = { wasmUrl: "/pdfjs/wasm/", iccUrl: "/pdfjs/iccs/", standardFontDataUrl: "/pdfjs/standard_fonts/" };
+
 /** Renders each page of a PDF (with its text) or reads an image, at up to `longEdge` pixels. */
 export async function readSheets(file: File, longEdge: number, onPage?: (n: number, of: number) => void): Promise<{ sheets: Sheet[]; pages: number }> {
   const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
@@ -47,7 +50,7 @@ export async function readSheets(file: File, longEdge: number, onPage?: (n: numb
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const { default: PdfWorker } = await import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker");
   if (!pdfjs.GlobalWorkerOptions.workerPort) pdfjs.GlobalWorkerOptions.workerPort = new PdfWorker();
-  const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
+  const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), ...PDFJS_ASSETS });
   const doc = await task.promise;
   try {
     const sheets: Sheet[] = [];
@@ -243,21 +246,33 @@ function thumbOf(canvas: HTMLCanvasElement, box: [number, number, number, number
   return t.toDataURL("image/png");
 }
 
-/** A crop of a sheet as an image file for upload. */
+/** Largest plan file the server takes is 8 MB; this leaves room. */
+const PLAN_BYTES = 7.5 * 1024 * 1024;
+
+/**
+ * A crop of a sheet as an image file for upload: WebP where the browser can write it, else PNG. A dense scan
+ * that comes out too big is sent as JPEG, then smaller, until it fits.
+ */
 export async function cropBlob(canvas: HTMLCanvasElement, box: [number, number, number, number]): Promise<{ blob: Blob; w: number; h: number }> {
-  const w = Math.max(16, Math.round(box[2] - box[0]));
-  const h = Math.max(16, Math.round(box[3] - box[1]));
-  const c = document.createElement("canvas");
-  c.width = w;
-  c.height = h;
-  const ctx = c.getContext("2d")!;
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(0, 0, w, h);
-  ctx.drawImage(canvas, box[0], box[1], w, h, 0, 0, w, h);
-  const webp = await new Promise<Blob | null>((r) => c.toBlob(r, "image/webp", 0.92));
-  const blob = webp && webp.type === "image/webp" ? webp : await new Promise<Blob | null>((r) => c.toBlob(r, "image/png"));
-  if (!blob) throw new Error("Couldn't prepare that plan.");
-  return { blob, w, h };
+  const cw = Math.max(16, Math.round(box[2] - box[0]));
+  const ch = Math.max(16, Math.round(box[3] - box[1]));
+  const encode = (c: HTMLCanvasElement, type: string, q?: number) => new Promise<Blob | null>((r) => c.toBlob(r, type, q));
+  for (let k = 1; ; k *= 0.8) {
+    const w = Math.max(16, Math.round(cw * k));
+    const h = Math.max(16, Math.round(ch * k));
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext("2d")!;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(canvas, box[0], box[1], cw, ch, 0, 0, w, h);
+    const webp = await encode(c, "image/webp", 0.92);
+    let blob = webp && webp.type === "image/webp" ? webp : await encode(c, "image/png");
+    if (blob && blob.size > PLAN_BYTES) blob = await encode(c, "image/jpeg", 0.88);
+    if (!blob) throw new Error("Couldn't prepare that plan.");
+    if (blob.size <= PLAN_BYTES || w < 800) return { blob, w, h };
+  }
 }
 
 /** Detected walls (image pixels) as level geometry: points as fractions of the image, sizes in metres. */
