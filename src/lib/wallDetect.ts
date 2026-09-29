@@ -57,6 +57,12 @@ export interface DetectResult {
   style: "solid" | "outline";
   /** Scale suggested from door widths (a door is about 0.9 m), when there are enough doors. */
   pxPerMSuggest: number | null;
+  /**
+   * Separate drawings on the sheet: groups of connected walls with clear paper
+   * between them, largest first. A sheet with a ground floor and a first floor
+   * side by side gives two.
+   */
+  plans: { walls: number[]; bbox: [number, number, number, number]; total: number }[];
 }
 
 const INF = 1e9;
@@ -302,6 +308,10 @@ export function detectWalls(img: RasterImage, opts: DetectOptions = {}): DetectR
   const thr = Math.max(60, Math.min(200, otsu(gray)));
   const ink = new Uint8Array(w * h);
   for (let i = 0; i < ink.length; i++) ink[i] = gray[i]! < thr ? 1 : 0;
+  // Thin lines (door swings, glazing) render as light grey when a sheet is read small: count any mark as evidence.
+  const faint = new Uint8Array(w * h);
+  const faintThr = Math.min(235, thr + 70);
+  for (let i = 0; i < faint.length; i++) faint[i] = gray[i]! < faintThr ? 1 : 0;
   const minDim = Math.min(w, h);
   const minWidth = Math.max(3, Math.round(minDim / 500));
 
@@ -389,6 +399,9 @@ export function detectWalls(img: RasterImage, opts: DetectOptions = {}): DetectR
   const out: DetectedWall[] = [];
   // Openings keep their centre point until the walls are snapped, then take their place along the wall.
   const gapsFound: { wall: number; x: number; y: number; w: number; kind: DetectedOpening["kind"] }[] = [];
+  // The walls' own soft edges aren't evidence of anything: skip marks within 2 px of a wall.
+  let near: Uint8Array | null = null;
+  const nearWalls = () => (near ??= dilate(walls, w, h, 2));
   /** What a gap in a wall is: a swing arc beside it marks a door, glazing lines inside it a window. */
   const classify = (horizontal: boolean, band: Band, g0: number, g1: number): DetectedOpening["kind"] => {
     const gw = g1 - g0;
@@ -397,9 +410,12 @@ export function detectWalls(img: RasterImage, opts: DetectOptions = {}): DetectR
     const [ax0, ax1, ay0, ay1, bx0, bx1, by0, by1, ix0, ix1, iy0, iy1] = horizontal
       ? [g0, g1, c - half - gw, c - half - 1, g0, g1, c + half + 1, c + half + gw, g0 + 1, g1 - 1, c - half, c + half]
       : [c - half - gw, c - half - 1, g0, g1, c + half + 1, c + half + gw, g0, g1, c - half, c + half, g0 + 1, g1 - 1];
-    const side = Math.max(inkNear(ink, walls, w, h, ax0, ay0, ax1, ay1), inkNear(ink, walls, w, h, bx0, by0, bx1, by1));
-    const inside = inkNear(ink, walls, w, h, ix0, iy0, ix1, iy1);
-    return side >= 1.2 * gw ? "door" : inside >= 0.8 * gw ? "window" : "opening";
+    // Outlined drawings fill lettering into bars whose soft edges would read as evidence: use firm ink there.
+    const marks = style === "outline" ? ink : faint;
+    const side = Math.max(inkNear(marks, nearWalls(), w, h, ax0, ay0, ax1, ay1), inkNear(marks, nearWalls(), w, h, bx0, by0, bx1, by1));
+    const inside = inkNear(marks, nearWalls(), w, h, ix0, iy0, ix1, iy1);
+    // Glazing lines inside the gap are the surer sign; a swing arc beside it marks a door.
+    return inside >= 0.8 * gw ? "window" : side >= 1.2 * gw ? "door" : "opening";
   };
   for (const horizontal of [true, false]) {
     const list = found.filter((b) => b.horizontal === horizontal).sort((a, b) => a.c - b.c || a.s0 - b.s0);
@@ -502,6 +518,47 @@ export function detectWalls(img: RasterImage, opts: DetectOptions = {}): DetectR
       kept.push(x);
     }
   });
+  // Group the kept walls into separate drawings; groups whose outlines overlap are one building.
+  const byRoot = new Map<number, number[]>();
+  out.forEach((_, i) => {
+    if (!keep[i]) return;
+    const r = find(i);
+    byRoot.set(r, [...(byRoot.get(r) ?? []), index.get(i)!]);
+  });
+  const boxOf = (ids: number[]): [number, number, number, number] => {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const id of ids) {
+      const wl = kept[id]!;
+      for (const q of [wl.a, wl.b]) {
+        x0 = Math.min(x0, q[0] - wl.t / 2);
+        y0 = Math.min(y0, q[1] - wl.t / 2);
+        x1 = Math.max(x1, q[0] + wl.t / 2);
+        y1 = Math.max(y1, q[1] + wl.t / 2);
+      }
+    }
+    return [x0, y0, x1, y1];
+  };
+  let drawings = [...byRoot.values()].map((ids) => ({ walls: ids, bbox: boxOf(ids), total: ids.reduce((n, id) => n + lenOf(kept[id]!), 0) }));
+  const pad = minDim * 0.01;
+  for (let merged = true; merged; ) {
+    merged = false;
+    outer: for (let i = 0; i < drawings.length; i++)
+      for (let j = i + 1; j < drawings.length; j++) {
+        const a = drawings[i]!.bbox;
+        const b = drawings[j]!.bbox;
+        if (a[0] - pad <= b[2] && b[0] - pad <= a[2] && a[1] - pad <= b[3] && b[1] - pad <= a[3]) {
+          const ids = [...drawings[i]!.walls, ...drawings[j]!.walls];
+          drawings[i] = { walls: ids, bbox: boxOf(ids), total: drawings[i]!.total + drawings[j]!.total };
+          drawings.splice(j, 1);
+          merged = true;
+          break outer;
+        }
+      }
+  }
+  drawings = drawings.sort((x, y) => y.total - x.total);
+  const top = drawings[0]?.total ?? 0;
+  const plans = drawings.filter((d) => d.total >= top * 0.2 && d.walls.length >= 3);
+
   out.length = 0;
   out.push(...kept);
   const survivors = gapsFound.filter((g) => index.has(g.wall)).map((g) => ({ ...g, wall: index.get(g.wall)! }));
@@ -517,5 +574,5 @@ export function detectWalls(img: RasterImage, opts: DetectOptions = {}): DetectR
   });
   const doors = openings.filter((o) => o.kind === "door").map((o) => o.w).sort((x, y) => x - y);
   const pxPerMSuggest = doors.length >= 2 ? doors[Math.floor(doors.length / 2)]! / 0.9 : null;
-  return { walls: out, openings, thickness: T, style, pxPerMSuggest };
+  return { walls: out, openings, thickness: T, style, pxPerMSuggest, plans };
 }

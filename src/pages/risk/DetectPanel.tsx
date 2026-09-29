@@ -4,6 +4,7 @@ import { newId, type Frame, type LevelGeometry, type OpeningKind, type Pt } from
 import type { SiteLevel } from "../../../shared/types";
 import { useThreatActions } from "../../actions/threatActions";
 import { detectWalls, type DetectResult } from "../../lib/wallDetect";
+import { sheetHasLevels, toGeometry } from "../../lib/planImport";
 
 /** Walls found on the plan, in plan fractions (thickness in metres), shown before they're accepted. */
 export interface Proposal {
@@ -21,6 +22,7 @@ export function DetectPanel({
   onPreview,
   onAccept,
   onClose,
+  onSplit,
 }: {
   level: SiteLevel;
   frame: Frame;
@@ -28,6 +30,8 @@ export function DetectPanel({
   onPreview: (p: Proposal | null) => void;
   onAccept: (g: LevelGeometry) => void;
   onClose: () => void;
+  /** Opens the importer to make each separate plan on this sheet its own level. */
+  onSplit: () => void;
 }) {
   const t = useThreatActions();
   const [style, setStyle] = useState<"auto" | "solid" | "outline">("auto");
@@ -111,18 +115,8 @@ export function DetectPanel({
   const accept = () => {
     if (!result || !img.current) return;
     const { w, h } = img.current;
-    const m = mPerPx();
-    const ids = result.walls.map(() => newId("w"));
-    const walls = result.walls.map((x, i) => {
-      const tm = Math.max(0.05, Math.min(0.6, x.t * m));
-      return { id: ids[i]!, a: [x.a[0] / w, x.a[1] / h] as Pt, b: [x.b[0] / w, x.b[1] / h] as Pt, t: Math.round(tm * 100) / 100, kind: tm >= 0.15 ? ("wall" as const) : ("partition" as const), h: null };
-    });
-    const openings = result.openings.map((o) => {
-      const wm = Math.max(0.5, Math.min(8, o.w * m));
-      const kind: OpeningKind = o.kind === "window" ? "window" : o.kind === "opening" ? "opening" : wm > 2.4 ? "roller" : wm > 1.4 ? "double" : "door";
-      return { id: newId("o"), wall: ids[o.wall]!, at: o.at, w: Math.round(wm * 100) / 100, kind };
-    });
-    onAccept(mode === "replace" ? { walls, openings } : { walls: [...geo.walls, ...walls], openings: [...geo.openings, ...openings] });
+    const g = toGeometry(result, w, h, mPerPx(), newId);
+    onAccept(mode === "replace" ? g : { walls: [...geo.walls, ...g.walls], openings: [...geo.openings, ...g.openings] });
   };
 
   const doors = result?.openings.filter((o) => o.kind === "door").length ?? 0;
@@ -171,6 +165,14 @@ export function DetectPanel({
           <span>
             Found <b>{result.walls.length}</b> walls, <b>{doors}</b> doors and <b>{windows}</b> windows
             {result.style === "outline" ? " (outlined walls)" : ""}.
+          </span>
+        )}
+        {result && sheetHasLevels(result.plans) && (
+          <span className="pt-pl-detect-panel__split">
+            This sheet shows <b>{result.plans.length} separate plans</b>, perhaps different levels.{" "}
+            <button className="pt-addlink" onClick={onSplit}>
+              Make each a level
+            </button>
           </span>
         )}
         {suggestW && (

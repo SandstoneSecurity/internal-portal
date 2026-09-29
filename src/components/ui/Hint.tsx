@@ -9,7 +9,7 @@ import { createPortal } from "react-dom";
 export function Hint({ text, title, label = "What does this mean?" }: { text: ReactNode; title?: string; label?: string }) {
   const [open, setOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
-  const [pos, setPos] = useState<{ left: number; top: number; below: boolean } | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number; below: boolean; notch: number } | null>(null);
   const btn = useRef<HTMLButtonElement>(null);
   const pop = useRef<HTMLDivElement>(null);
   const id = useId();
@@ -20,8 +20,10 @@ export function Hint({ text, title, label = "What does this mean?" }: { text: Re
     const w = Math.min(280, window.innerWidth - 24);
     const left = Math.max(12, Math.min(window.innerWidth - w - 12, r.left + r.width / 2 - w / 2));
     const h = pop.current?.offsetHeight ?? 80;
-    const below = r.top < h + 16;
-    setPos({ left, top: below ? r.bottom + 8 : r.top - h - 8, below });
+    const below = r.top < h + 20;
+    // The notch points at the button, wherever the popover had to shift to stay on screen.
+    const notch = Math.max(12, Math.min(w - 12, r.left + r.width / 2 - left));
+    setPos({ left, top: below ? r.bottom + 10 : r.top - h - 10, below, notch });
   }, [open]);
 
   useEffect(() => {
@@ -62,13 +64,22 @@ export function Hint({ text, title, label = "What does this mean?" }: { text: Re
         onFocus={() => setOpen(true)}
         onBlur={() => !pinned && setOpen(false)}
       >
-        i
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden focusable="false">
+          <rect x="7" y="3.2" width="2" height="2" />
+          <rect x="7" y="6.6" width="2" height="6.2" />
+        </svg>
       </button>
       {open &&
         createPortal(
-          <div ref={pop} id={id} role="tooltip" className={`pt-hint__pop${pos?.below ? " is-below" : ""}`} style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999 }}>
-            {title && <b>{title}</b>}
-            {text}
+          <div
+            ref={pop}
+            id={id}
+            role="tooltip"
+            className={`pt-hint__pop${pos?.below ? " is-below" : ""}${pos ? " is-placed" : ""}`}
+            style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, ["--notch" as string]: `${pos?.notch ?? 20}px` }}
+          >
+            {title && <span className="pt-hint__title">{title}</span>}
+            <span className="pt-hint__text">{text}</span>
           </div>,
           document.body
         )}
