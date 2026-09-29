@@ -21,6 +21,7 @@ DELETE FROM tm_controls;
 DELETE FROM tm_scenarios;
 UPDATE tm_elements SET zone_id = NULL;
 DELETE FROM tm_elements;
+DELETE FROM tm_cameras;
 UPDATE site_levels SET plan_file_id = NULL;
 DELETE FROM site_file_chunks;
 DELETE FROM site_files;

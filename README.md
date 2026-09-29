@@ -90,6 +90,15 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
 - **Threat Modelling (risk quantification across physical, personnel and cyber):**
   - **Portfolio:** every client ranked by expected annual loss, with its mix
     by domain, its 1-in-10-year loss and its top risk.
+  - **Guidance:**
+    - A four-step "How it works" strip, which can be hidden.
+    - A setup checklist on each client, showing what the model still needs
+      and the next step.
+    - "i" hints beside every figure and column that explain it in plain
+      English.
+    - A Guide drawer with the steps, how to read the numbers, how to build
+      a site model (with keyboard shortcuts), where the figures come from,
+      and a glossary. Definitions live once, in `src/pages/risk/Guide.tsx`.
   - **Risk profile per client:**
     - Expected loss a year, with and without controls, and the 1-in-10 and
       1-in-100-year losses.
@@ -110,13 +119,42 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
     own history (Gamma–Poisson credibility; the reference rate counts as
     three years of evidence).
   - **Sites:** several per client, each with levels.
-    - **Plan:** upload a floor plan per level (PNG, JPEG or WebP; export PDFs
-      as an image first). Drag out zones, click to place assets and entry
-      points, drag to move them. Dropping an asset into a zone files it
-      there.
-    - **3D:** the plan's dark linework is raised into walls. Levels stack
-      with adjustable spacing, and assets are pins coloured by their worst
-      rating. Orbit, zoom and click to inspect.
+    - **Plan:** upload a floor plan per level as a PDF, PNG, JPEG or WebP.
+      A PDF's first page is rendered at 3,200 px (pdf.js, loaded only when
+      needed), so architects' vector drawings stay sharp.
+      - **Scale:** measure a wall of known length, or accept the scale that
+        wall detection suggests from door widths. Lengths read "≈" until the
+        scale is set.
+      - **Walls:** "Detect walls" finds walls, doors (by their swing arc)
+        and windows (by their glazing lines) on the plan
+        (`src/lib/wallDetect.ts`). It separates wall strokes from text and
+        furniture by stroke width and connectivity, reads solid or outlined
+        walls, and snaps corners. Results show as a preview to accept or
+        tune.
+      - **Drawing:** the Wall tool snaps to corners and right angles, and
+        takes typed lengths. Door and Window place openings on a wall.
+        Select to move ends (shared corners move together), edit type,
+        thickness and height, or delete. Undo and redo cover every change.
+        Zoom with Ctrl-scroll or pinch.
+      - **Model layers:** drag out zones, click to place assets and entry
+        points, drag to move them. Dropping an asset into a zone files it
+        there.
+    - **Cameras:** click to place, click again to aim. Set lens, resolution,
+      mounting height, tilt and range; 2.8–25 mm, fisheye and PTZ presets.
+      - **Coverage:** what each camera sees is shaded on the plan and in 3D
+        in the four IEC 62676-4 DORI bands (identify 250 px/m, recognise
+        125, observe 62.5, detect 25). Walls and closed doors block the
+        view; glass, windows and open doorways don't.
+      - **Summaries:** the inspector lists the distance each band reaches
+        and the zones and entry points the camera covers. The level summary
+        gives zone coverage and entries identified.
+    - **3D:** built from the walls. Thicknesses and heights are real; door
+      and window openings are cut out, doors stand ajar, and glazing is
+      transparent. A cutaway (with a cut-height slider) shows the rooms, or
+      switch to full height. Also: shadows, coverage on the floor, and
+      camera bodies with their view frustums. "View through camera" shows
+      the camera's picture as an inset or full view. Levels stack with
+      adjustable spacing.
     - **Attack paths:** derived rather than hand-drawn, running threat →
       entry point → zone → asset. Physical threats use physical entries and
       cyber threats use network and remote access. Line weight is expected
@@ -295,6 +333,8 @@ input returns `400 {error, fields}`.
 | POST · PATCH · DELETE | `/api/sites/:id/levels`, `/api/levels/:id` | Levels (stack order, height, plan width in metres) |
 | PUT · DELETE | `/api/levels/:id/plan?w=&h=&name=` | Floor plan, as the raw image body (PNG, JPEG or WebP, up to 8 MB, checked by its bytes) |
 | GET | `/api/plans/:id` | A floor plan image |
+| PUT | `/api/levels/:id/geometry` | A level's walls and openings, saved whole (points as plan fractions, sizes in metres) |
+| POST · PATCH · DELETE | `/api/sites/:id/cameras`, `/api/cameras/:id` | Cameras (position, height, yaw, tilt, field of view, resolution, range) |
 | POST · PATCH · DELETE | `/api/sites/:id/elements`, `/api/elements/:id` | Zones, assets and entry points (positions as fractions of the plan) |
 | POST · PATCH · DELETE | `/api/clients/:id/scenarios`, `/api/scenarios/:id` | Scenarios (library `threatKey` or `custom`; rate and loss overrides) |
 | POST | `/api/clients/:id/scenarios/bulk` | Several library threats at once; duplicates skipped |
@@ -352,9 +392,11 @@ could be left on in production.
 ```
 worker/         Cloudflare Worker (Hono): auth, reads (db.ts), writes (writes.ts), files (files.ts), threat modelling (threats.ts)
 shared/threatLibrary.ts, shared/risk.ts, shared/crime.ts  Threat and control library; quantification engine; NSW crime location factors
+shared/geometry.ts, shared/cameras.ts                    Walls and openings; camera optics, DORI and coverage with occlusion
+src/lib/wallDetect.ts                                    Wall, door and window detection on raster plans
 shared/types.ts Types shared between the Worker and the React app
 src/            React app (pages/, components/, actions/, lib/)
 src/styles/ds/  Sandstone design system tokens + component CSS (ported as-is)
-migrations/     D1 schema (0002: dates, audit log, regions; 0003: three-section board, task fields, subtasks; 0004: milestones, dependencies; 0005: applicant tracking and CRM; 0006: CV tables shared with the careers site; 0007: drops the audit log, as the portal has one user; 0008: threat modelling; 0009: NSW crime statistics and site LGAs)
+migrations/     D1 schema (0002: dates, audit log, regions; 0003: three-section board, task fields, subtasks; 0004: milestones, dependencies; 0005: applicant tracking and CRM; 0006: CV tables shared with the careers site; 0007: drops the audit log, as the portal has one user; 0008: threat modelling; 0009: NSW crime statistics and site LGAs; 0010: level geometry, plan scale and cameras)
 seed/           Fictional demo data for local development
 ```

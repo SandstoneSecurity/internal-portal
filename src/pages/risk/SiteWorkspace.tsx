@@ -1,6 +1,7 @@
 import { lazy, Suspense, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Box, DoorOpen, Image as ImageIcon, Layers, Package, Plus, Square, Workflow } from "lucide-react";
+import { ArrowLeft, Box, Camera, DoorOpen, Image as ImageIcon, Layers, Package, Plus, Square, Workflow } from "lucide-react";
+import { frameOf } from "../../../shared/geometry";
 import { RATING, type RatedScenario } from "../../../shared/risk";
 import { ASSET_TYPES, CONTROL_BY_KEY, DOMAIN_LABEL, THREATS, type AssetType } from "../../../shared/threatLibrary";
 import type { TmElement } from "../../../shared/types";
@@ -13,7 +14,10 @@ import { AttackPaths } from "./AttackPaths";
 import { SiteCrimeProfile } from "./CrimeProfile";
 import { kindLabel } from "./ClientRisk";
 import { ScenarioPicker } from "./ScenarioPicker";
-import { PlanView, ZONE_HUE } from "./PlanView";
+import { PlanView, ZONE_HUE, type Pick, type Tool } from "./PlanView";
+import { BuildInspector, ModelSummary } from "./BuildInspector";
+import { useGeometry } from "../../lib/useGeometry";
+import { GuideButton, Term } from "./Guide";
 
 const Site3D = lazy(() => import("./Site3D"));
 const VIEWS = [
@@ -30,13 +34,28 @@ export function SiteWorkspace({ clientId, siteId }: { clientId: number; siteId: 
   const t = useThreatActions();
   const [params, setParams] = useSearchParams();
   const view: View = (["plan", "3d", "paths"] as const).includes(params.get("view") as View) ? (params.get("view") as View) : "plan";
-  const [selected, setSelected] = useState<number | null>(null);
+  const [selected, setSelectedEl] = useState<number | null>(null);
+  const [pick, setPickState] = useState<Pick | null>(null);
+  const [toolReq, setToolReq] = useState<{ tool: Tool; n: number } | null>(null);
   const [adding, setAdding] = useState(false);
+  // One thing is selected at a time: a model element, or a wall, opening or camera.
+  const setSelected = (id: number | null) => {
+    setSelectedEl(id);
+    if (id != null) setPickState(null);
+  };
+  const setPick = (p: Pick | null) => {
+    setPickState(p);
+    if (p) setSelectedEl(null);
+  };
   const site = m?.sites.find((s) => s.id === siteId);
   const levelParam = Number(params.get("level")) || null;
   const levels = useMemo(() => [...(site?.levels ?? [])].sort((a, b) => a.order - b.order), [site]);
   const level = levels.find((l) => l.id === levelParam) ?? levels[0] ?? null;
   const elements = useMemo(() => (m ? m.elements.filter((e) => e.siteId === siteId) : []), [m, siteId]);
+  const geoApi = useGeometry(level);
+  const siteCams = useMemo(() => d.tmCameras.filter((c) => c.siteId === siteId), [d.tmCameras, siteId]);
+  const levelCams = useMemo(() => siteCams.filter((c) => c.levelId === (level?.id ?? null)), [siteCams, level]);
+  const camView = Number(params.get("cam")) || null;
   const aimed = useMemo(() => new Map(d.tmScenarios.filter((s) => s.elementId != null).map((s) => [s.id, s.elementId!])), [d.tmScenarios]);
 
   // Each asset takes the worst rating among the scenarios aimed at it (or at its type, at this site).
@@ -62,6 +81,17 @@ export function SiteWorkspace({ clientId, siteId }: { clientId: number; siteId: 
   const siteRows = m.rows.filter((r) => r.s.siteId === siteId);
   const siteAle = siteRows.reduce((n, r) => n + r.currentAle, 0);
   const sel = elements.find((e) => e.id === selected) ?? null;
+  const frame = level ? frameOf(level) : null;
+  const onLevelEls = elements.filter((e) => e.levelId === level?.id && e.x != null);
+  const viewCamera = (id: number) => {
+    const c = siteCams.find((x) => x.id === id);
+    set({ view: "3d", cam: String(id), ...(c?.levelId ? { level: String(c.levelId) } : {}) });
+  };
+  const pickCamera = (id: number) => {
+    const c = siteCams.find((x) => x.id === id);
+    if (c?.levelId && c.levelId !== level?.id) set({ level: String(c.levelId) });
+    setPick({ kind: "camera", id });
+  };
 
   return (
     <div className="pt-risk">
@@ -82,11 +112,15 @@ export function SiteWorkspace({ clientId, siteId }: { clientId: number; siteId: 
         <div className="pt-risk-head__actions">
           <span className="pt-risk-head__ale">
             {compactAud(siteAle)}
-            <span className="pt-meta">expected a year at this site</span>
+            <span className="pt-meta">
+              expected a year at this site
+              <Term k="ale" />
+            </span>
           </span>
           <button className="sds-btn sds-btn--sm sds-btn--secondary" onClick={() => t.editSite(site)}>
             Edit site
           </button>
+          <GuideButton topic="site" />
         </div>
       </header>
 
@@ -121,6 +155,21 @@ export function SiteWorkspace({ clientId, siteId }: { clientId: number; siteId: 
           </div>
           <Tree elements={elements} selected={selected} onSelect={setSelected} risk={risk} />
           <div className="pt-risk-tree__group">
+            <div className="pt-risk-tree__label">
+              <Camera size={12} /> Cameras
+            </div>
+            {siteCams.length === 0 && <p className="pt-dim pt-risk-tree__none">Place cameras with the Camera tool on the plan.</p>}
+            {siteCams.map((c) => (
+              <button key={c.id} className={`pt-risk-tree__item pt-risk-tree__el pt-hue-brass${pick?.kind === "camera" && pick.id === c.id ? " is-on" : ""}`} onClick={() => pickCamera(c.id)}>
+                <span className="pt-risk-tree__icon">
+                  <Camera size={12} />
+                </span>
+                <span className="pt-risk-tree__name">{c.name}</span>
+                <span className="pt-meta">{levels.find((l) => l.id === c.levelId)?.name ?? ""}</span>
+              </button>
+            ))}
+          </div>
+          <div className="pt-risk-tree__group">
             <div className="pt-risk-tree__label">Scenarios here</div>
             {siteRows.length === 0 && <p className="pt-dim pt-risk-tree__none">None yet.</p>}
             {siteRows.map((r) => (
@@ -140,11 +189,12 @@ export function SiteWorkspace({ clientId, siteId }: { clientId: number; siteId: 
           <div className="pt-risk-stage__bar">
             <span className="pt-seg" role="radiogroup" aria-label="View">
               {VIEWS.map(({ key, label, icon: Icon }) => (
-                <button key={key} type="button" role="radio" aria-checked={view === key} className="pt-seg__btn pt-hue-slate" onClick={() => set({ view: key === "plan" ? null : key })}>
+                <button key={key} type="button" role="radio" aria-checked={view === key} className="pt-seg__btn pt-hue-slate" onClick={() => set({ view: key === "plan" ? null : key, cam: null })}>
                   <Icon size={14} /> {label}
                 </button>
               ))}
             </span>
+            {view === "paths" && <Term k="paths" />}
             {view === "plan" && levels.length > 1 && (
               <div className="pt-select pt-select--sm">
                 <select value={level?.id ?? ""} onChange={(e) => set({ level: e.target.value })} aria-label="Level">
@@ -157,20 +207,71 @@ export function SiteWorkspace({ clientId, siteId }: { clientId: number; siteId: 
               </div>
             )}
           </div>
-          {view === "plan" && <PlanView site={site} level={level} elements={elements} risk={risk} selected={selected} onSelect={setSelected} />}
+          {view === "plan" && (
+            <PlanView
+              site={site}
+              level={level}
+              elements={elements}
+              risk={risk}
+              selected={selected}
+              onSelect={setSelected}
+              geo={geoApi}
+              cameras={levelCams}
+              pick={pick}
+              onPick={setPick}
+              toolRequest={toolReq}
+            />
+          )}
           {view === "3d" && (
             <Suspense fallback={<div className="pt-risk-3d pt-skeleton" />}>
-              <Site3D levels={levels} elements={elements} risk={risk} selected={selected} onSelect={setSelected} />
+              <Site3D
+                levels={levels}
+                elements={elements}
+                risk={risk}
+                selected={selected}
+                onSelect={setSelected}
+                cameras={siteCams}
+                camView={camView}
+                onCamView={(id) => set({ cam: id == null ? null : String(id) })}
+                onPickCamera={pickCamera}
+                pickedCamera={pick?.kind === "camera" ? pick.id : null}
+              />
             </Suspense>
           )}
           {view === "paths" && <AttackPaths m={m} site={site} aimed={aimed} onSelect={setSelected} onScenario={(r) => t.editScenario(clientId, r)} />}
         </section>
 
         <aside className="pt-risk-inspector" aria-label="Inspector">
-          {sel ? (
+          {pick && level && frame ? (
+            <BuildInspector
+              pick={pick}
+              onPick={setPick}
+              level={level}
+              frame={frame}
+              geoApi={geoApi}
+              cameras={levelCams}
+              zones={onLevelEls.filter((e) => e.kind === "zone")}
+              entries={onLevelEls.filter((e) => e.kind === "entry")}
+              onViewCamera={viewCamera}
+            />
+          ) : sel ? (
             <Inspector el={sel} clientId={clientId} rows={m.rows} aimed={aimed} onClose={() => setSelected(null)} zones={elements.filter((e) => e.kind === "zone")} />
           ) : (
             <>
+              {level && frame && (
+                <ModelSummary
+                  level={level}
+                  frame={frame}
+                  geo={geoApi.geo}
+                  cameras={levelCams}
+                  zones={onLevelEls.filter((e) => e.kind === "zone")}
+                  entries={onLevelEls.filter((e) => e.kind === "entry")}
+                  onMeasure={() => {
+                    set({ view: null, cam: null });
+                    setToolReq({ tool: "measure", n: Date.now() });
+                  }}
+                />
+              )}
               <SiteCrimeProfile site={site} onEdit={() => t.editSite(site)} />
               <SectionHead title="This site" />
               <dl className="pt-risk-insp__facts">
@@ -197,7 +298,7 @@ export function SiteWorkspace({ clientId, siteId }: { clientId: number; siteId: 
                     </li>
                   ))}
               </ul>
-              <p className="pt-risk-note">Select a zone, asset or entry point on the plan, in 3D or in the model browser to inspect it.</p>
+              <p className="pt-risk-note">Select a wall, camera, zone, asset or entry point on the plan, in 3D or in the model browser to inspect it.</p>
             </>
           )}
         </aside>

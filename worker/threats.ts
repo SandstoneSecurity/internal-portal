@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { CONTROL_BY_KEY, DOMAINS, ENTRY_TYPES, SITE_KINDS, THREAT_BY_KEY, ZONE_CLASSES, ASSET_TYPES } from "../shared/threatLibrary";
+import { CAMERA_KINDS } from "../shared/cameras";
+import { GEOMETRY_LIMITS, OPENING_KINDS, WALL_KINDS, tidy } from "../shared/geometry";
 import { nowIso, todaySydney } from "./dates";
 import { deleteThreatModel } from "./threatCleanup";
 import { BadRequest, NotFound, body, handleApiError, isoDate, mustExist, optText, param, setClause, text, type Ctx, type Env } from "./writes";
@@ -13,6 +15,8 @@ const id = z.coerce.number().int().positive();
 // null is tried first: z.coerce.number() would otherwise turn null into 0.
 const nullableId = z.union([z.null(), id]).default(null);
 const fraction = z.union([z.null(), z.coerce.number().min(0).max(1)]).default(null);
+// Wall ends may sit a little outside the plan image (a wall drawn to the edge).
+const planCoord = z.number().min(-0.5).max(1.5);
 const optNum = (max: number) => z.union([z.null(), z.coerce.number().min(0).max(max)]).default(null);
 
 const schemas = {
@@ -34,6 +38,47 @@ const schemas = {
     order: z.coerce.number().int().min(-5).max(200).default(0),
     heightM: z.coerce.number().min(2).max(30).default(3.6),
     widthM: z.coerce.number().min(2).max(2000).default(40),
+    scaleSet: z.union([z.boolean(), z.literal(0), z.literal(1)]).transform((v) => (v ? 1 : 0)).default(0),
+  }),
+  geometry: z.object({
+    walls: z
+      .array(
+        z.object({
+          id: z.string().regex(/^[a-z0-9]{1,24}$/),
+          a: z.tuple([planCoord, planCoord]),
+          b: z.tuple([planCoord, planCoord]),
+          t: z.number().min(0.01).max(3),
+          kind: z.enum(WALL_KINDS.map(([k]) => k) as [string, ...string[]]),
+          h: z.union([z.null(), z.number().min(0.3).max(30)]).default(null),
+        })
+      )
+      .max(GEOMETRY_LIMITS.walls),
+    openings: z
+      .array(
+        z.object({
+          id: z.string().regex(/^[a-z0-9]{1,24}$/),
+          wall: z.string().regex(/^[a-z0-9]{1,24}$/),
+          at: z.number().min(0).max(1),
+          w: z.number().min(0.2).max(30),
+          kind: z.enum(OPENING_KINDS.map(([k]) => k) as [string, ...string[]]),
+        })
+      )
+      .max(GEOMETRY_LIMITS.openings),
+  }),
+  camera: z.object({
+    name: text(80),
+    kind: z.enum(CAMERA_KINDS.map(([k]) => k) as [string, ...string[]]).default("fixed"),
+    levelId: nullableId,
+    x: z.coerce.number().min(0).max(1),
+    y: z.coerce.number().min(0).max(1),
+    heightM: z.coerce.number().min(0.5, "0.5–30 m").max(30, "0.5–30 m").default(3),
+    yaw: z.coerce.number().min(-720).max(720).default(0),
+    tilt: z.coerce.number().min(-30, "−30° to 90°").max(90, "−30° to 90°").default(25),
+    hfov: z.coerce.number().min(3, "3°–360°").max(360, "3°–360°").default(85),
+    resW: z.coerce.number().int().min(160).max(16_000).default(2560),
+    resH: z.coerce.number().int().min(120).max(16_000).default(1440),
+    rangeM: z.coerce.number().min(0).max(1000).default(30),
+    notes: optText(1000),
   }),
   element: z.object({
     kind: z.enum(["zone", "asset", "entry"]),
@@ -85,7 +130,22 @@ const schemas = {
 };
 
 const SITE_COLUMNS = { name: "name", address: "address", suburb: "suburb", state: "state", postcode: "postcode", kind: "kind", occupants: "occupants", crimeFactor: "crime_factor", lga: "lga", hours: "hours", notes: "notes" };
-const LEVEL_COLUMNS = { name: "name", order: "sort_order", heightM: "height_m", widthM: "width_m" };
+const LEVEL_COLUMNS = { name: "name", order: "sort_order", heightM: "height_m", widthM: "width_m", scaleSet: "scale_set" };
+const CAMERA_COLUMNS = {
+  name: "name",
+  kind: "kind",
+  levelId: "level_id",
+  x: "x",
+  y: "y",
+  heightM: "height_m",
+  yaw: "yaw",
+  tilt: "tilt",
+  hfov: "hfov",
+  resW: "res_w",
+  resH: "res_h",
+  rangeM: "range_m",
+  notes: "notes",
+};
 const ELEMENT_COLUMNS = { kind: "kind", name: "name", subtype: "subtype", value: "value", criticality: "criticality", levelId: "level_id", zoneId: "zone_id", x: "x", y: "y", w: "w", h: "h", notes: "notes" };
 const SCENARIO_COLUMNS = {
   siteId: "site_id",
@@ -199,9 +259,27 @@ threats.delete("/levels/:id", async (c) => {
   await db.batch([
     ...removePlan(db, level.plan_file_id as number | null),
     db.prepare(`UPDATE tm_elements SET level_id = NULL WHERE level_id = ?`).bind(levelId),
+    db.prepare(`DELETE FROM tm_cameras WHERE level_id = ?`).bind(levelId),
     db.prepare(`DELETE FROM site_levels WHERE id = ?`).bind(levelId),
   ]);
   return c.json({ ok: true });
+});
+
+const GEOMETRY_MAX = 900_000;
+
+// Walls and openings are saved whole: the editor sends the level's geometry after each change.
+threats.put("/levels/:id/geometry", async (c) => {
+  const levelId = param(c);
+  const v = await body(c, schemas.geometry);
+  await mustExist(c, "site_levels", levelId);
+  const walls = new Set(v.walls.map((w) => w.id));
+  if (walls.size !== v.walls.length) throw new BadRequest("Two walls share an id.");
+  if (new Set(v.openings.map((o) => o.id)).size !== v.openings.length) throw new BadRequest("Two openings share an id.");
+  const g = tidy(v as Parameters<typeof tidy>[0]);
+  const json = JSON.stringify(g);
+  if (json.length > GEOMETRY_MAX) throw new BadRequest("That level has too much geometry to save. Simplify the walls or split the plan into levels.");
+  await c.env.DB.prepare(`UPDATE site_levels SET geometry = ? WHERE id = ?`).bind(json, levelId).run();
+  return c.json({ ok: true, walls: g.walls.length, openings: g.openings.length });
 });
 
 function removePlan(db: D1Database, fileId: number | null): D1PreparedStatement[] {
@@ -288,6 +366,44 @@ threats.get("/plans/:id{[0-9]+}", async (c) => {
       "Content-Security-Policy": "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'",
     },
   });
+});
+
+// ── Cameras ─────────────────────────────────────────────────────────────────
+async function checkCameraLevel(c: Ctx, siteId: number, levelId: number | null | undefined) {
+  if (levelId == null) return;
+  const l = await c.env.DB.prepare(`SELECT site_id FROM site_levels WHERE id = ?`).bind(levelId).first<{ site_id: number }>();
+  if (!l || l.site_id !== siteId) throw new BadRequest("That level is on another site.", { levelId: "Pick a level on this site" });
+}
+
+threats.post("/sites/:id/cameras", async (c) => {
+  const siteId = param(c);
+  const v = await body(c, schemas.camera);
+  await mustExist(c, "client_sites", siteId);
+  await checkCameraLevel(c, siteId, v.levelId);
+  const row = await c.env.DB.prepare(
+    `INSERT INTO tm_cameras (site_id, level_id, name, kind, x, y, height_m, yaw, tilt, hfov, res_w, res_h, range_m, notes, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
+  )
+    .bind(siteId, v.levelId, v.name, v.kind, v.x, v.y, v.heightM, v.yaw, v.tilt, v.hfov, v.resW, v.resH, v.rangeM, v.notes, nowIso())
+    .first<{ id: number }>();
+  return c.json({ id: row!.id }, 201);
+});
+
+threats.patch("/cameras/:id", async (c) => {
+  const camId = param(c);
+  const v = await body(c, schemas.camera, true);
+  const cam = await mustExist(c, "tm_cameras", camId);
+  await checkCameraLevel(c, cam.site_id as number, v.levelId);
+  const { sql, binds } = setClause(v, CAMERA_COLUMNS);
+  if (sql) await c.env.DB.prepare(`UPDATE tm_cameras SET ${sql} WHERE id = ?`).bind(...binds, camId).run();
+  return c.json({ ok: true });
+});
+
+threats.delete("/cameras/:id", async (c) => {
+  const camId = param(c);
+  await mustExist(c, "tm_cameras", camId);
+  await c.env.DB.prepare(`DELETE FROM tm_cameras WHERE id = ?`).bind(camId).run();
+  return c.json({ ok: true });
 });
 
 // ── Model elements ──────────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ import { useThreatActions } from "../../actions/threatActions";
 import { Modal } from "../../components/ui/Overlay";
 import { hueClass } from "../../lib/hues";
 import { DOMAIN_HUE, compactAud, frequencyLabel, type ClientModel } from "../../lib/riskModel";
+import { Term } from "./Guide";
 
 /** Where a scenario sits: the organisation as a whole, or one site. */
 interface Target {
@@ -157,6 +158,7 @@ export function ScenarioPicker({ m, open, onClose, siteId }: { m: ClientModel; o
           <h2>Add threats to {m.client.org}</h2>
           <p>
             Priced for this client: its size{m.sites.length ? ", and each site's type and location" : ""}. Expected cost is a year's loss before controls.
+            <Term k="expected" />
           </p>
         </div>
         <button className="pt-iconbtn" onClick={close} aria-label="Close">

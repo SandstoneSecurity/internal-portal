@@ -6,6 +6,7 @@ import { useThreatActions } from "../../actions/threatActions";
 import { SectionHead } from "../../components/ui/Bits";
 import { usePortal } from "../../lib/DataProvider";
 import { relativeTime } from "../../lib/format";
+import { Term } from "./Guide";
 
 /** Where the NSW crime statistics stand, with refresh and upload. */
 export function CrimeStatus() {
@@ -59,7 +60,7 @@ export function SiteCrimeProfile({ site, onEdit }: { site: ClientSite; onEdit: (
   const pos = (v: number) => ((Math.log(Math.min(FACTOR_MAX, Math.max(FACTOR_MIN, v))) - Math.log(FACTOR_MIN)) / (Math.log(FACTOR_MAX) - Math.log(FACTOR_MIN))) * 100;
   return (
     <div className="pt-risk-cp">
-      <SectionHead title="Crime profile" meta={site.lga ? `${site.lga} vs NSW` : undefined} />
+      <SectionHead title="Crime profile" hint={<Term k="location" />} meta={site.lga ? `${site.lga} vs NSW` : undefined} />
       {!site.lga ? (
         <p className="pt-risk-note">
           Set the site's council area (LGA) to size its crime-driven threats from BOCSAR's recorded rates.{" "}

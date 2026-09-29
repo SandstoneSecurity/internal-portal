@@ -16,6 +16,7 @@ import { list, row } from "../../lib/motion";
 import { DOMAIN_HUE, RATING_HUE, STATUS_HUE, compactAud, frequencyLabel, pct, useClientModel, type ClientModel } from "../../lib/riskModel";
 import { DomainBars, ExceedanceChart, HeatMap, RangeBar } from "./charts";
 import { ScenarioPicker } from "./ScenarioPicker";
+import { GuideButton, SetupChecklist, Term, type SetupItem } from "./Guide";
 
 const TABS = ["Overview", "Register", "Sites", "Controls", "Incidents"] as const;
 type Tab = (typeof TABS)[number];
@@ -53,27 +54,43 @@ export function ClientRisk({ clientId }: { clientId: number }) {
           <Link className="sds-btn sds-btn--sm sds-btn--ghost" to={`/clients?id=${client.id}`}>
             <Building size={14} /> Company record
           </Link>
+          <GuideButton topic="numbers" />
         </div>
       </header>
 
       <section className="pt-risk-kpis" aria-label="Risk profile">
         <div className="pt-risk-kpi pt-risk-kpi--lead">
-          <span className="pt-risk-kpi__l">Expected loss a year</span>
+          <span className="pt-risk-kpi__l">
+            Expected loss a year
+            <Term k="ale" />
+          </span>
           <span className="pt-risk-kpi__v">{compactAud(totals.current)}</span>
-          <span className="pt-risk-kpi__n">with controls in place · {compactAud(totals.inherent)} without</span>
+          <span className="pt-risk-kpi__n">
+            with controls in place · {compactAud(totals.inherent)} without
+            <Term k="inherent" />
+          </span>
         </div>
         <div className="pt-risk-kpi">
-          <span className="pt-risk-kpi__l">1-in-10-year loss</span>
+          <span className="pt-risk-kpi__l">
+            1-in-10-year loss
+            <Term k="p90" />
+          </span>
           <span className="pt-risk-kpi__v">{compactAud(sims.current.p90)}</span>
           <span className="pt-risk-kpi__n">90th percentile year</span>
         </div>
         <div className="pt-risk-kpi">
-          <span className="pt-risk-kpi__l">1-in-100-year loss</span>
+          <span className="pt-risk-kpi__l">
+            1-in-100-year loss
+            <Term k="p99" />
+          </span>
           <span className="pt-risk-kpi__v">{compactAud(sims.current.p99)}</span>
           <span className="pt-risk-kpi__n">the bad year to plan reserves for</span>
         </div>
         <div className="pt-risk-kpi">
-          <span className="pt-risk-kpi__l">Controls remove</span>
+          <span className="pt-risk-kpi__l">
+            Controls remove
+            <Term k="controls" />
+          </span>
           <span className="pt-risk-kpi__v">{Math.round(reduction * 100)}%</span>
           <span className="pt-risk-kpi__n">{compactAud(totals.spend)} a year spent</span>
         </div>
@@ -92,12 +109,47 @@ export function ClientRisk({ clientId }: { clientId: number }) {
         counts={{ Register: m.rows.length, Sites: m.sites.length, Controls: m.controls.length, Incidents: m.incidents.length }}
       />
 
+      {tab === "Overview" && <Setup m={m} onTab={setTab} />}
       {tab === "Overview" && <Overview m={m} onOpenRegister={() => setTab("Register")} />}
       {tab === "Register" && <Register m={m} />}
       {tab === "Sites" && <Sites m={m} />}
       {tab === "Controls" && <Controls m={m} />}
       {tab === "Incidents" && <Incidents m={m} />}
     </div>
+  );
+}
+
+/** What's still missing before this model supports a decision, each with its next step. */
+function Setup({ m, onTab }: { m: ClientModel; onTab: (t: Tab) => void }) {
+  const t = useThreatActions();
+  const actions = useActions();
+  const [, setParams] = useSearchParams();
+  const [adding, setAdding] = useState(false);
+  const firstSite = m.sites[0];
+  const modelled = m.sites.some((s) => s.levels.some((l) => l.geometry.walls.length > 0 && l.scaleSet));
+  const items: SetupItem[] = [
+    { label: "Organisation profile", done: m.client.staff > 0, hint: "Staff and revenue size the losses", action: { label: "Edit profile", run: () => t.editProfile(m.client) } },
+    { label: "Sites", done: m.sites.length > 0, hint: "Where physical threats happen", action: { label: "Add site", run: () => actions.addSite({ clientId: m.client.id }) } },
+    {
+      label: "Site model",
+      done: modelled,
+      hint: "Plan, scale and walls for 3D and cameras",
+      action: firstSite ? { label: "Open site", run: () => setParams({ client: String(m.client.id), site: String(firstSite.id) }) } : undefined,
+    },
+    { label: "Threats", done: m.rows.length > 0, hint: "Priced from Australian incident data", action: { label: "Add threats", run: () => setAdding(true) } },
+    { label: "Controls", done: m.controls.length > 0, hint: "What's in place and proposed", action: { label: "Controls", run: () => onTab("Controls") } },
+    {
+      label: "Incident history",
+      done: m.client.historyYears > 0 || m.incidents.length > 0,
+      hint: "Calibrates frequencies to this client",
+      action: { label: "Log incident", run: () => t.logIncident(m.client.id) },
+    },
+  ];
+  return (
+    <>
+      <SetupChecklist items={items} clientId={m.client.id} />
+      <ScenarioPicker m={m} open={adding} onClose={() => setAdding(false)} />
+    </>
   );
 }
 
@@ -127,11 +179,11 @@ function Overview({ m, onOpenRegister }: { m: ClientModel; onOpenRegister: () =>
   return (
     <div className="pt-risk-overview">
       <div className="pt-panel pt-panel--ruled pt-risk-overview__curve">
-        <SectionHead title="Loss exceedance" meta={`${m.sims.current.trials.toLocaleString()} simulated years`} />
+        <SectionHead title="Loss exceedance" hint={<Term k="exceedance" />} meta={`${m.sims.current.trials.toLocaleString()} simulated years`} />
         <ExceedanceChart inherent={m.curves.inherent} current={m.curves.current} target={m.curves.target} p90={m.sims.current.p90} />
       </div>
       <div className="pt-panel pt-risk-overview__heat">
-        <SectionHead title="Risk matrix" meta="current controls" />
+        <SectionHead title="Risk matrix" hint={<Term k="rating" />} meta="current controls" />
         <HeatMap rows={m.rows} onPick={() => onOpenRegister()} />
       </div>
       <div className="pt-panel pt-risk-overview__dom">
@@ -156,7 +208,7 @@ function Overview({ m, onOpenRegister }: { m: ClientModel; onOpenRegister: () =>
         </ol>
       </div>
       <div className="pt-panel pt-risk-overview__rec">
-        <SectionHead title="Best value next" meta="loss removed per dollar" />
+        <SectionHead title="Best value next" hint={<Term k="rosi" />} meta="loss removed per dollar" />
         <Recommendations m={m} limit={5} />
       </div>
     </div>
@@ -245,19 +297,27 @@ function Register({ m }: { m: ClientModel }) {
             <span role="columnheader">Scenario</span>
             <span role="columnheader" className="pt-hide-sm">
               How often
+              <Term k="frequency" />
             </span>
             <span role="columnheader" className="pt-hide-sm">
               Loss per event
+              <Term k="loss" />
             </span>
             <span role="columnheader" className="pt-num pt-hide-sm">
               Chance / yr
+              <Term k="chance" />
             </span>
-            <span role="columnheader">Rating</span>
+            <span role="columnheader">
+              Rating
+              <Term k="rating" />
+            </span>
             <span role="columnheader" className="pt-num pt-hide-sm">
               Unprotected
+              <Term k="inherent" />
             </span>
             <span role="columnheader" className="pt-num">
               Expected / yr
+              <Term k="ale" />
             </span>
           </div>
           <motion.div variants={list} initial="initial" animate="animate">
@@ -304,7 +364,7 @@ function Register({ m }: { m: ClientModel }) {
           </motion.div>
         </div>
         <aside className="pt-panel pt-risk-regsplit__heat">
-          <SectionHead title="Matrix" meta="click a cell to filter" />
+          <SectionHead title="Matrix" hint={<Term k="rating" />} meta="click a cell to filter" />
           <HeatMap rows={m.rows} selected={cell} onPick={setCell} />
         </aside>
       </div>
@@ -383,6 +443,7 @@ function Controls({ m }: { m: ClientModel }) {
             </span>
             <span role="columnheader" className="pt-num pt-hide-sm">
               ROSI
+              <Term k="rosi" />
             </span>
           </div>
           {rows.map((c) => {
@@ -553,7 +614,7 @@ function Incidents({ m }: { m: ClientModel }) {
       )}
       {calibrated.length > 0 && (
         <div className="pt-panel" style={{ marginTop: 20 }}>
-          <SectionHead title="Calibration" meta="reference rate → this client" />
+          <SectionHead title="Calibration" hint={<Term k="calibration" />} meta="reference rate → this client" />
           <ul className="pt-risk-cal">
             {calibrated.map((r) => (
               <li key={r.s.id}>
