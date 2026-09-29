@@ -176,10 +176,13 @@ export function EnterKey() {
 }
 
 /** Section heading in the register style: eyebrow on the left, a mono count or note on the right. */
-export function SectionHead({ title, meta, action }: { title: string; meta?: ReactNode; action?: ReactNode }) {
+export function SectionHead({ title, meta, action, hint }: { title: string; meta?: ReactNode; action?: ReactNode; hint?: ReactNode }) {
   return (
     <div className="pt-section-head">
-      <span className="pt-eyebrow">{title}</span>
+      <span className="pt-eyebrow">
+        {title}
+        {hint}
+      </span>
       {meta !== undefined && <span className="pt-meta">{meta}</span>}
       {action}
     </div>

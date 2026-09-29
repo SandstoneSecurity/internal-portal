@@ -13,6 +13,7 @@ export function deleteThreatModel(db: D1Database, where: "client_id = ?" | "site
     db.prepare(`DELETE FROM tm_scenarios WHERE ${rows}`).bind(id),
     db.prepare(`DELETE FROM tm_controls WHERE ${rows}`).bind(id),
     db.prepare(`DELETE FROM tm_incidents WHERE ${rows}`).bind(id),
+    db.prepare(`DELETE FROM tm_cameras WHERE site_id IN (${sites})`).bind(id),
     db.prepare(`UPDATE tm_elements SET zone_id = NULL, level_id = NULL WHERE site_id IN (${sites})`).bind(id),
     db.prepare(`DELETE FROM tm_elements WHERE site_id IN (${sites})`).bind(id),
     db.prepare(`DELETE FROM site_levels WHERE site_id IN (${sites})`).bind(id),

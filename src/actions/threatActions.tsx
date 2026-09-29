@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { CONTROL_STATUSES, type RatedScenario } from "../../shared/risk";
 import { CONTROL_BY_KEY, DOMAINS, DOMAIN_LABEL, THREATS, THREAT_BY_KEY, EXPOSURE_LABEL } from "../../shared/threatLibrary";
-import type { Client, ClientSite, PortalData, SiteLevel, TmControl, TmElement, TmElementKind, TmIncident } from "../../shared/types";
+import type { Client, ClientSite, PortalData, SiteLevel, TmCamera, TmControl, TmElement, TmElementKind, TmIncident } from "../../shared/types";
+import { DEFAULT_CAMERA } from "../../shared/cameras";
 import type { FieldSpec, FormValues } from "../components/ui/FormDrawer";
 import { useConfirm } from "../components/ui/Confirm";
 import { useToast } from "../components/ui/Toast";
@@ -16,28 +17,50 @@ import { SUBTYPES, guessArea, siteFields, siteInitial } from "./threatFields";
 const num = (v: unknown): number | null => (v === "" || v === undefined || v === null ? null : Number(v));
 const KIND_LABEL: Record<TmElementKind, string> = { zone: "zone", asset: "asset", entry: "entry point" };
 
-/** Largest edge a floor plan is stored at: plenty for reading room labels, small enough to load fast. */
-const PLAN_EDGE = 2400;
+/** Largest edge a floor plan is stored at: sharp enough to trace walls at 1:100, small enough to load fast. */
+const PLAN_EDGE = 3200;
 
-/** Reads an image file, scales it down if needed and re-encodes it, returning bytes and pixel size. */
-async function preparePlan(file: File): Promise<{ blob: Blob; w: number; h: number; name: string }> {
-  if (!/^image\/(png|jpeg|webp)$/.test(file.type)) throw new Error("Upload the floor plan as a PNG, JPEG or WebP image. For a PDF, export the page as an image first.");
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, PLAN_EDGE / Math.max(bitmap.width, bitmap.height));
-  const w = Math.max(16, Math.round(bitmap.width * scale));
-  const h = Math.max(16, Math.round(bitmap.height * scale));
-  if (scale === 1 && file.size < 3 * 1024 * 1024) return { blob: file, w, h, name: file.name };
+const isPdf = (f: File) => f.type === "application/pdf" || /\.pdf$/i.test(f.name);
+
+/**
+ * Reads an image or PDF floor plan, scales it to at most PLAN_EDGE and
+ * re-encodes it, returning bytes and pixel size. A PDF's first page is
+ * rendered at full resolution.
+ */
+async function preparePlan(file: File): Promise<{ blob: Blob; w: number; h: number; name: string; note?: string }> {
+  let source: CanvasImageSource;
+  let sw: number;
+  let sh: number;
+  let note: string | undefined;
+  if (isPdf(file)) {
+    const { renderPdfPlan } = await import("../lib/pdfPlan");
+    const { canvas, pages } = await renderPdfPlan(file, PLAN_EDGE);
+    source = canvas;
+    sw = canvas.width;
+    sh = canvas.height;
+    if (pages > 1) note = `Used page 1 of ${pages}. Add a level for each other floor and upload its page.`;
+  } else {
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) throw new Error("Upload the floor plan as a PDF, PNG, JPEG or WebP.");
+    const bitmap = await createImageBitmap(file);
+    source = bitmap;
+    sw = bitmap.width;
+    sh = bitmap.height;
+  }
+  const scale = Math.min(1, PLAN_EDGE / Math.max(sw, sh));
+  const w = Math.max(16, Math.round(sw * scale));
+  const h = Math.max(16, Math.round(sh * scale));
+  if (!isPdf(file) && scale === 1 && file.size < 3 * 1024 * 1024) return { blob: file, w, h, name: file.name };
   const canvas = document.createElement("canvas");
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext("2d")!;
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, w, h);
-  ctx.drawImage(bitmap, 0, 0, w, h);
+  ctx.drawImage(source, 0, 0, w, h);
   const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/webp", 0.9));
   const png = blob && blob.type === "image/webp" ? blob : await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
   if (!png) throw new Error("Couldn't read that image.");
-  return { blob: png, w, h, name: file.name.replace(/\.[^.]+$/, "") + (png.type === "image/webp" ? ".webp" : ".png") };
+  return { blob: png, w, h, name: file.name.replace(/\.[^.]+$/, "") + (png.type === "image/webp" ? ".webp" : ".png"), note };
 }
 
 export function useThreatActions() {
@@ -146,7 +169,7 @@ export function useThreatActions() {
             run: () =>
               destroy({
                 title: `Delete ${l.name}?`,
-                body: "Its floor plan is deleted. Zones, assets and entry points on it are kept but lose their place on the plan.",
+                body: "Its floor plan, walls and cameras are deleted. Zones, assets and entry points on it are kept but lose their place on the plan.",
                 path: `/levels/${l.id}`,
                 toast: "Level deleted",
               }),
@@ -166,7 +189,7 @@ export function useThreatActions() {
             const j = (await res.json().catch(() => ({}))) as { error?: string };
             throw new ApiError(j.error ?? `Upload failed (${res.status}).`, res.status);
           }
-          await done("Floor plan uploaded", `${l.name} · ${plan.w}×${plan.h}`);
+          await done("Floor plan uploaded", plan.note ?? (l.scaleSet ? `${l.name} · ${plan.w}×${plan.h}` : "Next: set the scale by measuring a wall you know the length of."));
           return true;
         } catch (err) {
           fail(err);
@@ -255,6 +278,46 @@ export function useThreatActions() {
           fail(err);
         }
       },
+
+      /** Sets the plan's real width after a measurement, marking the scale as known. */
+      setScale: async (l: SiteLevel, widthM: number) => {
+        const w = Math.round(widthM * 100) / 100;
+        try {
+          await mutate(
+            (dd) => ({ ...dd, sites: dd.sites.map((s) => (s.id !== l.siteId ? s : { ...s, levels: s.levels.map((x) => (x.id === l.id ? { ...x, widthM: w, scaleSet: true } : x)) })) }),
+            () => send("PATCH", `/levels/${l.id}`, { widthM: w, scaleSet: true })
+          );
+          toast({ title: "Scale set", desc: `${l.name} is ${w.toLocaleString("en-AU")} m across`, kind: "secure" });
+        } catch (err) {
+          fail(err);
+        }
+      },
+
+      addCamera: async (s: ClientSite, levelId: number | null, spec: Partial<TmCamera> & { x: number; y: number }) => {
+        const n = d.tmCameras.filter((c) => c.siteId === s.id).length + 1;
+        try {
+          const r = await send<{ id: number }>("POST", `/sites/${s.id}/cameras`, { ...DEFAULT_CAMERA, name: `Camera ${n}`, ...spec, levelId });
+          await refresh();
+          return r.id;
+        } catch (err) {
+          fail(err);
+          return null;
+        }
+      },
+
+      updateCamera: async (c: TmCamera, patch: Partial<Omit<TmCamera, "id" | "siteId">>) => {
+        try {
+          await mutate(
+            (dd) => ({ ...dd, tmCameras: dd.tmCameras.map((k) => (k.id === c.id ? { ...k, ...patch } : k)) }),
+            () => send("PATCH", `/cameras/${c.id}`, patch)
+          );
+        } catch (err) {
+          fail(err);
+        }
+      },
+
+      deleteCamera: (c: TmCamera) =>
+        destroy({ title: `Delete ${c.name}?`, body: "Its view and coverage are removed from the plan and 3D model.", path: `/cameras/${c.id}`, toast: "Camera deleted" }),
 
       addScenarios: async (clientId: number, items: { threatKey: string; siteId: number | null }[]) => {
         if (!items.length) return;

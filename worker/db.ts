@@ -5,6 +5,7 @@ import type {
   ClientSite,
   SiteLevel,
   TmControl,
+  TmCamera,
   TmElement,
   TmIncident,
   TmScenario,
@@ -29,6 +30,7 @@ import type {
 import { DEAL_STAGES, ENGAGEMENT_KINDS, PRIORITIES, STAGES } from "../shared/types";
 import { addDays, dayMonth, daysBetween, shortDate, todaySydney } from "./dates";
 import { getCrime } from "./crime";
+import { parseGeometry } from "../shared/geometry";
 
 export function asKind(v: string): StatusKind {
   return (["secure", "advisory", "breach", "info", "neutral"] as const).includes(v as StatusKind)
@@ -620,7 +622,7 @@ export function computeMetrics(
 
 // ── Threat modelling ────────────────────────────────────────────────────────
 export async function getThreatModels(db: D1Database) {
-  const [sites, levels, elements, scenarios, controls, incidents] = await Promise.all([
+  const [sites, levels, elements, scenarios, controls, incidents, cameras] = await Promise.all([
     db
       .prepare(
         `SELECT id, client_id, name, address, suburb, state, postcode, kind, occupants, crime_factor, lga, hours, notes, created_at
@@ -628,8 +630,8 @@ export async function getThreatModels(db: D1Database) {
       )
       .all<{ id: number; client_id: number; name: string; address: string; suburb: string; state: string; postcode: string; kind: string; occupants: number; crime_factor: number; lga: string; hours: string; notes: string; created_at: string }>(),
     db
-      .prepare(`SELECT id, site_id, name, sort_order, height_m, width_m, plan_file_id, plan_w, plan_h FROM site_levels ORDER BY site_id, sort_order, id`)
-      .all<{ id: number; site_id: number; name: string; sort_order: number; height_m: number; width_m: number; plan_file_id: number | null; plan_w: number | null; plan_h: number | null }>(),
+      .prepare(`SELECT id, site_id, name, sort_order, height_m, width_m, plan_file_id, plan_w, plan_h, geometry, scale_set FROM site_levels ORDER BY site_id, sort_order, id`)
+      .all<{ id: number; site_id: number; name: string; sort_order: number; height_m: number; width_m: number; plan_file_id: number | null; plan_w: number | null; plan_h: number | null; geometry: string; scale_set: number }>(),
     db
       .prepare(`SELECT id, site_id, level_id, kind, name, subtype, value, criticality, zone_id, x, y, w, h, notes FROM tm_elements ORDER BY site_id, id`)
       .all<{ id: number; site_id: number; level_id: number | null; kind: string; name: string; subtype: string; value: number; criticality: number; zone_id: number | null; x: number | null; y: number | null; w: number | null; h: number | null; notes: string }>(),
@@ -645,6 +647,9 @@ export async function getThreatModels(db: D1Database) {
     db
       .prepare(`SELECT id, client_id, site_id, threat_key, occurred_on, loss, description FROM tm_incidents ORDER BY occurred_on DESC, id DESC`)
       .all<{ id: number; client_id: number; site_id: number | null; threat_key: string; occurred_on: string; loss: number; description: string }>(),
+    db
+      .prepare(`SELECT id, site_id, level_id, name, kind, x, y, height_m, yaw, tilt, hfov, res_w, res_h, range_m, notes FROM tm_cameras ORDER BY site_id, id`)
+      .all<{ id: number; site_id: number; level_id: number | null; name: string; kind: string; x: number; y: number; height_m: number; yaw: number; tilt: number; hfov: number; res_w: number; res_h: number; range_m: number; notes: string }>(),
   ]);
   const levelsBySite = new Map<number, SiteLevel[]>();
   for (const l of levels.results) {
@@ -657,6 +662,8 @@ export async function getThreatModels(db: D1Database) {
       heightM: l.height_m,
       widthM: l.width_m,
       plan: l.plan_file_id ? { fileId: l.plan_file_id, w: l.plan_w ?? 0, h: l.plan_h ?? 0 } : null,
+      geometry: parseGeometry(l.geometry),
+      scaleSet: l.scale_set === 1,
     });
     levelsBySite.set(l.site_id, list);
   }
@@ -723,6 +730,25 @@ export async function getThreatModels(db: D1Database) {
         capex: r.capex,
         opex: r.opex,
         effectiveness: r.effectiveness,
+        notes: r.notes,
+      })
+    ),
+    tmCameras: cameras.results.map(
+      (r): TmCamera => ({
+        id: r.id,
+        siteId: r.site_id,
+        levelId: r.level_id,
+        name: r.name,
+        kind: r.kind === "ptz" || r.kind === "fisheye" ? r.kind : "fixed",
+        x: r.x,
+        y: r.y,
+        heightM: r.height_m,
+        yaw: r.yaw,
+        tilt: r.tilt,
+        hfov: r.hfov,
+        resW: r.res_w,
+        resH: r.res_h,
+        rangeM: r.range_m,
         notes: r.notes,
       })
     ),

@@ -1,4 +1,6 @@
 import type { CrimeData } from "./crime";
+import type { CameraSpec } from "./cameras";
+import type { LevelGeometry } from "./geometry";
 export type StatusKind = "secure" | "advisory" | "breach" | "info" | "neutral";
 
 export interface Metric {
@@ -274,6 +276,7 @@ export interface PortalData {
   feed: IntelItem[];
   sites: ClientSite[];
   tmElements: TmElement[];
+  tmCameras: TmCamera[];
   tmScenarios: TmScenario[];
   tmControls: TmControl[];
   tmIncidents: TmIncident[];
@@ -290,6 +293,21 @@ export interface SiteLevel {
   /** Real-world width the floor plan spans, in metres. */
   widthM: number;
   plan: { fileId: number; w: number; h: number } | null;
+  /** Walls and openings (see shared/geometry.ts). */
+  geometry: LevelGeometry;
+  /** True once the plan's scale has been measured, so widthM is real. */
+  scaleSet: boolean;
+}
+
+/** A CCTV camera on a site level; position as plan fractions (see shared/cameras.ts). */
+export interface TmCamera extends CameraSpec {
+  id: number;
+  siteId: number;
+  levelId: number | null;
+  name: string;
+  x: number;
+  y: number;
+  notes: string;
 }
 
 export interface ClientSite {

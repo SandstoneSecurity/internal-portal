@@ -13,6 +13,7 @@ import { DOMAIN_HUE, RATING_HUE, buildModel, compactAud, frequencyLabel, meanOf 
 import { ClientRisk } from "./ClientRisk";
 import { CrimeStatus } from "./CrimeProfile";
 import { SiteWorkspace } from "./SiteWorkspace";
+import { GuideButton, GuideDrawer, HowItWorks, Term } from "./Guide";
 
 const TOP_TABS = ["Clients", "Library"] as const;
 
@@ -20,9 +21,12 @@ export function RiskPage() {
   const [params] = useSearchParams();
   const clientId = Number(params.get("client")) || null;
   const siteId = Number(params.get("site")) || null;
-  if (clientId && siteId) return <SiteWorkspace clientId={clientId} siteId={siteId} />;
-  if (clientId) return <ClientRisk clientId={clientId} />;
-  return <Portfolio />;
+  return (
+    <>
+      {clientId && siteId ? <SiteWorkspace clientId={clientId} siteId={siteId} /> : clientId ? <ClientRisk clientId={clientId} /> : <Portfolio />}
+      <GuideDrawer />
+    </>
+  );
 }
 
 function Portfolio() {
@@ -54,7 +58,10 @@ function Portfolio() {
           <span className="pt-eyebrow">Portfolio exposure</span>
           <div className="pt-risk-hero__figure">
             {compactAud(total)}
-            <span className="pt-risk-hero__unit">expected loss a year</span>
+            <span className="pt-risk-hero__unit">
+              expected loss a year
+              <Term k="ale" />
+            </span>
           </div>
           <p className="pt-risk-hero__lede">
             {modelled.length
@@ -80,6 +87,8 @@ function Portfolio() {
         </dl>
       </header>
 
+      <HowItWorks />
+
       <CrimeStatus />
 
       <Tabs id="risk-top" tabs={TOP_TABS} value={tab} onChange={(t) => setParams(t === "Clients" ? {} : { tab: t })} counts={{ Clients: d.clients.length, Library: THREATS.length }} />
@@ -92,6 +101,7 @@ function Portfolio() {
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search clients" aria-label="Search clients" />
             </label>
             <span style={{ flex: 1 }} />
+            <GuideButton />
             <button className="sds-btn sds-btn--sm sds-btn--secondary" onClick={() => actions.addSite()}>
               Add site
             </button>
@@ -110,9 +120,11 @@ function Portfolio() {
                 </span>
                 <span role="columnheader" className="pt-num">
                   Expected loss / yr
+                  <Term k="ale" />
                 </span>
                 <span role="columnheader" className="pt-num pt-hide-sm">
                   1-in-10 yr
+                  <Term k="p90" />
                 </span>
                 <span role="columnheader" className="pt-hide-sm">
                   Top risk
