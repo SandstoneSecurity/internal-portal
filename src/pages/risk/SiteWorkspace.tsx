@@ -125,121 +125,124 @@ export function SiteWorkspace({ clientId, siteId }: { clientId: number; siteId: 
       </header>
 
       <div className={`pt-risk-ws${view === "paths" ? " pt-risk-ws--wide" : ""}`}>
-        <aside className="pt-risk-tree" aria-label="Model browser">
-          <div className="pt-risk-tree__head">
-            <span className="pt-eyebrow">Model</span>
-            <RowMenu
-              label="Add to model"
-              trigger={<Plus size={15} />}
-              items={[
-                { label: "Zone", onSelect: () => t.addElement(site, "zone", { levelId: level?.id }) },
-                { label: "Asset", onSelect: () => t.addElement(site, "asset", { levelId: level?.id }) },
-                { label: "Entry point", onSelect: () => t.addElement(site, "entry", { levelId: level?.id }) },
-                { label: "Level", onSelect: () => t.addLevel(site) },
-              ]}
-            />
-          </div>
-          <div className="pt-risk-tree__group">
-            <div className="pt-risk-tree__label">
-              <Layers size={12} /> Levels
+        {/* Tree and stage share a row, so the pinned tree stops where the stage ends rather than riding over the inspector when that wraps below. */}
+        <div className="pt-risk-ws__main">
+          <aside className="pt-risk-tree" aria-label="Model browser">
+            <div className="pt-risk-tree__head">
+              <span className="pt-eyebrow">Model</span>
+              <RowMenu
+                label="Add to model"
+                trigger={<Plus size={15} />}
+                items={[
+                  { label: "Zone", onSelect: () => t.addElement(site, "zone", { levelId: level?.id }) },
+                  { label: "Asset", onSelect: () => t.addElement(site, "asset", { levelId: level?.id }) },
+                  { label: "Entry point", onSelect: () => t.addElement(site, "entry", { levelId: level?.id }) },
+                  { label: "Level", onSelect: () => t.addLevel(site) },
+                ]}
+              />
             </div>
-            {levels.map((l) => (
-              <div key={l.id} className={`pt-risk-tree__item pt-risk-tree__level${level?.id === l.id ? " is-on" : ""}`}>
-                <button onClick={() => set({ level: String(l.id), view: view === "paths" ? "plan" : view })}>
-                  {l.name}
-                  <span className="pt-meta">{l.plan ? "plan" : "no plan"}</span>
-                </button>
-                <RowMenu label={`${l.name} options`} items={[{ label: "Edit level", onSelect: () => t.editLevel(l) }]} />
+            <div className="pt-risk-tree__group">
+              <div className="pt-risk-tree__label">
+                <Layers size={12} /> Levels
               </div>
-            ))}
-          </div>
-          <Tree elements={elements} selected={selected} onSelect={setSelected} risk={risk} />
-          <div className="pt-risk-tree__group">
-            <div className="pt-risk-tree__label">
-              <Camera size={12} /> Cameras
+              {levels.map((l) => (
+                <div key={l.id} className={`pt-risk-tree__item pt-risk-tree__level${level?.id === l.id ? " is-on" : ""}`}>
+                  <button onClick={() => set({ level: String(l.id), view: view === "paths" ? "plan" : view })}>
+                    {l.name}
+                    <span className="pt-meta">{l.plan ? "plan" : "no plan"}</span>
+                  </button>
+                  <RowMenu label={`${l.name} options`} items={[{ label: "Edit level", onSelect: () => t.editLevel(l) }]} />
+                </div>
+              ))}
             </div>
-            {siteCams.length === 0 && <p className="pt-dim pt-risk-tree__none">Place cameras with the Camera tool on the plan.</p>}
-            {siteCams.map((c) => (
-              <button key={c.id} className={`pt-risk-tree__item pt-risk-tree__el pt-hue-brass${pick?.kind === "camera" && pick.id === c.id ? " is-on" : ""}`} onClick={() => pickCamera(c.id)}>
-                <span className="pt-risk-tree__icon">
-                  <Camera size={12} />
-                </span>
-                <span className="pt-risk-tree__name">{c.name}</span>
-                <span className="pt-meta">{levels.find((l) => l.id === c.levelId)?.name ?? ""}</span>
-              </button>
-            ))}
-          </div>
-          <div className="pt-risk-tree__group">
-            <div className="pt-risk-tree__label">Scenarios here</div>
-            {siteRows.length === 0 && <p className="pt-dim pt-risk-tree__none">None yet.</p>}
-            {siteRows.map((r) => (
-              <button key={r.s.id} className={`pt-risk-tree__item pt-risk-tree__scn ${hueClass(DOMAIN_HUE[r.s.domain])}`} onClick={() => t.editScenario(clientId, r)}>
-                <span className="pt-chip__dot" />
-                <span className="pt-risk-tree__name">{r.s.name}</span>
-                <span className={`pt-risk-tree__rating ${hueClass(RATING_HUE[r.rating]!)}`}>{r.rating[0]}</span>
-              </button>
-            ))}
-            <button className="pt-addlink pt-risk-tree__add" onClick={() => setAdding(true)}>
-              + Threats for this site
-            </button>
-          </div>
-        </aside>
-
-        <section className="pt-risk-stage">
-          <div className="pt-risk-stage__bar">
-            <span className="pt-seg" role="radiogroup" aria-label="View">
-              {VIEWS.map(({ key, label, icon: Icon }) => (
-                <button key={key} type="button" role="radio" aria-checked={view === key} className="pt-seg__btn pt-hue-slate" onClick={() => set({ view: key === "plan" ? null : key, cam: null })}>
-                  <Icon size={14} /> {label}
+            <Tree elements={elements} selected={selected} onSelect={setSelected} risk={risk} />
+            <div className="pt-risk-tree__group">
+              <div className="pt-risk-tree__label">
+                <Camera size={12} /> Cameras
+              </div>
+              {siteCams.length === 0 && <p className="pt-dim pt-risk-tree__none">Place cameras with the Camera tool on the plan.</p>}
+              {siteCams.map((c) => (
+                <button key={c.id} className={`pt-risk-tree__item pt-risk-tree__el pt-hue-brass${pick?.kind === "camera" && pick.id === c.id ? " is-on" : ""}`} onClick={() => pickCamera(c.id)}>
+                  <span className="pt-risk-tree__icon">
+                    <Camera size={12} />
+                  </span>
+                  <span className="pt-risk-tree__name">{c.name}</span>
+                  <span className="pt-meta">{levels.find((l) => l.id === c.levelId)?.name ?? ""}</span>
                 </button>
               ))}
-            </span>
-            {view === "paths" && <Term k="paths" />}
-            {view === "plan" && levels.length > 1 && (
-              <div className="pt-select pt-select--sm">
-                <select value={level?.id ?? ""} onChange={(e) => set({ level: e.target.value })} aria-label="Level">
-                  {levels.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-          {view === "plan" && (
-            <PlanView
-              site={site}
-              level={level}
-              elements={elements}
-              risk={risk}
-              selected={selected}
-              onSelect={setSelected}
-              geo={geoApi}
-              cameras={levelCams}
-              pick={pick}
-              onPick={setPick}
-              toolRequest={toolReq}
-            />
-          )}
-          {view === "3d" && (
-            <Suspense fallback={<div className="pt-risk-3d pt-skeleton" />}>
-              <Site3D
-                levels={levels}
+            </div>
+            <div className="pt-risk-tree__group">
+              <div className="pt-risk-tree__label">Scenarios here</div>
+              {siteRows.length === 0 && <p className="pt-dim pt-risk-tree__none">None yet.</p>}
+              {siteRows.map((r) => (
+                <button key={r.s.id} className={`pt-risk-tree__item pt-risk-tree__scn ${hueClass(DOMAIN_HUE[r.s.domain])}`} onClick={() => t.editScenario(clientId, r)}>
+                  <span className="pt-chip__dot" />
+                  <span className="pt-risk-tree__name">{r.s.name}</span>
+                  <span className={`pt-risk-tree__rating ${hueClass(RATING_HUE[r.rating]!)}`}>{r.rating[0]}</span>
+                </button>
+              ))}
+              <button className="pt-addlink pt-risk-tree__add" onClick={() => setAdding(true)}>
+                + Threats for this site
+              </button>
+            </div>
+          </aside>
+
+          <section className="pt-risk-stage">
+            <div className="pt-risk-stage__bar">
+              <span className="pt-seg" role="radiogroup" aria-label="View">
+                {VIEWS.map(({ key, label, icon: Icon }) => (
+                  <button key={key} type="button" role="radio" aria-checked={view === key} className="pt-seg__btn pt-hue-slate" onClick={() => set({ view: key === "plan" ? null : key, cam: null })}>
+                    <Icon size={14} /> {label}
+                  </button>
+                ))}
+              </span>
+              {view === "paths" && <Term k="paths" />}
+              {view === "plan" && levels.length > 1 && (
+                <div className="pt-select pt-select--sm">
+                  <select value={level?.id ?? ""} onChange={(e) => set({ level: e.target.value })} aria-label="Level">
+                    {levels.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+            {view === "plan" && (
+              <PlanView
+                site={site}
+                level={level}
                 elements={elements}
                 risk={risk}
                 selected={selected}
                 onSelect={setSelected}
-                cameras={siteCams}
-                camView={camView}
-                onCamView={(id) => set({ cam: id == null ? null : String(id) })}
-                onPickCamera={pickCamera}
-                pickedCamera={pick?.kind === "camera" ? pick.id : null}
+                geo={geoApi}
+                cameras={levelCams}
+                pick={pick}
+                onPick={setPick}
+                toolRequest={toolReq}
               />
-            </Suspense>
-          )}
-          {view === "paths" && <AttackPaths m={m} site={site} aimed={aimed} onSelect={setSelected} onScenario={(r) => t.editScenario(clientId, r)} />}
-        </section>
+            )}
+            {view === "3d" && (
+              <Suspense fallback={<div className="pt-risk-3d pt-skeleton" />}>
+                <Site3D
+                  levels={levels}
+                  elements={elements}
+                  risk={risk}
+                  selected={selected}
+                  onSelect={setSelected}
+                  cameras={siteCams}
+                  camView={camView}
+                  onCamView={(id) => set({ cam: id == null ? null : String(id) })}
+                  onPickCamera={pickCamera}
+                  pickedCamera={pick?.kind === "camera" ? pick.id : null}
+                />
+              </Suspense>
+            )}
+            {view === "paths" && <AttackPaths m={m} site={site} aimed={aimed} onSelect={setSelected} onScenario={(r) => t.editScenario(clientId, r)} />}
+          </section>
+        </div>
 
         <aside className="pt-risk-inspector" aria-label="Inspector">
           {pick && level && frame ? (

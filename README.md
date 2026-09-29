@@ -122,7 +122,11 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
   - **Sites:** several per client, each with levels.
     - **Plan:** upload a floor plan as a PDF, PNG, JPEG or WebP. PDF pages
       are rendered at 3,200 px (pdf.js, loaded only when needed), so
-      architects' vector drawings stay sharp.
+      architects' vector drawings stay sharp. Scanned drawings decode too:
+      pdf.js's JPEG 2000 and JBIG2 decoders and standard fonts are served
+      from `/pdfjs/` (copied from the package at build, see
+      `vite.config.ts`). A site with no levels gets its first level from
+      the upload.
       - **Several levels in one drawing** (`src/lib/planImport.ts`): each
         PDF page, and each separate plan drawn side by side on a sheet,
         becomes a candidate level.

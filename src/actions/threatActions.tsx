@@ -17,52 +17,6 @@ import { SUBTYPES, guessArea, siteFields, siteInitial } from "./threatFields";
 const num = (v: unknown): number | null => (v === "" || v === undefined || v === null ? null : Number(v));
 const KIND_LABEL: Record<TmElementKind, string> = { zone: "zone", asset: "asset", entry: "entry point" };
 
-/** Largest edge a floor plan is stored at: sharp enough to trace walls at 1:100, small enough to load fast. */
-const PLAN_EDGE = 3200;
-
-const isPdf = (f: File) => f.type === "application/pdf" || /\.pdf$/i.test(f.name);
-
-/**
- * Reads an image or PDF floor plan, scales it to at most PLAN_EDGE and
- * re-encodes it, returning bytes and pixel size. A PDF's first page is
- * rendered at full resolution.
- */
-async function preparePlan(file: File): Promise<{ blob: Blob; w: number; h: number; name: string; note?: string }> {
-  let source: CanvasImageSource;
-  let sw: number;
-  let sh: number;
-  let note: string | undefined;
-  if (isPdf(file)) {
-    const { renderPdfPlan } = await import("../lib/pdfPlan");
-    const { canvas, pages } = await renderPdfPlan(file, PLAN_EDGE);
-    source = canvas;
-    sw = canvas.width;
-    sh = canvas.height;
-    if (pages > 1) note = `Used page 1 of ${pages}. Add a level for each other floor and upload its page.`;
-  } else {
-    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) throw new Error("Upload the floor plan as a PDF, PNG, JPEG or WebP.");
-    const bitmap = await createImageBitmap(file);
-    source = bitmap;
-    sw = bitmap.width;
-    sh = bitmap.height;
-  }
-  const scale = Math.min(1, PLAN_EDGE / Math.max(sw, sh));
-  const w = Math.max(16, Math.round(sw * scale));
-  const h = Math.max(16, Math.round(sh * scale));
-  if (!isPdf(file) && scale === 1 && file.size < 3 * 1024 * 1024) return { blob: file, w, h, name: file.name };
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(0, 0, w, h);
-  ctx.drawImage(source, 0, 0, w, h);
-  const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/webp", 0.9));
-  const png = blob && blob.type === "image/webp" ? blob : await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
-  if (!png) throw new Error("Couldn't read that image.");
-  return { blob: png, w, h, name: file.name.replace(/\.[^.]+$/, "") + (png.type === "image/webp" ? ".webp" : ".png"), note };
-}
-
 export function useThreatActions() {
   const { data, refresh, mutate } = usePortalData();
   const actions = useActions();
@@ -175,27 +129,6 @@ export function useThreatActions() {
               }),
           },
         }),
-
-      uploadPlan: async (l: SiteLevel, file: File) => {
-        try {
-          const plan = await preparePlan(file);
-          const res = await fetch(`/api/levels/${l.id}/plan?w=${plan.w}&h=${plan.h}&name=${encodeURIComponent(plan.name)}`, {
-            method: "PUT",
-            credentials: "same-origin",
-            headers: { "X-Sandstone-Portal": "1", "Content-Type": plan.blob.type },
-            body: plan.blob,
-          });
-          if (!res.ok) {
-            const j = (await res.json().catch(() => ({}))) as { error?: string };
-            throw new ApiError(j.error ?? `Upload failed (${res.status}).`, res.status);
-          }
-          await done("Floor plan uploaded", plan.note ?? (l.scaleSet ? `${l.name} · ${plan.w}×${plan.h}` : "Next: set the scale by measuring a wall you know the length of."));
-          return true;
-        } catch (err) {
-          fail(err);
-          return false;
-        }
-      },
 
       removePlan: (l: SiteLevel) =>
         destroy({

@@ -39,6 +39,9 @@ import {
 } from "../../../shared/geometry";
 import type { ClientSite, SiteLevel, TmCamera, TmElement } from "../../../shared/types";
 import { useThreatActions } from "../../actions/threatActions";
+import { useToast } from "../../components/ui/Toast";
+import { send } from "../../lib/api";
+import { usePortalData } from "../../lib/DataProvider";
 import { hueClass, type Hue } from "../../lib/hues";
 import type { GeometryApi } from "../../lib/useGeometry";
 import { DetectPanel, type Proposal } from "./DetectPanel";
@@ -146,6 +149,8 @@ export function PlanView({
   toolRequest?: { tool: Tool; n: number } | null;
 }) {
   const t = useThreatActions();
+  const { refresh } = usePortalData();
+  const toast = useToast();
   const [tool, setTool] = useState<Tool>("select");
   const [wallKind, setWallKind] = useState<WallKind>("wall");
   const [doorKind, setDoorKind] = useState<OpeningKind>("door");
@@ -167,7 +172,9 @@ export function PlanView({
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [over, setOver] = useState(false);
   const [importing, setImporting] = useState<ImportSource | null>(null);
-  const busy = importing !== null;
+  /** A drawing dropped on a site with no levels yet, waiting for its first level to exist. */
+  const [pending, setPending] = useState<File | null>(null);
+  const busy = importing !== null || pending !== null;
   const viewport = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLDivElement>(null);
   const covCanvas = useRef<HTMLCanvasElement>(null);
@@ -631,9 +638,26 @@ export function PlanView({
 
   // Uploads go through the importer: a drawing with several levels offers to split them.
   const upload = async (fl: File | undefined) => {
-    if (!fl || !level) return;
-    setImporting({ kind: "file", file: fl });
+    if (!fl) return;
+    if (level) {
+      setImporting({ kind: "file", file: fl });
+      return;
+    }
+    // A site with no levels: the drawing starts the first one (the importer renames it from the drawing's title).
+    setPending(fl);
+    try {
+      await send("POST", `/sites/${site.id}/levels`, { name: "Ground floor", order: 0, heightM: 3.6, widthM: 40 });
+      await refresh();
+    } catch (err) {
+      setPending(null);
+      toast({ title: "Couldn't add a level for the plan", desc: (err as Error).message, kind: "breach" });
+    }
   };
+  useEffect(() => {
+    if (!pending || !level) return;
+    setImporting({ kind: "file", file: pending });
+    setPending(null);
+  }, [pending, level]);
 
   // Walls as drawn while an end or the whole wall is being dragged.
   const shownRuns = useMemo(() => {
@@ -938,11 +962,9 @@ export function PlanView({
           <div className="pt-pl-empty">
             <b>{busy ? "Reading the plan…" : "No floor plan on this level yet"}</b>
             <span>Drop a PDF or image of the plan here, or draw walls straight onto the grid. PDFs from architects give the sharpest result.</span>
-            {level && (
-              <button className="sds-btn sds-btn--sm sds-btn--primary" onClick={() => file.current?.click()} disabled={busy}>
-                <Upload size={14} /> Upload plan
-              </button>
-            )}
+            <button className="sds-btn sds-btn--sm sds-btn--primary" onClick={() => file.current?.click()} disabled={busy}>
+              <Upload size={14} /> Upload plan
+            </button>
           </div>
         )}
 
@@ -991,19 +1013,27 @@ export function PlanView({
             </>
           )}
         </span>
-        {level && (
-          <span className="pt-pl-upload">
-            <input ref={file} type="file" accept="application/pdf,image/png,image/jpeg,image/webp" hidden onChange={(e) => void upload(e.target.files?.[0])} />
-            <button className="sds-btn sds-btn--sm sds-btn--ghost" onClick={() => file.current?.click()} disabled={busy}>
-              <Upload size={14} /> {busy ? "Uploading…" : plan ? "Replace plan" : "Upload plan"}
+        <span className="pt-pl-upload">
+          <input
+            ref={file}
+            type="file"
+            accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp"
+            hidden
+            onChange={(e) => {
+              void upload(e.target.files?.[0]);
+              // Picking the same file again still counts as a change.
+              e.target.value = "";
+            }}
+          />
+          <button className="sds-btn sds-btn--sm sds-btn--ghost" onClick={() => file.current?.click()} disabled={busy}>
+            <Upload size={14} /> {busy ? "Uploading…" : plan ? "Replace plan" : "Upload plan"}
+          </button>
+          {plan && (
+            <button className="sds-btn sds-btn--sm sds-btn--ghost pt-danger-link" onClick={() => level && void t.removePlan(level)}>
+              Remove plan
             </button>
-            {plan && (
-              <button className="sds-btn sds-btn--sm sds-btn--ghost pt-danger-link" onClick={() => void t.removePlan(level)}>
-                Remove plan
-              </button>
-            )}
-          </span>
-        )}
+          )}
+        </span>
       </div>
     </div>
   );

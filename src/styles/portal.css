@@ -1658,13 +1658,17 @@ button.pt-risk-table__row:hover { background: var(--surface-sunken); }
 
 /* Site workspace: model browser · stage · inspector */
 .pt-risk-ws { display: grid; grid-template-columns: 250px minmax(0, 1fr) 290px; gap: 14px; align-items: start; }
+/* Three columns: the tree and stage sit straight in the workspace grid. When the inspector wraps below,
+   they get a row of their own, so the pinned tree can't ride down over the inspector. */
+.pt-risk-ws__main { display: contents; }
 /* The attack-path diagram needs the width; the inspector moves below it. */
-.pt-risk-ws--wide { grid-template-columns: 250px minmax(0, 1fr); }
-.pt-risk-ws--wide .pt-risk-inspector { grid-column: 1 / -1; position: static; max-height: none; }
+.pt-risk-ws--wide { grid-template-columns: minmax(0, 1fr); }
+.pt-risk-ws--wide .pt-risk-ws__main { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 14px; align-items: start; }
+.pt-risk-ws--wide .pt-risk-inspector { position: static; max-height: none; }
 /* The side panels stay put while the plan scrolls: pinned below the page header, never taller than the
    visible area (so the end of the page can't push them up under it), and scrolling only themselves. */
 .pt-risk-tree, .pt-risk-inspector {
-  position: sticky; top: 16px; background: var(--surface-raised); border: var(--border-hair) solid var(--border-subtle);
+  position: sticky; top: 16px; z-index: 2; background: var(--surface-raised); border: var(--border-hair) solid var(--border-subtle);
   max-height: calc(100dvh - 200px); overflow: auto; overscroll-behavior: contain; scrollbar-width: thin;
 }
 .pt-risk-tree { padding: 10px 0 14px; }
@@ -2017,8 +2021,9 @@ button.pt-risk-table__row:hover { background: var(--surface-sunken); }
 .pt-risk-node__barrier { display: inline-flex; align-items: center; gap: 3px; color: var(--status-secure-fg); }
 
 @media (max-width: 1200px) {
-  .pt-risk-ws { grid-template-columns: 220px minmax(0, 1fr); }
-  .pt-risk-inspector { grid-column: 1 / -1; position: static; max-height: none; }
+  .pt-risk-ws { grid-template-columns: minmax(0, 1fr); }
+  .pt-risk-ws__main, .pt-risk-ws--wide .pt-risk-ws__main { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 14px; align-items: start; }
+  .pt-risk-inspector { position: static; max-height: none; }
 }
 @media (max-width: 900px) {
   .pt-risk-hero { grid-template-columns: 1fr; }
@@ -2028,8 +2033,7 @@ button.pt-risk-table__row:hover { background: var(--surface-sunken); }
   .pt-risk-kpi:nth-child(n + 2) { border-top: var(--border-hair) solid var(--border-subtle); }
   .pt-risk-overview { grid-template-columns: 1fr; }
   .pt-risk-overview__curve { grid-row: auto; }
-  .pt-risk-ws { grid-template-columns: 1fr; }
-  .pt-risk-ws--wide { grid-template-columns: 1fr; }
+  .pt-risk-ws__main, .pt-risk-ws--wide .pt-risk-ws__main { grid-template-columns: minmax(0, 1fr); }
   .pt-risk-stage { order: -1; }
   .pt-risk-tree { position: static; max-height: none; }
   .pt-risk-cal li { grid-template-columns: minmax(0, 1fr) auto; }
