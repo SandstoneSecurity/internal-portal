@@ -2126,3 +2126,5 @@ button.pt-risk-table__row:hover { background: var(--surface-sunken); }
 @media (max-width: 640px) {
   .pt-report__impact .pt-seg { flex-direction: column; }
 }
+.pt-report__gh { display: inline-flex; margin-left: 6px; color: var(--text-tertiary); vertical-align: -1px; }
+.pt-report__gh:hover { color: var(--text-link-hover); }
