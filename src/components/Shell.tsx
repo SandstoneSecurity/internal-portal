@@ -1,26 +1,17 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { Building2, LayoutDashboard, ShieldHalf, LogOut, MapPin, Moon, Plus, Route, Search, Sun, Users } from "lucide-react";
+import { Bug, LogOut, Moon, Plus, Search, Sun } from "lucide-react";
 import { useActions } from "../actions/ActionHost";
 import { peopleView } from "../pages/PeoplePage";
 import { usePortal } from "../lib/DataProvider";
 import { initialsOf, isoWeek, longDate } from "../lib/format";
 import { useHotkey } from "../lib/hotkeys";
 import { DUR, tween } from "../lib/motion";
+import { MODULES } from "../lib/modules";
 import { useTheme } from "../lib/theme";
 import { CommandPalette } from "./CommandPalette";
 import { Kbd, ModKey } from "./ui/Bits";
-
-const NAV = [
-  { to: "/", label: "Control", icon: LayoutDashboard },
-  { to: "/operations", label: "Operations", icon: Route },
-  { to: "/people", label: "People", icon: Users },
-  { to: "/clients", label: "Clients", icon: Building2 },
-  { to: "/risk", label: "Threat Modelling", icon: ShieldHalf },
-  { to: "/intelligence", label: "Intelligence", icon: MapPin },
-] as const;
-
 
 function useHeading(pathname: string, search: string): { title: string; meta: string } {
   const d = usePortal();
@@ -89,7 +80,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
         <div className="pt-side__label">Modules</div>
         <nav className="pt-nav" aria-label="Modules">
-          {NAV.map(({ to, label, icon: Icon }) => {
+          {MODULES.map(({ to, label, icon: Icon }) => {
             const c = counts[to];
             const isActive = to === "/" ? pathname === "/" : pathname.startsWith(to);
             return (
@@ -147,6 +138,9 @@ export function Shell({ children }: { children: ReactNode }) {
               </button>
             )}
             <span className="pt-head__sep" />
+            <button className="pt-iconbtn" onClick={() => actions.report()} aria-label="Report a bug or request a feature" title="Report a bug or request a feature">
+              <Bug size={17} strokeWidth={1.75} />
+            </button>
             <button
               className="pt-iconbtn"
               onClick={toggle}

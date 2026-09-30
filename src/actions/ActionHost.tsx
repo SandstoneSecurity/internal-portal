@@ -31,6 +31,7 @@ import { addDays, aud, dayMonth, initialsOf, money } from "../lib/format";
 import { useConfirm } from "../components/ui/Confirm";
 import { FormDrawer, type FieldSpec, type FormSpec, type FormValues } from "../components/ui/FormDrawer";
 import { useToast } from "../components/ui/Toast";
+import { ReportDrawer, type ReportKind } from "../components/ReportDrawer";
 import { TaskPane } from "../components/TaskPane";
 import { guessArea, siteFields, siteInitial } from "./threatFields";
 
@@ -91,6 +92,8 @@ export interface Actions {
   deleteIntel: (i: IntelItem) => Promise<boolean>;
   /** Opens any form in the side drawer. */
   openForm: (spec: FormSpec) => void;
+  /** Report a bug or request a feature: files a task under Internal portal. */
+  report: (kind?: ReportKind) => void;
   /** Adds a site to a client, asking which client when none is given. */
   addSite: (o?: { clientId?: number }) => void;
   /** The page's primary action (header button, "N" shortcut). */
@@ -138,6 +141,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const [spec, setSpec] = useState<FormSpec | null>(null);
   const [taskId, setTaskId] = useState<number | null>(null);
+  const [reporting, setReporting] = useState<ReportKind | null>(null);
   const close = useCallback(() => setSpec(null), []);
 
   const done = useCallback(
@@ -1044,6 +1048,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
         }),
 
       openForm: (spec) => setSpec(spec),
+      report: (kind = "bug") => setReporting(kind),
 
       addSite: (o) => {
         const clients = [...(d?.clients ?? [])].sort((x, y) => x.org.localeCompare(y.org));
@@ -1088,6 +1093,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
       {children}
       <FormDrawer spec={spec} onClose={close} />
       <TaskPane id={taskId} onClose={() => setTaskId(null)} />
+      <ReportDrawer kind={reporting} onClose={() => setReporting(null)} />
     </ActionContext.Provider>
   );
 }
