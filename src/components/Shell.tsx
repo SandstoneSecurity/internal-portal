@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { Bug, LogOut, Moon, Plus, Search, Sun } from "lucide-react";
+import { LogOut, MessageSquarePlus, Moon, Plus, Search, Sun } from "lucide-react";
 import { useActions } from "../actions/ActionHost";
 import { peopleView } from "../pages/PeoplePage";
 import { usePortal } from "../lib/DataProvider";
@@ -138,8 +138,8 @@ export function Shell({ children }: { children: ReactNode }) {
               </button>
             )}
             <span className="pt-head__sep" />
-            <button className="pt-iconbtn" onClick={() => actions.report()} aria-label="Report a bug or request a feature" title="Report a bug or request a feature">
-              <Bug size={17} strokeWidth={1.75} />
+            <button className="pt-iconbtn" onClick={() => actions.report()} aria-label="Report a bug or request a feature" title="Feedback: report a bug or request a feature">
+              <MessageSquarePlus size={17} strokeWidth={1.75} />
             </button>
             <button
               className="pt-iconbtn"

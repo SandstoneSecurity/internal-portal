@@ -214,7 +214,7 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
   to any page, person, account, work item, role or intelligence item, run any
   action, switch theme or sign out. `N` starts the
   page's primary action.
-- **Report a bug or request a feature** from the bug icon in the header, or
+- **Report a bug or request a feature** from the feedback icon (speech bubble) in the header, or
   "Report a bug" / "Request a feature" in the palette. A short form (what's
   wrong or what you'd like, the details, and how much it matters) files a
   task at the top of To do on the Operations board, under client/site
