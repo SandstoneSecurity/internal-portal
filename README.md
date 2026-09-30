@@ -214,19 +214,36 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
   to any page, person, account, work item, role or intelligence item, run any
   action, switch theme or sign out. `N` starts the
   page's primary action.
-- **Report a bug or request a feature** from the bug icon in the header, or
-  "Report a bug" / "Request a feature" in the palette. A short form (what's
-  wrong or what you'd like, the details, and how much it matters) files a
-  task at the top of To do on the Operations board, under client/site
-  "Internal portal" and the Tech service line, so filtering the board by
-  "Internal portal" shows the portal's own backlog.
-  - **Title** is prefixed "Bug:" or "Feature:"; how much it matters sets
-    the priority (Low, Medium, High).
-  - **Description** carries the details, what was expected (bugs), who
-    raised it and when, the module and page it came from, and the browser
-    and window size.
+- **Report a bug or request a feature** from the feedback icon (speech
+  bubble) in the header, or "Report a bug" / "Request a feature" in the
+  palette. A short form (what's wrong or what you'd like, the details, and
+  how much it matters) opens an issue in `SandstoneSecurity/internal-portal`
+  on GitHub and adds it to the **internal portal** GitHub Project
+  (`worker/feedback.ts`).
+  - **The issue** is titled "Bug: …" or "Feature: …" and labelled `bug` or
+    `enhancement` (left unlabelled if the repository lacks them). Its body
+    has the details, what was expected (bugs), who raised it and when, how
+    much it matters, the module and page it came from, and the browser and
+    window size.
+  - **The project** is found by title under the repository's owner
+    (ignoring case). If it has a single-select **Priority** field whose
+    options include Low, Medium and High, that is set too. If the issue
+    can't be added to the project it is still filed, and the confirmation
+    says why.
   - The report stays on the page it was raised from; the confirmation
-    offers "View task". `POST /api/feedback` (`worker/writes.ts`).
+    offers "Open in GitHub".
+  - **Setup:** create a GitHub token that can open issues on the repository
+    and add items to the project:
+    - fine-grained: Issues (read and write) on the repository, and Projects
+      (read and write) on the organisation;
+    - or classic: `repo` and `project` scopes. Use this if the project
+      belongs to a user rather than an organisation.
+
+    Save it as the repository secret `PORTAL_GITHUB_TOKEN`. The deploy
+    workflow copies it into the Worker as `GITHUB_TOKEN`; alternatively run
+    `npx wrangler secret put GITHUB_TOKEN`. Until it's set, the form says
+    GitHub isn't connected and won't file. The repository and project name
+    are `FEEDBACK_REPO` and `FEEDBACK_PROJECT` in `wrangler.jsonc`.
 - **Themes.** The default is limestone (day). Operations mode is the night
   theme for the control room; toggle it from the header or the palette. The
   choice is remembered per browser.

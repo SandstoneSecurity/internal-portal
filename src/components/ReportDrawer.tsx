@@ -1,8 +1,7 @@
 import { useEffect, useId, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { Bug, Lightbulb } from "lucide-react";
+import { useLocation } from "react-router-dom";
+import { Bug, ExternalLink, Lightbulb } from "lucide-react";
 import { ApiError, send } from "../lib/api";
-import { usePortalData } from "../lib/DataProvider";
 import { moduleFor } from "../lib/modules";
 import { Drawer } from "./ui/Overlay";
 import { useToast } from "./ui/Toast";
@@ -46,14 +45,15 @@ function browserName(): string {
   return os ? `${name} on ${os}` : name;
 }
 
+/** Where reports go (from the server), and whether GitHub is connected. */
+type Destination = { repo: string; project: string; connected: boolean };
+
 /**
- * Report a bug or ask for a feature from anywhere in the portal. It files a task on the Operations
- * board under "Internal portal", with the page it came from and the browser attached.
+ * Report a bug or ask for a feature from anywhere in the portal. It opens an issue on GitHub and adds it
+ * to the portal's GitHub Project, with the page it came from and the browser attached.
  */
 export function ReportDrawer({ kind: opened, onClose }: { kind: ReportKind | null; onClose: () => void }) {
-  const { refresh } = usePortalData();
   const toast = useToast();
-  const navigate = useNavigate();
   const { pathname, search } = useLocation();
   const formId = useId();
   const [kind, setKind] = useState<ReportKind>("bug");
@@ -66,6 +66,7 @@ export function ReportDrawer({ kind: opened, onClose }: { kind: ReportKind | nul
   const [busy, setBusy] = useState(false);
   // Where it was raised from, fixed when the drawer opens.
   const [where, setWhere] = useState({ module: "", page: "", browser: "", screen: "" });
+  const [dest, setDest] = useState<Destination | null>(null);
 
   useEffect(() => {
     if (!opened) return;
@@ -74,6 +75,10 @@ export function ReportDrawer({ kind: opened, onClose }: { kind: ReportKind | nul
     setFormError(null);
     setBusy(false);
     setWhere({ module: moduleFor(pathname), page: (pathname + search).slice(0, 300), browser: browserName(), screen: `${window.innerWidth}×${window.innerHeight}` });
+    fetch("/api/feedback", { credentials: "same-origin" })
+      .then((r) => (r.ok ? (r.json() as Promise<Destination>) : null))
+      .then((d) => d && setDest(d))
+      .catch(() => undefined);
     // What was typed stays if the drawer is closed by accident; it's cleared once filed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened]);
@@ -94,12 +99,19 @@ export function ReportDrawer({ kind: opened, onClose }: { kind: ReportKind | nul
     setBusy(true);
     setFormError(null);
     try {
-      const r = await send<{ id: number; ref: string }>("POST", "/feedback", { kind, title, details, expected: kind === "bug" ? expected : "", impact, ...where });
-      await refresh();
+      const r = await send<{ number: number; url: string; project: { title: string; url: string } | null; warning: string | null }>("POST", "/feedback", {
+        kind,
+        title,
+        details,
+        expected: kind === "bug" ? expected : "",
+        impact,
+        ...where,
+      });
       toast({
-        title: `${r.ref} filed`,
-        desc: `${kind === "bug" ? "Bug" : "Feature"} added to Internal portal on the Operations board.`,
-        action: { label: "View task", run: () => navigate(`/operations?card=${r.id}`) },
+        title: `Issue #${r.number} filed`,
+        desc: r.warning ?? `${kind === "bug" ? "Bug" : "Feature request"} added to the ${r.project?.title ?? "project"} project on GitHub.`,
+        kind: r.warning ? "advisory" : "secure",
+        action: { label: "Open in GitHub", run: () => window.open(r.url, "_blank", "noopener") },
       });
       setTitle("");
       setDetails("");
@@ -140,7 +152,7 @@ export function ReportDrawer({ kind: opened, onClose }: { kind: ReportKind | nul
           <button type="button" className="sds-btn sds-btn--md sds-btn--ghost" onClick={onClose} disabled={busy}>
             Cancel
           </button>
-          <button type="submit" form={formId} className="sds-btn sds-btn--md sds-btn--primary" disabled={busy} aria-busy={busy}>
+          <button type="submit" form={formId} className="sds-btn sds-btn--md sds-btn--primary" disabled={busy || dest?.connected === false} aria-busy={busy}>
             {busy ? <span className="pt-spinner" aria-hidden /> : null}
             {c.submit}
           </button>
@@ -160,6 +172,11 @@ export function ReportDrawer({ kind: opened, onClose }: { kind: ReportKind | nul
             </button>
           ))}
         </div>
+        {dest?.connected === false && (
+          <div className="pt-form__intro" role="status">
+            GitHub isn't connected to the portal yet, so this can't be filed. Ask an admin to add the GitHub token.
+          </div>
+        )}
         {formError && (
           <div className="pt-form__error" role="alert">
             {formError}
@@ -240,7 +257,12 @@ export function ReportDrawer({ kind: opened, onClose }: { kind: ReportKind | nul
         <dl className="pt-report__context">
           <dt>Filed as</dt>
           <dd>
-            A task in <b>To do</b> on the Operations board, under Internal portal · Tech
+            A GitHub issue{dest ? <> in <span className="pt-mono">{dest.repo}</span>, added to the <b>{dest.project}</b> project</> : " on the portal's GitHub Project"}
+            {dest && (
+              <a className="pt-report__gh" href={`https://github.com/${dest.repo}/issues`} target="_blank" rel="noopener noreferrer" aria-label="Open the issues on GitHub">
+                <ExternalLink size={12} />
+              </a>
+            )}
           </dd>
           <dt>Attached</dt>
           <dd className="pt-mono">

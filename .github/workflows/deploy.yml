@@ -4,6 +4,8 @@ name: Deploy to Cloudflare
 # Requires the repository secret CLOUDFLARE_API to hold a Cloudflare API token
 # with Workers Scripts:Edit and D1:Edit permissions. An optional
 # CLOUDFLARE_ACCOUNT_ID secret pins the account when the token can see several.
+# An optional PORTAL_GITHUB_TOKEN secret becomes the Worker's GITHUB_TOKEN, which
+# files bug reports and feature requests as issues on the GitHub Project.
 on:
   push:
     branches: [main]
@@ -40,3 +42,16 @@ jobs:
 
       - name: Build and deploy Worker
         run: npm run deploy
+
+      # Copies the GitHub token for bug reports into the Worker's secrets. Skipped
+      # when the repository secret isn't set; the portal then says GitHub isn't
+      # connected instead of filing.
+      - name: Set GitHub token for bug reports
+        env:
+          PORTAL_GITHUB_TOKEN: ${{ secrets.PORTAL_GITHUB_TOKEN }}
+        run: |
+          if [ -z "$PORTAL_GITHUB_TOKEN" ]; then
+            echo "PORTAL_GITHUB_TOKEN isn't set; bug reports stay off."
+            exit 0
+          fi
+          printf '%s' "$PORTAL_GITHUB_TOKEN" | npx wrangler secret put GITHUB_TOKEN

@@ -63,19 +63,6 @@ export const schemas = {
     /** Index within the target column (0 = top). */
     position: z.coerce.number().int().min(0).max(10_000).optional(),
   }),
-  /** A bug report or feature request from inside the portal; it becomes a task for the portal itself. */
-  feedback: z.object({
-    kind: z.enum(["bug", "feature"]),
-    title: text(110),
-    details: text(4000),
-    expected: optText(2000),
-    impact: z.enum(["Low", "Medium", "High"]).default("Medium"),
-    /** Where it was raised from, filled in by the page. */
-    page: optText(300),
-    module: optText(60),
-    browser: optText(200),
-    screen: optText(40),
-  }),
   dependency: z.object({ dependsOn: id }),
   subtask: z.object({
     title: text(200),
@@ -301,39 +288,6 @@ async function reorder(
 }
 
 writes.post("/work", async (c) => c.json(await createCard(c, await body(c, schemas.work)), 201));
-
-/** Tasks for the portal itself carry this client / site, so the board filters them together. */
-const PORTAL_PROJECT = "Internal portal";
-
-// Report a bug or request a feature: files a task at the top of To do, with where it came from.
-writes.post("/feedback", async (c) => {
-  const v = await body(c, schemas.feedback);
-  const bug = v.kind === "bug";
-  const where = [v.module, v.page].filter(Boolean).join(" · ");
-  const report = [v.details, ...(bug && v.expected ? ["", `Expected: ${v.expected}`] : [])].join("\n");
-  const foot = [
-    "",
-    "—",
-    `${bug ? "Reported" : "Requested"} by ${c.get("userEmail")} on ${shortDate(todaySydney())}${where ? ` from ${where}` : ""}.`,
-    `${bug ? "Gets in the way" : "Would help"}: ${v.impact.toLowerCase()}.`,
-    ...(v.browser || v.screen ? [`Browser: ${[v.browser, v.screen].filter(Boolean).join(" · ")}`] : []),
-  ].join("\n");
-  // A long report gives up some of its text, never who raised it or where.
-  const description = report.slice(0, 4000 - foot.length) + foot;
-  const card = await createCard(c, {
-    title: `${bug ? "Bug" : "Feature"}: ${v.title}`,
-    site: PORTAL_PROJECT,
-    line: "Tech",
-    description,
-    priority: v.impact,
-    startDate: null,
-    dueDate: null,
-    owner: "",
-    milestone: false,
-    position: 0,
-  });
-  return c.json(card, 201);
-});
 
 async function createCard(c: Ctx, v: z.infer<typeof schemas.work>): Promise<{ id: number; ref: string }> {
   if (v.milestone) v.startDate = null;
