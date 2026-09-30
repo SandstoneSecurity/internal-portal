@@ -3,8 +3,10 @@ import { useNavigate } from "react-router-dom";
 import {
   ArrowRight,
   Briefcase,
+  Bug,
   Building2,
   LayoutDashboard,
+  Lightbulb,
   LogOut,
   MapPin,
   Moon,
@@ -77,6 +79,8 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         run: toggle,
         keywords: "theme dark light night day",
       },
+      { id: "act-bug", group: "Actions", label: "Report a bug", icon: <Bug size={15} />, run: () => actions.report("bug"), keywords: "issue problem broken error feedback portal" },
+      { id: "act-feat", group: "Actions", label: "Request a feature", icon: <Lightbulb size={15} />, run: () => actions.report("feature"), keywords: "idea suggestion improvement feedback portal" },
       { id: "act-out", group: "Actions", label: "Sign out", icon: <LogOut size={15} />, run: () => (window.location.href = "/cdn-cgi/access/logout"), keywords: "logout" },
     ];
     for (const e of data.employees)

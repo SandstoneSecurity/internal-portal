@@ -9,6 +9,8 @@ interface ToastItem {
   title: string;
   desc?: string;
   kind: ToastKind;
+  /** A follow-up, such as opening what was just made. */
+  action?: { label: string; run: () => void };
 }
 
 const ToastContext = createContext<((t: Omit<ToastItem, "id" | "kind"> & { kind?: ToastKind }) => void) | null>(null);
@@ -22,7 +24,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     (t: Omit<ToastItem, "id" | "kind"> & { kind?: ToastKind }) => {
       const id = ++seq.current;
       setItems((all) => [...all.slice(-3), { id, kind: "secure", ...t }]);
-      window.setTimeout(() => dismiss(id), t.kind === "breach" ? 7000 : 4200);
+      window.setTimeout(() => dismiss(id), t.kind === "breach" || t.action ? 7000 : 4200);
     },
     [dismiss]
   );
@@ -45,6 +47,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 <div className="pt-toast__title">{t.title}</div>
                 {t.desc && <div className="pt-toast__desc">{t.desc}</div>}
               </div>
+              {t.action && (
+                <button
+                  className="pt-toast__action"
+                  onClick={() => {
+                    t.action!.run();
+                    dismiss(t.id);
+                  }}
+                >
+                  {t.action.label}
+                </button>
+              )}
               <button className="pt-iconbtn pt-iconbtn--inverse" aria-label="Dismiss" onClick={() => dismiss(t.id)}>
                 <X size={14} />
               </button>

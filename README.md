@@ -214,6 +214,19 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
   to any page, person, account, work item, role or intelligence item, run any
   action, switch theme or sign out. `N` starts the
   page's primary action.
+- **Report a bug or request a feature** from the bug icon in the header, or
+  "Report a bug" / "Request a feature" in the palette. A short form (what's
+  wrong or what you'd like, the details, and how much it matters) files a
+  task at the top of To do on the Operations board, under client/site
+  "Internal portal" and the Tech service line, so filtering the board by
+  "Internal portal" shows the portal's own backlog.
+  - **Title** is prefixed "Bug:" or "Feature:"; how much it matters sets
+    the priority (Low, Medium, High).
+  - **Description** carries the details, what was expected (bugs), who
+    raised it and when, the module and page it came from, and the browser
+    and window size.
+  - The report stays on the page it was raised from; the confirmation
+    offers "View task". `POST /api/feedback` (`worker/writes.ts`).
 - **Themes.** The default is limestone (day). Operations mode is the night
   theme for the control room; toggle it from the header or the palette. The
   choice is remembered per browser.
