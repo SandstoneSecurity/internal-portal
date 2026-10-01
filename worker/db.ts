@@ -479,7 +479,7 @@ export async function getCandidates(db: D1Database, today: string): Promise<Cand
 
 export async function getRegions(db: D1Database): Promise<Region[]> {
   const { results } = await db
-    .prepare(`SELECT key, label, map_x, map_y, label_anchor, label_dx, label_dy FROM regions ORDER BY label`)
+    .prepare(`SELECT key, label, map_x, map_y, label_anchor, label_dx, label_dy, lat, lng FROM regions ORDER BY label`)
     .all<{
       key: string;
       label: string;
@@ -488,6 +488,8 @@ export async function getRegions(db: D1Database): Promise<Region[]> {
       label_anchor: string;
       label_dx: number;
       label_dy: number;
+      lat: number | null;
+      lng: number | null;
     }>();
   return results.map((r) => ({
     key: r.key,
@@ -497,6 +499,9 @@ export async function getRegions(db: D1Database): Promise<Region[]> {
     anchor: r.label_anchor === "end" ? "end" : "start",
     dx: r.label_dx,
     dy: r.label_dy,
+    // Regions without coordinates are placed from the old drawn map (NSW spans x 6–738, y 10–598).
+    lat: r.lat ?? -28.16 - ((r.map_y - 10) / 588) * 9.34,
+    lng: r.lng ?? 141 + ((r.map_x - 6) / 732) * 12.64,
   }));
 }
 

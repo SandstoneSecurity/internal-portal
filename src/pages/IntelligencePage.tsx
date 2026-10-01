@@ -9,17 +9,7 @@ import { pad2 } from "../lib/format";
 import { list, row, tween, DUR } from "../lib/motion";
 import { registerKeys, useSelection } from "../lib/selection";
 
-const SurveyField = lazy(() => import("../components/SurveyField"));
-
-const VIEWBOX = "0 -10 760 620";
-const NSW_PATH =
-  "M 5.8 63 L 466.9 59.9 L 495 45 L 527.8 34.6 L 552 50 L 580 56.7 L 610 50 L 643.8 44.1 L 672.8 22 L 713.4 15.8 L 733.7 10 L 738.3 40.3 L 722 90 L 713 126 L 709.9 144.9 L 698.9 189 L 696 216 L 675.7 252 L 655.4 296 L 632.2 310.6 L 614.8 333.9 L 603.2 368.6 L 585.8 384.3 L 580 404.5 L 577 441 L 539.4 485.1 L 527.8 522.9 L 524.9 560.7 L 526.6 598.5 L 423.4 554.4 L 377 510.3 L 319 510.3 L 266.8 497.7 L 234.9 510.3 L 203 491.4 L 156.6 459.9 L 139.2 422.1 L 87 425.3 L 40.6 390.6 L 5.8 379.3 Z";
-const ACT_PATH = "M 469.8 465 L 490 452 L 500 470 L 496 500 L 478 505 L 466 488 Z";
-
-// The relief is clipped to the state's outline with a mask built from the same path.
-const MASK = `url("data:image/svg+xml,${encodeURIComponent(
-  `<svg xmlns='http://www.w3.org/2000/svg' viewBox='${VIEWBOX}' preserveAspectRatio='none'><path d='${NSW_PATH}' fill='black'/></svg>`
-)}")`;
+const IntelMap = lazy(() => import("../components/IntelMap"));
 
 const DOT = { breach: "var(--status-breach-dot)", advisory: "var(--status-advisory-dot)", info: "var(--status-info-dot)", secure: "var(--status-secure-dot)", neutral: "var(--status-neutral-dot)" } as const;
 const SEVERITY_ORDER = ["breach", "advisory", "info"] as const;
@@ -29,8 +19,19 @@ export function IntelligencePage() {
   const d = usePortal();
   const actions = useActions();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("All");
-  const [region, setRegion] = useState<string | null>(null);
-  const [itemParam, setItem] = useSelection("item");
+  const [region, setRegionState] = useState<string | null>(null);
+  const [itemParam, setItemParam] = useSelection("item");
+  // Moves the map: to a region when one is picked or an item opened, back to the whole state when cleared.
+  const [focus, setFocus] = useState<{ key: string | null; n: number }>({ key: null, n: 0 });
+  const setRegion = (key: string | null) => {
+    setRegionState(key);
+    setFocus((f) => ({ key, n: f.n + 1 }));
+  };
+  const setItem = (id: number) => {
+    setItemParam(id);
+    const key = d.feed.find((f) => f.id === id)?.regionKey ?? null;
+    if (key) setFocus((f) => ({ key, n: f.n + 1 }));
+  };
 
   const shown = d.feed.filter((f) => (filter === "All" || f.sev === filter) && (!region || f.regionKey === region));
   const selId = d.feed.some((f) => f.id === itemParam) ? itemParam : shown[0]?.id ?? null;
@@ -53,7 +54,7 @@ export function IntelligencePage() {
   const markers = d.regions.map((r) => {
     const items = d.feed.filter((f) => f.regionKey === r.key);
     const worst = SEVERITY_ORDER.find((k) => items.some((f) => f.kind === k));
-    return { ...r, items, worst, on: sel?.regionKey === r.key || region === r.key };
+    return { key: r.key, label: r.label, lat: r.lat, lng: r.lng, anchor: r.anchor, count: items.length, worst, on: sel?.regionKey === r.key || region === r.key };
   });
   const regionLabel = d.regions.find((r) => r.key === region)?.label;
 
@@ -64,63 +65,9 @@ export function IntelligencePage() {
           <span className="pt-eyebrow">New South Wales — monitored activity</span>
           <span className="pt-meta">{d.regions.length} regions</span>
         </div>
-        <div className="pt-map">
-          <svg viewBox={VIEWBOX} aria-hidden>
-            <path d={NSW_PATH} fill="var(--surface-sunken)" />
-          </svg>
-          <div className="pt-map__relief" style={{ maskImage: MASK, WebkitMaskImage: MASK, maskSize: "100% 100%", WebkitMaskSize: "100% 100%" }}>
-            <Suspense fallback={null}>
-              <SurveyField density={7} scale={2.1} seed={11.4} />
-            </Suspense>
-          </div>
-          <svg viewBox={VIEWBOX} style={{ position: "absolute", inset: 0 }} role="group" aria-label="Regions">
-            <path d={NSW_PATH} fill="none" stroke="var(--border-strong)" strokeWidth={1.5} strokeLinejoin="round" />
-            <path d={ACT_PATH} fill="var(--surface-accent)" stroke="var(--border-strong)" strokeWidth={1} strokeDasharray="3 3" />
-            {markers.map((m) => (
-              <g
-                key={m.key}
-                className="pt-map__marker"
-                role="button"
-                tabIndex={0}
-                aria-label={`${m.label}: ${m.items.length} items. Filter the feed to this region.`}
-                onClick={() => setRegion(region === m.key ? null : m.key)}
-                onKeyDown={(e) => registerKeys(e as unknown as React.KeyboardEvent<HTMLElement>, () => setRegion(region === m.key ? null : m.key))}
-              >
-                {m.worst === "breach" && <circle className="pt-map__ping" cx={m.x} cy={m.y} r={6} fill="none" stroke={DOT.breach} strokeWidth={1.2} />}
-                <motion.circle
-                  cx={m.x}
-                  cy={m.y}
-                  fill="none"
-                  stroke="var(--brass-500)"
-                  strokeWidth={1.5}
-                  initial={false}
-                  animate={{ r: m.on ? 12 : 5, opacity: m.on ? 1 : 0 }}
-                  transition={tween(DUR.slow)}
-                />
-                <circle cx={m.x} cy={m.y} r={m.items.length ? 5.5 : 3.5} fill={m.worst ? DOT[m.worst] : "var(--border-strong)"} stroke="var(--surface-raised)" strokeWidth={1.5} />
-              </g>
-            ))}
-          </svg>
-          {markers.map((m) => (
-            <span
-              key={m.key}
-              className="pt-map__label"
-              onClick={() => setRegion(region === m.key ? null : m.key)}
-              style={{
-                left: `${(((m.x + m.dx) / 760) * 100).toFixed(2)}%`,
-                top: `${(((m.y + m.dy + 10) / 620) * 100).toFixed(2)}%`,
-                transform: m.anchor === "end" ? "translate(-100%,-50%)" : "translate(0,-50%)",
-                color: m.on ? "var(--text-primary)" : undefined,
-              }}
-            >
-              {m.label.toUpperCase()}
-              {m.items.length > 0 && <span className="pt-dim"> · {m.items.length}</span>}
-            </span>
-          ))}
-          <span className="pt-map__label" style={{ left: "63.5%", top: "79%", background: "none" }}>
-            ACT
-          </span>
-        </div>
+        <Suspense fallback={<div className="pt-imap pt-imap--loading" aria-hidden />}>
+          <IntelMap markers={markers} focus={focus} onRegion={(key) => setRegion(region === key ? null : key)} />
+        </Suspense>
         <div className="pt-legend" style={{ marginTop: 12, borderTop: "1px solid var(--border-subtle)", paddingTop: 12 }}>
           {(["breach", "advisory", "info"] as const).map((k) => (
             <span key={k}>
@@ -128,7 +75,7 @@ export function IntelligencePage() {
               {k === "info" ? "INFORMATION" : k.toUpperCase()} {counts[k === "breach" ? "Breach" : k === "advisory" ? "Advisory" : "Information"]}
             </span>
           ))}
-          <span style={{ marginLeft: "auto" }}>SELECT A REGION TO FILTER</span>
+          <span className="pt-hide-sm" style={{ marginLeft: "auto" }}>DRAG TO MOVE · CTRL + SCROLL TO ZOOM · SELECT A REGION TO FILTER</span>
         </div>
       </div>
 
