@@ -248,6 +248,9 @@ export interface Region {
   anchor: "start" | "end";
   dx: number;
   dy: number;
+  /** Where it is on the map (WGS84). */
+  lat: number;
+  lng: number;
 }
 
 export interface IntelItem {

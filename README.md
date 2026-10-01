@@ -208,6 +208,18 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
     location), ranked by expected cost, with a chip for each site where it
     applies. "Select recommended" picks the threats that make up 80% of the
     expected cost.
+- **Intelligence map:** a real map of NSW (MapLibre, with OpenFreeMap's
+  vector tiles from OpenStreetMap; no key or account needed), recoloured to
+  Sandstone, with a dark version for operations mode and the state border
+  in brass (`src/lib/map/style.ts`).
+  - **Moving around:** drag to move the map. Zoom with the buttons,
+    Ctrl/⌘ + scroll, or a pinch; a plain scroll keeps scrolling the page.
+    "NSW" returns to the whole state.
+  - **Regions** sit at their real coordinates (migration 0011) with the
+    worst severity's colour; a breach pings. Picking one filters the feed
+    and flies there, and opening a feed item centres its region.
+  - **If tiles can't load,** the map says so and the regions still filter
+    the feed. The map's code loads only on this page.
 - **Drag and drop** updates the screen at once and rolls back if the save
   fails.
 - **Command palette:** press `Ctrl K` / `⌘K` or `/`. From there you can jump

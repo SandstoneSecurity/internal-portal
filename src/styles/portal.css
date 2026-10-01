@@ -498,16 +498,56 @@ input[type="date"].pt-input { font-family: var(--font-mono); font-size: 13px; }
 .pt-funnel__bar i { display: block; height: 100%; background: var(--rule-strong); transform-origin: left; }
 
 /* ── Intelligence map ─────────────────────────────────────────────────── */
-.pt-map { position: relative; margin-top: 14px; }
-.pt-map svg { width: 100%; height: auto; display: block; position: relative; }
-.pt-map__relief { position: absolute; inset: 0; pointer-events: none; }
-.pt-map__relief .pt-survey { position: absolute; inset: 0; }
-.pt-map__label { position: absolute; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.06em; color: var(--text-secondary); white-space: nowrap; cursor: pointer; padding: 2px 3px; background: color-mix(in srgb, var(--surface-raised) 70%, transparent); }
-.pt-map__label:hover { color: var(--text-primary); }
-.pt-map__marker { cursor: pointer; }
-.pt-map__marker:focus-visible { outline: none; }
-.pt-map__marker:focus-visible circle:last-of-type { stroke: var(--brass-500); stroke-width: 2.5px; }
-.pt-map__ping { transform-box: fill-box; transform-origin: center; animation: pt-map-ping 2.8s var(--ease-out) infinite; }
+/* Intelligence map: a real, pannable map (MapLibre) with the regions drawn over it. */
+.pt-imap { position: relative; margin-top: 14px; height: 520px; background: var(--surface-sunken); border: var(--border-hair) solid var(--border-subtle); overflow: hidden; }
+.pt-imap--loading { background: var(--surface-sunken); }
+/* Two classes, so MapLibre's own .maplibregl-map { position: relative } (loaded later) can't shrink it. */
+.pt-imap > .pt-imap__canvas { position: absolute; inset: 0; }
+.pt-imap__canvas .maplibregl-canvas:focus-visible { outline: none; box-shadow: inset var(--focus-ring); }
+.pt-imap__markers { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.pt-imap__marker {
+  --dot: var(--border-strong);
+  position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 7px; padding: 0; margin: -6px 0 0 -6px;
+  border: 0; background: none; cursor: pointer; pointer-events: auto; font: inherit; color: var(--text-secondary);
+}
+.pt-imap__marker.is-end { flex-direction: row-reverse; margin-left: auto; translate: calc(-100% + 12px) 0; }
+.pt-imap__marker.is-breach { --dot: var(--status-breach-dot); }
+.pt-imap__marker.is-advisory { --dot: var(--status-advisory-dot); }
+.pt-imap__marker.is-info { --dot: var(--status-info-dot); }
+.pt-imap__dot { position: relative; flex: none; width: 12px; height: 12px; border-radius: 999px; background: var(--dot); box-shadow: 0 0 0 2px var(--surface-raised), 0 1px 3px rgba(0, 0, 0, 0.25); transition: box-shadow var(--dur-base, 160ms) ease; }
+.pt-imap__marker.is-none .pt-imap__dot { width: 8px; height: 8px; margin: 2px; }
+.pt-imap__marker.is-on .pt-imap__dot { box-shadow: 0 0 0 2px var(--surface-raised), 0 0 0 4px var(--brass-500), 0 1px 4px rgba(0, 0, 0, 0.3); }
+.pt-imap__ping { position: absolute; left: 0; top: 0; width: 12px; height: 12px; border-radius: 999px; border: 1.5px solid var(--status-breach-dot); animation: pt-map-ping 2.8s var(--ease-out) infinite; pointer-events: none; }
+.pt-imap__marker.is-end .pt-imap__ping { left: auto; right: 0; }
+.pt-imap__label {
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.06em; white-space: nowrap; padding: 2px 5px;
+  background: color-mix(in srgb, var(--surface-raised) 86%, transparent); border: var(--border-hair) solid var(--border-subtle);
+}
+.pt-imap__marker:hover .pt-imap__label, .pt-imap__marker.is-on .pt-imap__label { color: var(--text-primary); border-color: var(--border-strong); }
+.pt-imap__marker.is-on .pt-imap__label { border-color: var(--brass-500); }
+.pt-imap__marker:focus-visible { outline: none; }
+.pt-imap__marker:focus-visible .pt-imap__label { box-shadow: var(--focus-ring); }
+.pt-imap__reset {
+  position: absolute; top: 10px; left: 10px; z-index: 3; display: inline-flex; align-items: center; gap: 5px; height: 29px; padding: 0 9px;
+  border: var(--border-hair) solid var(--border-default); border-radius: var(--radius-sm); background: var(--surface-raised); color: var(--text-secondary);
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.08em; cursor: pointer;
+}
+.pt-imap__reset:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.pt-imap__reset:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.pt-imap__notice { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; padding: 24px; text-align: center; font: var(--type-small); color: var(--text-secondary); }
+.pt-imap__notice--soft { inset: auto 10px 10px auto; display: block; padding: 6px 10px; background: var(--surface-raised); border: var(--border-hair) solid var(--border-subtle); pointer-events: none; }
+/* MapLibre's own controls, cut to the house: square, hairline, brass on focus. */
+.pt-imap .maplibregl-ctrl-group { border-radius: var(--radius-sm); box-shadow: none; border: var(--border-hair) solid var(--border-default); background: var(--surface-raised); }
+.pt-imap .maplibregl-ctrl-group button { width: 29px; height: 29px; }
+.pt-imap .maplibregl-ctrl-group button + button { border-top: var(--border-hair) solid var(--border-subtle); }
+.pt-imap .maplibregl-ctrl-group button:focus-visible { box-shadow: var(--focus-ring); }
+:root[data-theme="night"] .pt-imap .maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(0.85); }
+.pt-imap .maplibregl-ctrl-attrib { font-size: 10px; background: color-mix(in srgb, var(--surface-raised) 85%, transparent); color: var(--text-tertiary); }
+.pt-imap .maplibregl-ctrl-attrib a { color: var(--text-secondary); }
+:root[data-theme="night"] .pt-imap .maplibregl-ctrl-attrib-button { filter: invert(0.85); }
+.pt-imap .maplibregl-cooperative-gesture-screen { font: var(--type-small); background: color-mix(in srgb, var(--bark-900) 55%, transparent); }
+@media (max-width: 900px) { .pt-imap { height: 420px; } }
+@media (max-width: 640px) { .pt-imap { height: 340px; } }
 @keyframes pt-map-ping { 0% { transform: scale(0.6); opacity: 0.55; } 75%, 100% { transform: scale(3.2); opacity: 0; } }
 
 .pt-feed__item { position: relative; padding: 14px 12px; border-bottom: var(--border-hair) solid var(--border-subtle); cursor: pointer; transition: background-color var(--dur-fast); outline: none; }
@@ -589,7 +629,7 @@ input[type="date"].pt-input { font-family: var(--font-mono); font-size: 13px; }
   .pt-tabs__trailing .pt-search { width: 100% !important; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pt-badge__dot--pulse::after, .pt-map__ping { animation: none; }
+  .pt-badge__dot--pulse::after, .pt-imap__ping { animation: none; }
 }
 
 /* ── Task board (Operations) ──────────────────────────────────────────────
