@@ -75,7 +75,7 @@ export function IntelligencePage() {
               {k === "info" ? "INFORMATION" : k.toUpperCase()} {counts[k === "breach" ? "Breach" : k === "advisory" ? "Advisory" : "Information"]}
             </span>
           ))}
-          <span className="pt-hide-sm" style={{ marginLeft: "auto" }}>DRAG TO MOVE · CTRL + SCROLL TO ZOOM · SELECT A REGION TO FILTER</span>
+          <span className="pt-hide-sm" style={{ marginLeft: "auto" }}>DRAG TO MOVE · SCROLL TO ZOOM · SELECT A REGION TO FILTER</span>
         </div>
       </div>
 
