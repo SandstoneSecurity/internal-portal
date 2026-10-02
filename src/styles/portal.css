@@ -519,14 +519,17 @@ input[type="date"].pt-input { font-family: var(--font-mono); font-size: 13px; }
 .pt-imap__marker.is-on .pt-imap__dot { box-shadow: 0 0 0 2px var(--surface-raised), 0 0 0 4px var(--brass-500), 0 1px 4px rgba(0, 0, 0, 0.3); }
 .pt-imap__ping { position: absolute; left: 0; top: 0; width: 12px; height: 12px; border-radius: 999px; border: 1.5px solid var(--status-breach-dot); animation: pt-map-ping 2.8s var(--ease-out) infinite; pointer-events: none; }
 .pt-imap__marker.is-end .pt-imap__ping { left: auto; right: 0; }
+/* Labels are plain text on the map, kept legible by a halo in the map's own background colour. */
+.pt-imap { --imap-halo: #F6F4F0; }
+:root[data-theme="night"] .pt-imap { --imap-halo: #1A1B19; }
 .pt-imap__label {
-  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.06em; white-space: nowrap; padding: 2px 5px;
-  background: color-mix(in srgb, var(--surface-raised) 86%, transparent); border: var(--border-hair) solid var(--border-subtle);
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.06em; white-space: nowrap; padding: 2px 0;
+  text-shadow: -1px -1px 0 var(--imap-halo), 1px -1px 0 var(--imap-halo), -1px 1px 0 var(--imap-halo), 1px 1px 0 var(--imap-halo), 0 0 4px var(--imap-halo);
 }
-.pt-imap__marker:hover .pt-imap__label, .pt-imap__marker.is-on .pt-imap__label { color: var(--text-primary); border-color: var(--border-strong); }
-.pt-imap__marker.is-on .pt-imap__label { border-color: var(--brass-500); }
+.pt-imap__marker:hover .pt-imap__label, .pt-imap__marker.is-on .pt-imap__label { color: var(--text-primary); }
+.pt-imap__marker.is-on .pt-imap__label { font-weight: 600; }
 .pt-imap__marker:focus-visible { outline: none; }
-.pt-imap__marker:focus-visible .pt-imap__label { box-shadow: var(--focus-ring); }
+.pt-imap__marker:focus-visible .pt-imap__label { color: var(--text-primary); text-decoration: underline 1.5px var(--brass-500); text-underline-offset: 3px; }
 .pt-imap__reset {
   position: absolute; top: 10px; left: 10px; z-index: 3; display: inline-flex; align-items: center; gap: 5px; height: 29px; padding: 0 9px;
   border: var(--border-hair) solid var(--border-default); border-radius: var(--radius-sm); background: var(--surface-raised); color: var(--text-secondary);
@@ -545,7 +548,6 @@ input[type="date"].pt-input { font-family: var(--font-mono); font-size: 13px; }
 .pt-imap .maplibregl-ctrl-attrib { font-size: 10px; background: color-mix(in srgb, var(--surface-raised) 85%, transparent); color: var(--text-tertiary); }
 .pt-imap .maplibregl-ctrl-attrib a { color: var(--text-secondary); }
 :root[data-theme="night"] .pt-imap .maplibregl-ctrl-attrib-button { filter: invert(0.85); }
-.pt-imap .maplibregl-cooperative-gesture-screen { font: var(--type-small); background: color-mix(in srgb, var(--bark-900) 55%, transparent); }
 @media (max-width: 900px) { .pt-imap { height: 420px; } }
 @media (max-width: 640px) { .pt-imap { height: 340px; } }
 @keyframes pt-map-ping { 0% { transform: scale(0.6); opacity: 0.55; } 75%, 100% { transform: scale(3.2); opacity: 0; } }

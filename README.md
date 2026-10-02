@@ -212,12 +212,12 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
   vector tiles from OpenStreetMap; no key or account needed), recoloured to
   Sandstone, with a dark version for operations mode and the state border
   in brass (`src/lib/map/style.ts`).
-  - **Moving around:** drag to move the map. Zoom with the buttons,
-    Ctrl/⌘ + scroll, or a pinch; a plain scroll keeps scrolling the page.
-    "NSW" returns to the whole state.
-  - **Regions** sit at their real coordinates (migration 0011) with the
-    worst severity's colour; a breach pings. Picking one filters the feed
-    and flies there, and opening a feed item centres its region.
+  - **Moving around:** drag to move the map. Zoom with the mouse wheel,
+    a pinch or the buttons. "NSW" returns to the whole state.
+  - **Regions** sit at their real coordinates (migration 0011) as a dot in
+    the worst severity's colour with a plain label; a breach pings.
+    Picking one filters the feed and flies there, and opening a feed item
+    centres its region.
   - **If tiles can't load,** the map says so and the regions still filter
     the feed. The map's code loads only on this page.
 - **Drag and drop** updates the screen at once and rolls back if the save

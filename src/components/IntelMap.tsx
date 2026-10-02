@@ -28,8 +28,8 @@ export interface MapMarker {
 }
 
 /**
- * A real, pannable map of NSW with the monitored regions on it. Drag to move; Ctrl/⌘ + scroll, pinch or the
- * buttons to zoom. `focus` moves the view: a region key flies there, null shows the whole state; bump `n`
+ * A real, pannable map of NSW with the monitored regions on it. Drag to move; scroll, pinch or the buttons
+ * to zoom. `focus` moves the view: a region key flies there, null shows the whole state; bump `n`
  * to repeat a move.
  */
 export default function IntelMap({ markers, focus, onRegion }: { markers: MapMarker[]; focus: { key: string | null; n: number }; onRegion: (key: string) => void }) {
@@ -55,8 +55,6 @@ export default function IntelMap({ markers, focus, onRegion }: { markers: MapMar
           [125, -46],
           [170, -18],
         ],
-        // In a scrolling page, the wheel scrolls the page; Ctrl/⌘ + wheel (or two fingers) works the map.
-        cooperativeGestures: true,
         dragRotate: false,
         pitchWithRotate: false,
         touchPitch: false,
@@ -116,7 +114,7 @@ export default function IntelMap({ markers, focus, onRegion }: { markers: MapMar
 
   return (
     <div className="pt-imap">
-      <div ref={box} className="pt-imap__canvas" role="region" aria-label="Map of New South Wales. Drag to move; use the zoom buttons or Ctrl and scroll to zoom." />
+      <div ref={box} className="pt-imap__canvas" role="region" aria-label="Map of New South Wales. Drag to move; scroll or use the zoom buttons to zoom." />
       {noWebGl ? (
         <div className="pt-imap__notice">This browser can't draw the map (WebGL is off). The feed still filters by region.</div>
       ) : (
