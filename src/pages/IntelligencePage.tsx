@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { lazy, Suspense, useEffect, useMemo, useState, type KeyboardEvent } from "react";
-import { Crosshair, MapPin, Pencil, Plus, Search, Trash2, X } from "lucide-react";
-import type { IntelItem, StatusKind } from "../../shared/types";
+import { MapPin, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { INTEL_FADE_DAYS, INTEL_KEEP_DAYS, type IntelItem, type StatusKind } from "../../shared/types";
 import { useActions } from "../actions/ActionHost";
 import { Empty } from "../components/ui/Bits";
 import { usePortal } from "../lib/DataProvider";
@@ -33,8 +33,6 @@ export function IntelligencePage() {
   const [itemParam, setItemParam] = useSelection("item");
   // Brings the chosen item's pin into view on the map.
   const [focus, setFocus] = useState<{ id: number | null; n: number }>({ id: null, n: 0 });
-  // The item whose pin is being placed by clicking the map.
-  const [placing, setPlacing] = useState<IntelItem | null>(null);
 
   const select = (id: number, fromMap = false) => {
     setItemParam(id);
@@ -58,7 +56,7 @@ export function IntelligencePage() {
   }, [d.feed]);
 
   const pins = shown.flatMap((f) =>
-    f.pin ? [{ id: f.id, lat: f.pin.lat, lng: f.pin.lng, kind: f.kind, title: f.headline.length > 90 ? `${f.headline.slice(0, 88)}…` : f.headline }] : []
+    f.pin ? [{ id: f.id, lat: f.pin.lat, lng: f.pin.lng, kind: f.kind, old: f.old, title: f.headline.length > 90 ? `${f.headline.slice(0, 88)}…` : f.headline }] : []
   );
 
   const groups = (["Today", "Yesterday", "Earlier"] as const)
@@ -78,13 +76,6 @@ export function IntelligencePage() {
     }
   };
 
-  const place = async (lat: number, lng: number) => {
-    if (!placing) return;
-    const item = placing;
-    setPlacing(null);
-    await actions.moveIntel(item, { lat, lng });
-  };
-
   return (
     <div className="pt-intel">
       <div className="pt-panel pt-intel__map">
@@ -94,9 +85,6 @@ export function IntelligencePage() {
             selectedId={selId}
             onSelect={(id) => select(id, true)}
             focus={focus}
-            placing={placing ? (placing.place || placing.headline.slice(0, 40) + (placing.headline.length > 40 ? "…" : "")) : null}
-            onPlace={(lat, lng) => void place(lat, lng)}
-            onCancelPlace={() => setPlacing(null)}
           />
         </Suspense>
       </div>
@@ -172,16 +160,14 @@ export function IntelligencePage() {
                       on={f.id === selId}
                       onSelect={() => select(f.id)}
                       onShow={() => setFocus((x) => ({ id: f.id, n: x.n + 1 }))}
-                      onPlace={() => {
-                        select(f.id);
-                        setPlacing(f);
-                      }}
-                      placing={placing?.id === f.id}
                     />
                   ))}
                 </AnimatePresence>
               </div>
             ))}
+            <p className="pt-ifeed__aging">
+              Items grey out after {INTEL_FADE_DAYS} days and leave the feed and map after {INTEL_KEEP_DAYS}.
+            </p>
           </div>
         )}
       </section>
@@ -189,20 +175,20 @@ export function IntelligencePage() {
   );
 }
 
-function FeedItem({ item: f, on, onSelect, onShow, onPlace, placing }: { item: IntelItem; on: boolean; onSelect: () => void; onShow: () => void; onPlace: () => void; placing: boolean }) {
+function FeedItem({ item: f, on, onSelect, onShow }: { item: IntelItem; on: boolean; onSelect: () => void; onShow: () => void }) {
   const actions = useActions();
   const k = intelKind(f.kind);
   const Icon = k.icon;
   const exact = f.pin?.how === "pinned";
   const where = f.place || (f.pin?.how === "suburb" ? f.pin.label : `${f.pin?.label ?? f.region} region`);
-  const whereTitle = exact ? "Pinned at this spot" : f.pin?.how === "suburb" ? `Placed at ${f.pin.label}; pin the exact spot to move it` : "Placed at its region; add a suburb or pin the exact spot";
+  const whereTitle = exact ? "Pinned at this spot" : f.pin?.how === "suburb" ? `Placed at ${f.pin.label}` : "Placed at its region; edit the item to name a suburb";
   return (
     <motion.article
       layout="position"
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0, transition: tween(DUR.base) }}
       exit={{ opacity: 0, transition: tween(DUR.fast) }}
-      className={`pt-ifeed__item is-${f.kind}${on ? " is-on" : ""}`}
+      className={`pt-ifeed__item is-${f.kind}${on ? " is-on" : ""}${f.old ? " is-old" : ""}`}
       data-record={`intel-${f.id}`}
       aria-selected={on}
       tabIndex={0}
@@ -220,7 +206,7 @@ function FeedItem({ item: f, on, onSelect, onShow, onPlace, placing }: { item: I
       <div className="pt-ifeed__body">
         <div className="pt-ifeed__meta">
           <span className="pt-ifeed__kind">{k.label}</span>
-          <span>{f.time}</span>
+          <span title={f.old ? `Older than ${INTEL_FADE_DAYS} days; leaves the feed after ${INTEL_KEEP_DAYS}` : undefined}>{f.time}</span>
           <span className={`pt-ifeed__where${f.pin?.how === "region" ? " is-rough" : ""}`} title={whereTitle}>
             {exact ? <MapPin size={10} aria-hidden /> : null}
             {where}
@@ -234,7 +220,7 @@ function FeedItem({ item: f, on, onSelect, onShow, onPlace, placing }: { item: I
         </div>
         <div className="pt-ifeed__src">
           {/^https?:\/\//i.test(f.source) ? (
-            <a href={f.source} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>View reference</a>
+            <a href={f.source} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} title={f.source}>{f.source}</a>
           ) : f.source}
         </div>
         {on && (
@@ -242,14 +228,6 @@ function FeedItem({ item: f, on, onSelect, onShow, onPlace, placing }: { item: I
             <button className="pt-ifeed__act" onClick={onShow}>
               <MapPin size={12} /> Show on map
             </button>
-            <button className={`pt-ifeed__act${placing ? " is-active" : ""}`} onClick={onPlace} aria-pressed={placing}>
-              <Crosshair size={12} /> {exact ? "Move pin" : "Pin exact spot"}
-            </button>
-            {exact && (
-              <button className="pt-ifeed__act" onClick={() => void actions.moveIntel(f, null)}>
-                Unpin
-              </button>
-            )}
             <span className="pt-ifeed__spacer" />
             <button className="pt-ifeed__act" onClick={() => actions.logIntel({ item: f })}>
               <Pencil size={12} /> Edit

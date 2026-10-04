@@ -28,7 +28,8 @@ import type {
   Role,
   StatusKind,
 } from "../shared/types";
-import { DEAL_STAGES, ENGAGEMENT_KINDS, PRIORITIES, STAGES } from "../shared/types";
+import { DEAL_STAGES, ENGAGEMENT_KINDS, INTEL_FADE_DAYS, INTEL_KEEP_DAYS, PRIORITIES, STAGES } from "../shared/types";
+import { checkRef, deriveCheck, type BackgroundCheck, type CheckResult, type CheckSubject } from "../shared/checks";
 import { addDays, dayMonth, daysBetween, shortDate, todaySydney } from "./dates";
 import { getCrime } from "./crime";
 import { parseGeometry } from "../shared/geometry";
@@ -526,14 +527,20 @@ function feedTime(createdAt: string | null, fallback: string, today: string): st
   return dayMonth(day);
 }
 
-export async function getFeed(db: D1Database, today: string): Promise<IntelItem[]> {
+const DAY_MS = 86_400_000;
+
+/** The feed: items logged in the last INTEL_KEEP_DAYS, the ones past INTEL_FADE_DAYS marked old. */
+export async function getFeed(db: D1Database, today: string, now = Date.now()): Promise<IntelItem[]> {
+  const fadeFrom = new Date(now - INTEL_FADE_DAYS * DAY_MS).toISOString();
   const { results } = await db
     .prepare(
       `SELECT f.id, f.time_label, f.created_at, f.severity, f.severity_kind, f.region_key, r.label as region_label,
               f.headline, f.source, f.lat, f.lng, f.place, r.lat AS region_lat, r.lng AS region_lng
        FROM intel_feed f JOIN regions r ON r.key = f.region_key
-       ORDER BY COALESCE(f.created_at, '') DESC, f.sort_order, f.id DESC`
+       WHERE f.created_at >= ?
+       ORDER BY f.created_at DESC, f.sort_order, f.id DESC`
     )
+    .bind(new Date(now - INTEL_KEEP_DAYS * DAY_MS).toISOString())
     .all<{
       id: number;
       time_label: string;
@@ -564,6 +571,7 @@ export async function getFeed(db: D1Database, today: string): Promise<IntelItem[
     lng: r.lng,
     place: r.place ?? "",
     pin: pinFor(r),
+    old: !r.created_at || r.created_at < fadeFrom,
   }));
 }
 
@@ -643,6 +651,65 @@ export function computeMetrics(
       noteKind: expired.length ? "breach" : expiring.length ? "advisory" : "secure",
     },
   ];
+}
+
+// ── Background checks ────────────────────────────────────────────────────────
+export async function getChecks(db: D1Database, today: string): Promise<BackgroundCheck[]> {
+  const [{ results: rows }, { results: items }] = await Promise.all([
+    db
+      .prepare(
+        `SELECT b.id, b.client_id, c.org, b.subject, b.subject_kind, b.purpose, b.details, b.consent_date, b.due_date,
+                b.owner_initials, b.notes, b.created_at, b.closed_at
+         FROM background_checks b LEFT JOIN clients c ON c.id = b.client_id
+         ORDER BY b.closed_at IS NOT NULL, b.created_at DESC, b.id DESC`
+      )
+      .all<{
+        id: number;
+        client_id: number | null;
+        org: string | null;
+        subject: string;
+        subject_kind: string;
+        purpose: string;
+        details: string;
+        consent_date: string | null;
+        due_date: string | null;
+        owner_initials: string;
+        notes: string;
+        created_at: string;
+        closed_at: string | null;
+      }>(),
+    db
+      .prepare(`SELECT id, check_id, kind, result, finding, completed_at FROM background_check_items ORDER BY check_id, sort_order, id`)
+      .all<{ id: number; check_id: number; kind: string; result: string; finding: string; completed_at: string | null }>(),
+  ]);
+  const byCheck = new Map<number, BackgroundCheck["items"]>();
+  for (const i of items) {
+    const list = byCheck.get(i.check_id) ?? [];
+    list.push({ id: i.id, kind: i.kind, result: i.result as CheckResult, finding: i.finding, completedAt: i.completed_at });
+    byCheck.set(i.check_id, list);
+  }
+  return rows.map((r) =>
+    deriveCheck(
+      {
+        id: r.id,
+        ref: checkRef(r.id),
+        clientId: r.client_id,
+        client: r.org ?? "",
+        subject: r.subject,
+        subjectKind: (r.subject_kind === "Company" ? "Company" : "Individual") as CheckSubject,
+        purpose: r.purpose,
+        details: r.details,
+        consentDate: r.consent_date,
+        dueDate: r.due_date,
+        owner: r.owner_initials,
+        notes: r.notes,
+        createdAt: r.created_at,
+        closedAt: r.closed_at,
+        items: byCheck.get(r.id) ?? [],
+      },
+      today
+    )
+  );
 }
 
 // ── Threat modelling ────────────────────────────────────────────────────────
@@ -785,7 +852,7 @@ export async function getThreatModels(db: D1Database) {
 
 export async function getPortal(db: D1Database, email: string, now = new Date()): Promise<PortalData> {
   const today = todaySydney(now);
-  const [employees, clients, deals, opsColumns, roles, candidates, regions, feed, models, crime] = await Promise.all([
+  const [employees, clients, deals, opsColumns, roles, candidates, regions, feed, models, crime, checks] = await Promise.all([
     getEmployees(db, today),
     getClients(db),
     getDeals(db),
@@ -793,9 +860,10 @@ export async function getPortal(db: D1Database, email: string, now = new Date())
     getRoles(db),
     getCandidates(db, today),
     getRegions(db),
-    getFeed(db, today),
+    getFeed(db, today, now.getTime()),
     getThreatModels(db),
     getCrime(db),
+    getChecks(db, today),
   ]);
   return {
     me: { email },
@@ -811,5 +879,6 @@ export async function getPortal(db: D1Database, email: string, now = new Date())
     feed,
     ...models,
     crime,
+    checks,
   };
 }
