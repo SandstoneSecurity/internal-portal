@@ -88,8 +88,11 @@ export interface Actions {
   evaluateCandidate: (c: Candidate, e: { score: number; verdict: string; body: string }) => Promise<boolean>;
   deleteCandidateEvent: (c: Candidate, ev: CandidateEvent) => Promise<void>;
   deleteCandidate: (c: Candidate) => Promise<boolean>;
-  logIntel: (o?: { regionKey?: string }) => void;
+  /** Log a new item, or edit `item`. */
+  logIntel: (o?: { regionKey?: string; item?: IntelItem }) => void;
   deleteIntel: (i: IntelItem) => Promise<boolean>;
+  /** Puts an item's pin at a point, or back at its region (null). */
+  moveIntel: (i: IntelItem, at: { lat: number; lng: number } | null) => Promise<boolean>;
   /** Opens any form in the side drawer. */
   openForm: (spec: FormSpec) => void;
   /** Report a bug or request a feature: files a task under Internal portal. */
@@ -1020,23 +1023,50 @@ export function ActionProvider({ children }: { children: ReactNode }) {
           toast: `${c.name} deleted`,
         }),
 
-      logIntel: (o) =>
+      logIntel: (o) => {
+        const item = o?.item;
+        // Older items were logged as "Info"; the form's option is "Information".
+        const sev = INTEL_SEVERITIES.find(([, k]) => k === item?.kind)?.[0] ?? "Advisory";
+        const initialRegion = o?.regionKey ?? (regions.find((r) => r.key === "syd") ?? regions[0])?.key ?? "";
         setSpec({
           eyebrow: "Intelligence",
-          title: "Log an item",
-          submitLabel: "Log item",
+          title: item ? "Edit item" : "Log an item",
+          submitLabel: item ? "Save changes" : "Log item",
           fields: [
-            { name: "severity", label: "Severity", type: "select", options: statusOpts(INTEL_SEVERITIES), required: true, half: true },
+            { name: "severity", label: "Type", type: "select", options: statusOpts(INTEL_SEVERITIES), required: true, half: true },
             { name: "regionKey", label: "Region", type: "select", options: regions.map((r) => ({ value: r.key, label: r.label })), required: true, half: true },
-            { name: "headline", label: "Report", type: "textarea", required: true, max: 400, placeholder: "What was observed, where, and what was done." },
+            { name: "place", label: "Place", max: 120, placeholder: "e.g. Kent Street, Sydney", hint: "Pin the exact spot on the map from the feed once it's logged." },
+            { name: "headline", label: "Report", type: "textarea", required: true, max: 400, placeholder: "What was observed, where, and what was done — or the opportunity and who to talk to." },
             { name: "source", label: "Source", required: true, max: 120, placeholder: "e.g. Patrol report · OP-231" },
           ],
-          initial: { severity: "Advisory", regionKey: o?.regionKey ?? regions[0]?.key ?? "", headline: "", source: "" },
+          initial: item
+            ? { severity: sev, regionKey: item.regionKey, place: item.place, headline: item.headline, source: item.source }
+            : { severity: "Advisory", regionKey: initialRegion, place: "", headline: "", source: "" },
           submit: async (v) => {
+            if (item) {
+              await send("PATCH", `/intel/${item.id}`, v);
+              await done("Item updated", String(v.severity));
+              return;
+            }
+            // "Barangaroo, Sydney" names its region: use that over the form's default.
+            const named = regions.find((r) => new RegExp(`\\b${r.label}\\b`, "i").test(String(v.place ?? "")));
+            if (named && v.regionKey === initialRegion) v.regionKey = named.key;
             const r = await send("POST", "/intel", v);
-            await done("Item logged", `${v.severity} · ${regions.find((x) => x.key === v.regionKey)?.label ?? ""}`, `/intelligence?item=${r.id}`);
+            await done("Item logged", `${v.severity} · ${String(v.place || "") || regions.find((x) => x.key === v.regionKey)?.label || ""}`, `/intelligence?item=${r.id}`);
           },
-        }),
+        });
+      },
+
+      moveIntel: async (i, at) => {
+        try {
+          await send("PATCH", `/intel/${i.id}`, at ?? { lat: null, lng: null });
+          await done(at ? "Pin placed" : "Pin back at its region", i.headline.slice(0, 80));
+          return true;
+        } catch (err) {
+          fail(err);
+          return false;
+        }
+      },
 
       deleteIntel: (i) =>
         destroy({

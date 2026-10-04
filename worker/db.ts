@@ -529,7 +529,7 @@ export async function getFeed(db: D1Database, today: string): Promise<IntelItem[
   const { results } = await db
     .prepare(
       `SELECT f.id, f.time_label, f.created_at, f.severity, f.severity_kind, f.region_key, r.label as region_label,
-              f.headline, f.source
+              f.headline, f.source, f.lat, f.lng, f.place
        FROM intel_feed f JOIN regions r ON r.key = f.region_key
        ORDER BY COALESCE(f.created_at, '') DESC, f.sort_order, f.id DESC`
     )
@@ -543,16 +543,23 @@ export async function getFeed(db: D1Database, today: string): Promise<IntelItem[
       region_label: string;
       headline: string;
       source: string;
+      lat: number | null;
+      lng: number | null;
+      place: string;
     }>();
   return results.map((r) => ({
     id: r.id,
     time: feedTime(r.created_at, r.time_label, today),
+    createdAt: r.created_at,
     sev: r.severity,
     kind: asKind(r.severity_kind),
     region: r.region_label.toUpperCase(),
     regionKey: r.region_key,
     headline: r.headline,
     source: r.source,
+    lat: r.lat,
+    lng: r.lng,
+    place: r.place ?? "",
   }));
 }
 

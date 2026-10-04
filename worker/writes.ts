@@ -169,6 +169,10 @@ export const schemas = {
     regionKey: text(8),
     headline: text(400),
     source: text(120),
+    place: optText(120),
+    /** A point in or near Australia; null clears it (the item goes back to its region). */
+    lat: z.union([z.coerce.number().min(-45).max(-9), z.null()]).default(null),
+    lng: z.union([z.coerce.number().min(110).max(160), z.null()]).default(null),
   }),
 };
 
@@ -941,10 +945,16 @@ writes.delete("/candidate-events/:id", async (c) => {
 });
 
 // ── Intelligence ─────────────────────────────────────────────────────────────
+async function regionLabel(c: Ctx, key: string): Promise<string> {
+  const label = await c.env.DB.prepare(`SELECT label FROM regions WHERE key = ?`).bind(key).first<string>("label");
+  if (!label) throw new BadRequest("Some fields need attention.", { regionKey: "Choose a region" });
+  return label;
+}
+
 writes.post("/intel", async (c) => {
   const v = await body(c, schemas.intel);
-  const region = await c.env.DB.prepare(`SELECT label FROM regions WHERE key = ?`).bind(v.regionKey).first<string>("label");
-  if (!region) throw new BadRequest("Some fields need attention.", { regionKey: "Choose a region" });
+  await regionLabel(c, v.regionKey);
+  if ((v.lat === null) !== (v.lng === null)) throw new BadRequest("A location needs both latitude and longitude.");
   const now = new Date();
   const time = new Intl.DateTimeFormat("en-AU", {
     timeZone: "Australia/Sydney",
@@ -956,12 +966,28 @@ writes.post("/intel", async (c) => {
   const [ins] = await db.batch([
     db
       .prepare(
-        `INSERT INTO intel_feed (time_label, severity, severity_kind, region_key, headline, source, created_at, sort_order)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 0) RETURNING id`
+        `INSERT INTO intel_feed (time_label, severity, severity_kind, region_key, headline, source, created_at, sort_order, lat, lng, place)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?) RETURNING id`
       )
-      .bind(time, v.severity, kindFor(INTEL_SEVERITIES, v.severity), v.regionKey, v.headline, v.source, nowIso(now)),
+      .bind(time, v.severity, kindFor(INTEL_SEVERITIES, v.severity), v.regionKey, v.headline, v.source, nowIso(now), v.lat, v.lng, v.place),
   ]);
   return c.json({ id: (ins.results[0] as { id: number }).id }, 201);
+});
+
+// Edit an item, or move its pin (lat/lng together; null puts it back at its region).
+writes.patch("/intel/:id", async (c) => {
+  const itemId = param(c);
+  const v = await body(c, schemas.intel, true);
+  await mustExist(c, "intel_feed", itemId);
+  if (v.regionKey !== undefined) await regionLabel(c, v.regionKey);
+  if ((v.lat === undefined) !== (v.lng === undefined) || (v.lat !== undefined && (v.lat === null) !== (v.lng === null)))
+    throw new BadRequest("A location needs both latitude and longitude.");
+  const { sql, binds } = setClause(
+    { ...v, kind: v.severity === undefined ? undefined : kindFor(INTEL_SEVERITIES, v.severity) },
+    { severity: "severity", kind: "severity_kind", regionKey: "region_key", headline: "headline", source: "source", place: "place", lat: "lat", lng: "lng" }
+  );
+  if (sql) await c.env.DB.prepare(`UPDATE intel_feed SET ${sql} WHERE id = ?`).bind(...binds, itemId).run();
+  return c.json({ ok: true });
 });
 
 writes.delete("/intel/:id", async (c) => {
