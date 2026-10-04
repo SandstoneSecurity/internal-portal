@@ -12,8 +12,8 @@ const NSW: LngLatBoundsLike = [
   [153.65, -28.15],
 ];
 
-/** Room for the labels, which run right of their dots. */
-const FIT = { top: 36, bottom: 36, left: 36, right: 120 };
+/** Margin around NSW when the whole state is shown. */
+const FIT = 36;
 
 export interface MapMarker {
   key: string;
@@ -23,8 +23,6 @@ export interface MapMarker {
   count: number;
   worst?: "breach" | "advisory" | "info";
   on: boolean;
-  /** Which side of the dot the label sits. */
-  anchor: "start" | "end";
 }
 
 /**
@@ -130,18 +128,15 @@ export default function IntelMap({ markers, focus, onRegion }: { markers: MapMar
                     <button
                       key={r.key}
                       type="button"
-                      className={`pt-imap__marker is-${r.worst ?? "none"}${r.on ? " is-on" : ""}${r.anchor === "end" ? " is-end" : ""}`}
+                      className={`pt-imap__marker is-${r.worst ?? "none"}${r.on ? " is-on" : ""}`}
                       style={{ transform: `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px)` }}
                       aria-pressed={r.on}
+                      title={`${r.label} · ${r.count} ${r.count === 1 ? "item" : "items"}`}
                       aria-label={`${r.label}: ${r.count} ${r.count === 1 ? "item" : "items"}. ${r.on ? "Showing only this region." : "Filter the feed to this region."}`}
                       onClick={() => onRegion(r.key)}
                     >
                       {r.worst === "breach" && <span className="pt-imap__ping" aria-hidden />}
                       <span className="pt-imap__dot" aria-hidden />
-                      <span className="pt-imap__label" aria-hidden>
-                        {r.label.toUpperCase()}
-                        {r.count > 0 && <span className="pt-dim"> · {r.count}</span>}
-                      </span>
                     </button>
                   );
                 })}
