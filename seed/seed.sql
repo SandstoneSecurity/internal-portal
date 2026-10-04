@@ -3,6 +3,8 @@
 -- the business has data to load — the schema in migrations/0001_init.sql
 -- does not need to change to do that.
 
+DELETE FROM background_check_items;
+DELETE FROM background_checks;
 DELETE FROM intel_feed;
 DELETE FROM regions;
 DELETE FROM careers_cv_chunks;
@@ -228,16 +230,18 @@ INSERT INTO regions (key, label, map_x, map_y, label_anchor, label_dx, label_dy,
 ('bhq', 'Broken Hill', 33, 250, 'start', 10, 4, -31.9505, 141.4533),
 ('tam', 'Tamworth', 582, 195, 'end', -10, 4, -31.0927, 150.9320);
 
-INSERT INTO intel_feed (id, time_label, severity, severity_kind, region_key, headline, source, sort_order, lat, lng, place) VALUES
-(1, '05:40', 'Incident', 'breach', 'syd', 'Attempted forced entry at commercial tower loading dock, Kent Street. Officer on scene 05:44; police attended 05:58.', 'Patrol report · OP-231 raised', 1, -33.867, 151.2045, 'Kent Street, Sydney'),
-(2, '04:15', 'Incident', 'breach', 'new', 'Copper theft on rail corridor near Hamilton — third incident this month. Adjacent industrial sites advised.', 'NSW Police media', 2, -32.923, 151.749, 'Hamilton, Newcastle'),
-(3, 'YEST 22:10', 'Incident', 'breach', 'wol', 'Aggravated trespass at Port Kembla industrial estate. Client site perimeter held; debrief 1 September.', 'Patrol report · OP-233', 3, -34.471, 150.893, 'Port Kembla'),
-(4, 'YEST 18:00', 'News', 'info', 'syd', 'Authorised assembly Saturday, Hyde Park to Town Hall. Road closures 10:00–14:00; two client sites on route.', 'City of Sydney notice', 4, -33.8731, 151.2111, 'Hyde Park, Sydney'),
-(5, 'YEST 16:45', 'News', 'info', 'cof', 'Severe weather warning, damaging winds on the northern rivers. Perimeter and signage checks advised.', 'Bureau of Meteorology', 5, -28.81, 153.277, 'Northern Rivers'),
-(6, 'YEST 11:20', 'News', 'info', 'dub', 'SLED announces regional licensing audit round for October. Fourteen officer renewals fall in window.', 'SLED circular', 6, NULL, NULL, ''),
-(7, '28 AUG', 'Incident', 'breach', 'wag', 'Cluster of vehicle break-ins, Bomen industrial precinct. Mobile patrol frequency increased.', 'NSW Police media', 7, -35.066, 147.413, 'Bomen, Wagga Wagga'),
-(8, '27 AUG', 'News', 'info', 'bhq', 'Mine site contractor inductions resume 7 September; two officers to re-induct.', 'Client notice', 8, NULL, NULL, ''),
-(9, '26 AUG', 'Opportunity', 'secure', 'tam', 'Regional saleyards precinct upgrade — expression of interest window opens for site security tender.', 'Tender watch', 9, -31.117, 150.879, 'Tamworth saleyards');
+-- Logged at times relative to now: some fresh, some past the 3-day fade, one past the 14-day cut-off (hidden).
+INSERT INTO intel_feed (id, time_label, severity, severity_kind, region_key, headline, source, sort_order, lat, lng, place, created_at) VALUES
+(1, '05:40', 'Incident', 'breach', 'syd', 'Attempted forced entry at commercial tower loading dock, Kent Street. Officer on scene 05:44; police attended 05:58.', 'Patrol report · OP-231 raised', 1, -33.867, 151.2045, 'Kent Street, Sydney', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-2 hours')),
+(2, '04:15', 'Incident', 'breach', 'new', 'Copper theft on rail corridor near Hamilton — third incident this month. Adjacent industrial sites advised.', 'NSW Police media', 2, -32.923, 151.749, 'Hamilton, Newcastle', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-4 hours')),
+(3, 'YEST 22:10', 'Incident', 'breach', 'wol', 'Aggravated trespass at Port Kembla industrial estate. Client site perimeter held; debrief 1 September.', 'Patrol report · OP-233', 3, -34.471, 150.893, 'Port Kembla', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 days')),
+(4, 'YEST 18:00', 'News', 'info', 'syd', 'Authorised assembly Saturday, Hyde Park to Town Hall. Road closures 10:00–14:00; two client sites on route.', 'City of Sydney notice', 4, -33.8731, 151.2111, 'Hyde Park, Sydney', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 days')),
+(5, 'YEST 16:45', 'News', 'info', 'cof', 'Severe weather warning, damaging winds on the northern rivers. Perimeter and signage checks advised.', 'Bureau of Meteorology', 5, -28.81, 153.277, 'Northern Rivers', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 days')),
+(6, 'YEST 11:20', 'News', 'info', 'dub', 'SLED announces regional licensing audit round for October. Fourteen officer renewals fall in window.', 'SLED circular', 6, NULL, NULL, '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-2 days')),
+(7, '28 AUG', 'Incident', 'breach', 'wag', 'Cluster of vehicle break-ins, Bomen industrial precinct. Mobile patrol frequency increased.', 'NSW Police media', 7, -35.066, 147.413, 'Bomen, Wagga Wagga', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-5 days')),
+(8, '27 AUG', 'News', 'info', 'bhq', 'Mine site contractor inductions resume 7 September; two officers to re-induct.', 'Client notice', 8, NULL, NULL, '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-6 days')),
+(9, '26 AUG', 'Opportunity', 'secure', 'tam', 'Regional saleyards precinct upgrade — expression of interest window opens for site security tender.', 'Tender watch', 9, -31.117, 150.879, 'Tamworth saleyards', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-8 days')),
+(10, '14 SEP', 'News', 'info', 'syd', 'Light rail closure on George Street for weekend works; client concierge desks advised of reroutes.', 'Transport for NSW', 10, NULL, NULL, 'George Street, Sydney', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-20 days'));
 
 -- Threat models: a logistics yard with three years of incident history, and a CBD office tower.
 UPDATE clients SET staff = 140, revenue = 60000000, history_years = 3 WHERE id = 4;
@@ -333,3 +337,34 @@ INSERT INTO tm_incidents (client_id, site_id, threat_key, occurred_on, loss, des
 -- Council areas (LGAs) for the demo sites; their crime profiles apply once BOCSAR data is loaded.
 UPDATE client_sites SET lga = 'Wollongong' WHERE id IN (1, 2);
 UPDATE client_sites SET lga = 'Sydney' WHERE id = 3;
+
+-- Background checks run for clients.
+INSERT INTO background_checks (id, client_id, subject, subject_kind, purpose, details, consent_date, due_date, owner_initials, notes, created_at, closed_at) VALUES
+(1, 1, 'Daniel Okafor', 'Individual', 'Pre-employment', 'DOB 14/03/1991 · Parramatta NSW · NSW security licence 409xxxxx', date('now', '-6 days'), date('now', '+4 days'), 'WC', 'Concierge supervisor role, Kent Street tower.', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-7 days'), NULL),
+(2, 2, 'Brightline Facilities Pty Ltd', 'Company', 'Contractor or supplier', 'ABN 51 824 753 556', NULL, date('now', '+12 days'), 'MK', 'Cleaning contractor for the residence.', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-2 days'), NULL),
+(3, 4, 'Priya Raman', 'Individual', 'Pre-employment', 'DOB 02/11/1988 · Wollongong NSW', NULL, date('now', '+9 days'), 'TA', 'Yard operations manager.', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 days'), NULL),
+(4, 1, 'Marcus Hale', 'Individual', 'Pre-employment', 'DOB 21/07/1985 · Ryde NSW', date('now', '-30 days'), date('now', '-20 days'), 'WC', '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-31 days'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-19 days'));
+
+INSERT INTO background_check_items (check_id, kind, result, finding, completed_at, sort_order) VALUES
+(1, 'identity', 'clear', 'Passport and licence sighted; DVS match.', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-5 days'), 1),
+(1, 'police', 'clear', 'No disclosable court outcomes.', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-3 days'), 2),
+(1, 'right_to_work', 'clear', 'Australian citizen.', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-5 days'), 3),
+(1, 'employment', 'pending', '', NULL, 4),
+(1, 'references', 'pending', '', NULL, 5),
+(1, 'qualifications', 'unverified', 'Certificate III issuer has closed; awaiting ASQA record.', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-2 days'), 6),
+(2, 'company', 'clear', 'Registered 2014; ABN active, GST registered.', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 days'), 1),
+(2, 'ownership', 'pending', '', NULL, 2),
+(2, 'directorships', 'pending', '', NULL, 3),
+(2, 'litigation', 'flag', 'Unpaid wages claim, Fair Work Commission, 2024; settled.', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 days'), 4),
+(2, 'sanctions', 'clear', '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 days'), 5),
+(2, 'media', 'pending', '', NULL, 6),
+(3, 'identity', 'pending', '', NULL, 1),
+(3, 'police', 'pending', '', NULL, 2),
+(3, 'right_to_work', 'pending', '', NULL, 3),
+(3, 'employment', 'pending', '', NULL, 4),
+(3, 'references', 'pending', '', NULL, 5),
+(4, 'identity', 'clear', '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-28 days'), 1),
+(4, 'police', 'clear', '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-24 days'), 2),
+(4, 'right_to_work', 'clear', '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-28 days'), 3),
+(4, 'employment', 'clear', 'Two prior employers confirmed dates and roles.', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-22 days'), 4),
+(4, 'references', 'clear', '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-21 days'), 5);

@@ -1,7 +1,7 @@
 # Sandstone internal portal
 
-The Sandstone admin portal — Control, Operations, Recruitment, Employees,
-Clients (CRM) and Intelligence — implemented from the Claude Design handoff
+The Sandstone admin portal — Control, Operations, People (employees,
+recruitment and background checks), Clients (CRM) and Intelligence — implemented from the Claude Design handoff
 (`Sandstone Admin Portal.dc.html`) as a real application:
 
 - **Frontend:** React + TypeScript (Vite), routed with `react-router`, styled
@@ -220,18 +220,25 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
     (`worker/geocode.ts`, with 4,655 NSW and ACT suburbs from the ABS 2016
     Census via michalsn/australian-suburbs, MIT) from the Suburb or place
     field, or else a suburb named in the report ("…in Auburn…"; proper
-    names only, nearest the item's region). "Pin exact spot" overrides it
-    with a click on the map; Unpin goes back. With no suburb, an item sits
-    at its region. Pins are MapLibre markers, so they move with the map in
-    the same frame; pins sharing a spot fan out.
+    names only, nearest the item's region). Changing an item's place moves
+    its pin there. With no suburb, an item sits at its region. Pins are
+    MapLibre markers, so they move with the map in the same frame; pins
+    sharing a spot fan out.
+  - **Items age out:** past 3 days an item and its pin are greyed (and an
+    old incident stops pinging); at 14 days it leaves the feed and the map
+    (`INTEL_FADE_DAYS` / `INTEL_KEEP_DAYS` in `shared/types.ts`). Nothing is
+    deleted: the rows stay in D1. Age runs from when the item was logged;
+    migration 0014 started the clock for items from before that was
+    recorded.
   - **Map and feed work together:** clicking a pin selects its item;
     selecting an item rings its pin and brings it into view. Filters and
     search narrow the pins and the list together.
   - **The feed:** type filters with counts (they double as the map's
     legend), search across reports, places and sources, items grouped
     Today / Yesterday / Earlier, and Up/Down to move through them. The
-    selected item opens to Show on map, Pin exact spot / Move pin, Unpin,
-    Edit and Remove. The filters stay in view while the list scrolls.
+    selected item opens to Show on map, Edit and Remove. A source that is a
+    link shows as its address and opens in a new tab. The filters stay in
+    view while the list scrolls.
   - **Tiles load through the portal** (`/api/map`, `worker/mapTiles.ts`):
     the Worker fetches the tile index, tiles, label fonts and icons from
     OpenFreeMap and Cloudflare caches them, so an ad blocker or a web
@@ -355,9 +362,35 @@ rates per 100,000 by LGA.
 
 ## People
 
-Employees and Recruitment are one module, **People**, at
-`/people?view=employees|recruitment`. The old `/employees` and
+Employees, Recruitment and Background checks are one module, **People**,
+at `/people?view=employees|recruitment|checks`. The old `/employees` and
 `/recruitment` addresses redirect, keeping their parameters.
+
+**Background checks** are files kept for checks run for clients on a person
+or a company (`shared/checks.ts`, migration 0014):
+
+- **Ordering:** pick the client, the subject (person or company), the
+  purpose and a package. The packages are standard pre-employment,
+  security officer, executive and company due diligence. Only checks that
+  apply to that kind of subject are added. A person's file waits as
+  *Awaiting consent* until signed consent is recorded.
+- **The checks:** identity (DVS), national police check, right to work
+  (VEVO), employment history, referees, qualifications and licences, WWCC,
+  bankruptcy and insolvency (AFSA NPII), company and ABN records, ownership
+  and control, directorships and banned persons (ASIC), court and
+  litigation records, sanctions and PEP screening (DFAT Consolidated List),
+  adverse media, online and social media, and credit history. Each shows
+  where its answer comes from.
+- **Results:** each check is Pending, Clear, Flagged or Unable to verify,
+  with a finding and the date it was answered. You can add or remove checks
+  on the file.
+- **Outcome:** once every check has a result, the file is *Ready to
+  report*, with an outcome of Clear, Clear with gaps, or Adverse findings.
+  *Mark report sent* closes and locks it; it can be reopened.
+- **What it doesn't do:** the portal records the work. It doesn't query
+  the registers itself, as none are connected.
+
+Deleting a client deletes its background checks.
 
 ## Local development
 
@@ -407,7 +440,9 @@ input returns `400 {error, fields}`.
 | POST | `/api/candidates/:id/comments`, `/api/candidates/:id/evaluations` | Comments, scorecards |
 | DELETE | `/api/candidate-events/:id` | Delete a comment or scorecard |
 | GET | `/api/files/:id[?download=1]` | A candidate's CV, reassembled from its chunks and checked against its SHA-256 |
-| POST · PATCH · DELETE | `/api/intel[/:id]` | Intelligence feed (PATCH edits or moves a pin) |
+| POST · PATCH · DELETE | `/api/intel[/:id]` | Intelligence feed (a new `place` re-places the pin) |
+| POST · PATCH · DELETE | `/api/checks[/:id]` | Background check files (`package` on create; `consentDate`, `closed` to send or reopen) |
+| POST · PATCH · DELETE | `/api/checks/:id/items`, `/api/check-items/:id` | Checks on a file (`kind`, `result`, `finding`) |
 | GET | `/api/map/*` | Map tiles, fonts and icons, fetched from OpenFreeMap and cached |
 | POST | `/api/clients/:id/sites` | Add a site (it starts with a ground floor) |
 | PATCH · DELETE | `/api/sites/:id` | Edit or delete a site and everything modelled at it |

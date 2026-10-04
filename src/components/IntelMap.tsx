@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import maplibregl, { type LngLatBoundsLike, type Map as MlMap, type Marker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { Maximize, X } from "lucide-react";
+import { Maximize } from "lucide-react";
 import type { StatusKind } from "../../shared/types";
 import { intelKind } from "../lib/intel";
 import { mapStyle } from "../lib/map/style";
@@ -24,30 +24,26 @@ export interface MapPin {
   lat: number;
   lng: number;
   kind: StatusKind;
+  /** Past its fade age: drawn greyed out. */
+  old: boolean;
   title: string;
 }
 
 /**
  * A real, pannable map of NSW with a pin for each feed item. Pins are MapLibre markers, so they move in
  * the same frame as the map. Drag to move; scroll, pinch or the buttons to zoom. `focus` brings an item's
- * pin into view (bump `n` to repeat). While `placing`, a click on the map reports where.
+ * pin into view (bump `n` to repeat).
  */
 export default function IntelMap({
   pins,
   selectedId,
   onSelect,
   focus,
-  placing,
-  onPlace,
-  onCancelPlace,
 }: {
   pins: MapPin[];
   selectedId: number | null;
   onSelect: (id: number) => void;
   focus: { id: number | null; n: number };
-  placing: string | null;
-  onPlace: (lat: number, lng: number) => void;
-  onCancelPlace: () => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<MlMap | null>(null);
@@ -56,8 +52,8 @@ export default function IntelMap({
   const [tilesFailed, setTilesFailed] = useState<string | null>(null);
   const [noWebGl, setNoWebGl] = useState(false);
   const shownTheme = useRef(theme);
-  const latest = useRef({ placing, onPlace, onSelect });
-  latest.current = { placing, onPlace, onSelect };
+  const latest = useRef({ onSelect });
+  latest.current = { onSelect };
   // One marker per pin, kept across renders; React fills each marker's element through a portal.
   const markers = useRef(new Map<number, { marker: Marker; el: HTMLDivElement }>());
   const [, setMarkerSet] = useState(0);
@@ -87,9 +83,6 @@ export default function IntelMap({
     }
     m.touchZoomRotate.disableRotation();
     m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-    m.on("click", (e) => {
-      if (latest.current.placing) latest.current.onPlace(e.lngLat.lat, e.lngLat.lng);
-    });
     m.on("error", (e) => {
       // Only a failed tile or tile index counts; a missing icon or label font doesn't blank the map.
       const ev = e as { sourceId?: string; tile?: unknown; error?: { status?: number; message?: string; url?: string } };
@@ -177,20 +170,14 @@ export default function IntelMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus.n]);
 
+  // The selected pin sits above the rest, and older ones beneath the fresh.
   useEffect(() => {
-    if (!placing) return;
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && onCancelPlace();
-    window.addEventListener("keydown", esc);
-    return () => window.removeEventListener("keydown", esc);
-  }, [placing, onCancelPlace]);
-
-  // The selected pin sits above the rest.
-  useEffect(() => {
-    for (const [id, { el }] of markers.current) el.style.zIndex = id === selectedId ? "3" : "";
+    const old = new Set(pins.filter((p) => p.old).map((p) => p.id));
+    for (const [id, { el }] of markers.current) el.style.zIndex = id === selectedId ? "3" : old.has(id) ? "0" : "1";
   });
 
   return (
-    <div className={`pt-imap${placing ? " is-placing" : ""}`}>
+    <div className="pt-imap">
       <div ref={box} className="pt-imap__canvas" role="region" aria-label="Map of New South Wales. Drag to move; scroll or use the zoom buttons to zoom." />
       {noWebGl ? (
         <div className="pt-imap__notice">This browser can't draw the map (WebGL is off). The feed still lists every item.</div>
@@ -206,16 +193,16 @@ export default function IntelMap({
               return createPortal(
                 <button
                   type="button"
-                  className={`pt-imap__pin is-${pin.kind}${on ? " is-on" : ""}`}
-                  title={`${k.label} · ${pin.title}`}
+                  className={`pt-imap__pin is-${pin.kind}${on ? " is-on" : ""}${pin.old ? " is-old" : ""}`}
+                  title={`${k.label}${pin.old ? " (older)" : ""} · ${pin.title}`}
                   aria-label={`${k.label}: ${pin.title}`}
                   aria-pressed={on}
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (!latest.current.placing) latest.current.onSelect(pin.id);
+                    latest.current.onSelect(pin.id);
                   }}
                 >
-                  {pin.kind === "breach" && <span className="pt-imap__ping" aria-hidden />}
+                  {pin.kind === "breach" && !pin.old && <span className="pt-imap__ping" aria-hidden />}
                   <span className="pt-imap__shape" aria-hidden />
                   <Icon size={12} strokeWidth={2.25} aria-hidden />
                 </button>,
@@ -226,16 +213,6 @@ export default function IntelMap({
           <button type="button" className="pt-imap__reset" onClick={() => map.current?.fitBounds(NSW, { padding: FIT, duration: 700 })} title="Show all of NSW" aria-label="Show all of NSW">
             <Maximize size={13} /> NSW
           </button>
-          {placing && (
-            <div className="pt-imap__placing" role="status">
-              <span>
-                Click the map where <b>{placing}</b> happened
-              </span>
-              <button type="button" className="pt-iconbtn pt-iconbtn--sm" onClick={onCancelPlace} aria-label="Cancel">
-                <X size={13} />
-              </button>
-            </div>
-          )}
           {tilesFailed && <div className="pt-imap__notice pt-imap__notice--soft">Map tiles couldn't load: {tilesFailed}.</div>}
         </>
       )}

@@ -24,13 +24,18 @@ function useHeading(pathname: string, search: string): { title: string; meta: st
   const active = d.clients.filter((c) => c.status === "Customer").length;
   const openDeals = d.deals.filter((x) => x.stage !== "Closed won" && x.stage !== "Closed lost");
   const openJobs = d.roles.filter((r) => r.status === "Published").length;
+  const openChecks = d.checks.filter((c) => !c.closedAt).length;
+  const awaitingConsent = d.checks.filter((c) => c.status === "Awaiting consent").length;
+  const flaggedChecks = d.checks.filter((c) => !c.closedAt && c.items.some((i) => i.result === "flag")).length;
   const map: Record<string, { title: string; meta: string }> = {
     "/": { title: "Control", meta: `${longDate(d.today)} · week ${isoWeek(d.today)}` },
     "/operations": { title: "Operations", meta: `Order book · ${open} open · ${late} past due` },
     "/people":
       peopleView(search) === "recruitment"
         ? { title: "People", meta: `Recruitment · ${openJobs} published ${openJobs === 1 ? "job" : "jobs"} · ${candidates} candidates` }
-        : { title: "People", meta: `Licensed personnel register · ${d.employees.length} on file · ${onShift} on shift · ${expiring} licences due` },
+        : peopleView(search) === "checks"
+          ? { title: "People", meta: `Background checks for clients · ${openChecks} open · ${awaitingConsent} awaiting consent · ${flaggedChecks} flagged` }
+          : { title: "People", meta: `Licensed personnel register · ${d.employees.length} on file · ${onShift} on shift · ${expiring} licences due` },
     "/clients": { title: "Clients", meta: `${d.clients.length} companies · ${active} customers · ${openDeals.length} open deals` },
     "/risk": { title: "Threat Modelling", meta: `${d.sites.length} ${d.sites.length === 1 ? "site" : "sites"} · ${new Set(d.tmScenarios.map((x) => x.clientId)).size} clients modelled · physical, personnel & cyber` },
     "/intelligence": {

@@ -1,6 +1,7 @@
 import type { CrimeData } from "./crime";
 import type { CameraSpec } from "./cameras";
 import type { LevelGeometry } from "./geometry";
+import type { BackgroundCheck } from "./checks";
 export type StatusKind = "secure" | "advisory" | "breach" | "info" | "neutral";
 
 export interface Metric {
@@ -274,7 +275,14 @@ export interface IntelItem {
    * region. `label` names the suburb or region.
    */
   pin: { lat: number; lng: number; how: "pinned" | "suburb" | "region"; label: string } | null;
+  /** Logged more than INTEL_FADE_DAYS ago: shown greyed out until it leaves the feed. */
+  old: boolean;
 }
+
+/** Items grey out once they're this many days old... */
+export const INTEL_FADE_DAYS = 3;
+/** ...and leave the feed and map at this age (they stay in the database). */
+export const INTEL_KEEP_DAYS = 14;
 
 export interface PortalData {
   me: { email: string };
@@ -296,6 +304,7 @@ export interface PortalData {
   tmControls: TmControl[];
   tmIncidents: TmIncident[];
   crime: CrimeData;
+  checks: BackgroundCheck[];
 }
 
 // ── Threat modelling ────────────────────────────────────────────────────────

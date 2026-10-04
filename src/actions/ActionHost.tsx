@@ -35,6 +35,15 @@ import { useToast } from "../components/ui/Toast";
 import { ReportDrawer, type ReportKind } from "../components/ReportDrawer";
 import { TaskPane } from "../components/TaskPane";
 import { guessArea, siteFields, siteInitial } from "./threatFields";
+import {
+  CHECK_PACKAGES,
+  CHECK_PURPOSES,
+  CHECK_SUBJECTS,
+  checkType,
+  deriveCheck,
+  type BackgroundCheck,
+  type BackgroundCheckItem,
+} from "../../shared/checks";
 
 const opts = (list: readonly string[]) => list.map((v) => ({ value: v, label: v }));
 const statusOpts = (t: readonly (readonly [string, string])[]) => t.map(([l]) => ({ value: l, label: l }));
@@ -92,8 +101,14 @@ export interface Actions {
   /** Log a new item, or edit `item`. */
   logIntel: (o?: { regionKey?: string; item?: IntelItem; kind?: StatusKind }) => void;
   deleteIntel: (i: IntelItem) => Promise<boolean>;
-  /** Puts an item's pin at a point, or back at its region (null). */
-  moveIntel: (i: IntelItem, at: { lat: number; lng: number } | null) => Promise<boolean>;
+  /** Order a background check for a client. */
+  orderCheck: (o?: { clientId?: number }) => void;
+  editCheck: (c: BackgroundCheck) => void;
+  patchCheck: (c: BackgroundCheck, patch: CheckPatch) => Promise<boolean>;
+  deleteCheck: (c: BackgroundCheck) => Promise<boolean>;
+  addCheckItem: (c: BackgroundCheck, kind: string) => Promise<void>;
+  patchCheckItem: (c: BackgroundCheck, item: BackgroundCheckItem, patch: Partial<Pick<BackgroundCheckItem, "result" | "finding">>) => Promise<void>;
+  removeCheckItem: (c: BackgroundCheck, item: BackgroundCheckItem) => Promise<void>;
   /** Opens any form in the side drawer. */
   openForm: (spec: FormSpec) => void;
   /** Report a bug or request a feature: files a task under Internal portal. */
@@ -108,6 +123,7 @@ export type WorkPatch = Partial<Pick<OpsCard, "title" | "site" | "line" | "descr
   owner?: string;
 };
 export type ClientPatch = Partial<Pick<Client, "org" | "sector" | "sites" | "status" | "meta" | "domain" | "phone" | "city" | "owner">> & { valuePa?: number };
+export type CheckPatch = Partial<Pick<BackgroundCheck, "consentDate" | "dueDate" | "notes" | "details">> & { closed?: boolean };
 export type EngagementInput = {
   kind: Engagement["kind"];
   subject?: string;
@@ -246,6 +262,33 @@ export function ActionProvider({ children }: { children: ReactNode }) {
       { name: "closeDate", label: "Close date", type: "date", half: true },
       { name: "owner", label: "Deal owner (initials)", type: "initials", half: true },
     ];
+
+    const checkFields = (creating: boolean): FieldSpec[] => [
+      { name: "clientId", label: "For client", type: "select", required: true, options: clientsList.map((c) => ({ value: String(c.id), label: c.org })) },
+      { name: "subject", label: "Who or what is being checked", required: true, max: 120, placeholder: "e.g. Daniel Okafor, or Brightline Facilities Pty Ltd" },
+      { name: "subjectKind", label: "Subject", type: "select", options: opts(CHECK_SUBJECTS), required: true, half: true },
+      { name: "purpose", label: "Purpose", type: "select", options: opts(CHECK_PURPOSES), required: true, half: true },
+      ...(creating
+        ? [{ name: "package", label: "Checks to run", type: "select" as const, required: true, options: CHECK_PACKAGES.map((p) => ({ value: p.key, label: p.label })), hint: "Only the checks that apply to a person or a company are added. Add or remove any on the file." }]
+        : []),
+      { name: "details", label: "Identifying details", type: "textarea", max: 1000, placeholder: "Date of birth, address, licence number; or ABN/ACN for a company" },
+      { name: "dueDate", label: "Report due", type: "date", half: true },
+      { name: "owner", label: "Investigator (initials)", type: "initials", half: true, placeholder: "WC" },
+      { name: "consent", label: "Signed consent received (needed for a person)", type: "checkbox" },
+      { name: "notes", label: "Notes", type: "textarea", max: 4000, placeholder: "Scope agreed with the client, anything to watch for." },
+    ];
+    const checkBody = (v: FormValues, day: string) => ({
+      clientId: Number(v.clientId),
+      subject: v.subject,
+      subjectKind: v.subjectKind,
+      purpose: v.purpose,
+      package: v.package ?? "none",
+      details: v.details,
+      consentDate: v.consent ? day : null,
+      dueDate: v.dueDate || null,
+      owner: v.owner,
+      notes: v.notes,
+    });
 
     const roleFields: FieldSpec[] = [
       { name: "title", label: "Job title", required: true, max: 100, placeholder: "e.g. Security officer — night, CBD portfolio" },
@@ -633,7 +676,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
       closeClient: async (c) => {
         const ok = await destroy({
           title: `Delete ${c.org}?`,
-          body: "The company, its contacts, deals and activity will be deleted.",
+          body: "The company, its contacts, deals, activity, threat model and background checks will be deleted.",
           confirmLabel: "Delete company",
           path: `/clients/${c.id}`,
           toast: `${c.org} deleted`,
@@ -1035,9 +1078,9 @@ export function ActionProvider({ children }: { children: ReactNode }) {
           fields: [
             { name: "severity", label: "Type", type: "select", options: statusOpts(INTEL_SEVERITIES), required: true, half: true },
             { name: "regionKey", label: "Region", type: "select", options: regions.map((r) => ({ value: r.key, label: r.label })), required: true, half: true },
-            { name: "place", label: "Suburb or place", max: 120, placeholder: "e.g. Lakemba, or Haldon Street, Lakemba", hint: "The pin goes to the suburb named here (or in the report). Pin the exact spot from the feed." },
+            { name: "place", label: "Suburb or place", max: 120, placeholder: "e.g. Lakemba, or Haldon Street, Lakemba", hint: "The pin goes to the suburb named here, or failing that one named in the report." },
             { name: "headline", label: "Report", type: "textarea", required: true, max: 400, placeholder: "What happened and what was done, the news, or the opportunity and who to talk to." },
-            { name: "source", label: "Source", required: true, max: 120, placeholder: "e.g. Patrol report · OP-231" },
+            { name: "source", label: "Source", required: true, max: 500, placeholder: "e.g. Patrol report · OP-231, or a link", hint: "A link shows in the feed as its address and opens in a new tab." },
           ],
           initial: item
             ? { severity: sev, regionKey: item.regionKey, place: item.place, headline: item.headline, source: item.source }
@@ -1057,17 +1100,6 @@ export function ActionProvider({ children }: { children: ReactNode }) {
         });
       },
 
-      moveIntel: async (i, at) => {
-        try {
-          await send("PATCH", `/intel/${i.id}`, at ?? { lat: null, lng: null });
-          await done(at ? "Pin placed" : "Unpinned", at ? i.headline.slice(0, 80) : "Back at the suburb or region it names.");
-          return true;
-        } catch (err) {
-          fail(err);
-          return false;
-        }
-      },
-
       deleteIntel: (i) =>
         destroy({
           title: "Remove this item from the feed?",
@@ -1076,6 +1108,143 @@ export function ActionProvider({ children }: { children: ReactNode }) {
           path: `/intel/${i.id}`,
           toast: "Item removed",
         }),
+
+      orderCheck: (o) => {
+        if (!clientsList.length) {
+          toast({ title: "Add a company first", desc: "Checks are run for a client. Create the company in Clients.", kind: "advisory" });
+          return;
+        }
+        setSpec({
+          eyebrow: "Background checks",
+          title: "Order a background check",
+          submitLabel: "Open file",
+          intro: "A check on a person needs their signed consent before it starts; the file waits on it until it's recorded.",
+          fields: [...checkFields(true)],
+          initial: {
+            clientId: String(o?.clientId ?? clientsList.find((c) => c.status === "Customer")?.id ?? clientsList[0]!.id),
+            subject: "",
+            subjectKind: "Individual",
+            purpose: "Pre-employment",
+            package: "standard",
+            details: "",
+            consent: false,
+            dueDate: addDays(today, 10),
+            owner: me,
+            notes: "",
+          },
+          submit: async (v) => {
+            const r = await send("POST", "/checks", checkBody(v, today));
+            await done(`${r.ref} opened`, String(v.subject), `/people?view=checks&check=${r.id}`);
+          },
+        });
+      },
+
+      editCheck: (c) =>
+        setSpec({
+          eyebrow: `Background check · ${c.ref}`,
+          title: c.subject,
+          submitLabel: "Save file",
+          fields: checkFields(false),
+          initial: {
+            clientId: String(c.clientId ?? ""),
+            subject: c.subject,
+            subjectKind: c.subjectKind,
+            purpose: c.purpose,
+            details: c.details,
+            consent: !!c.consentDate,
+            dueDate: c.dueDate ?? "",
+            owner: c.owner,
+            notes: c.notes,
+          },
+          submit: async (v) => {
+            const { package: _p, ...b } = checkBody(v, today);
+            // Keep the date consent was first recorded.
+            await send("PATCH", `/checks/${c.id}`, { ...b, consentDate: v.consent ? c.consentDate ?? today : null });
+            await done("File saved", String(v.subject));
+          },
+          danger: { label: "Delete file", run: () => a.deleteCheck(c) },
+        }),
+
+      patchCheck: async (c, patch) => {
+        try {
+          const { closed, ...rest } = patch;
+          await mutate(
+            (dd) => ({
+              ...dd,
+              checks: dd.checks.map((k) =>
+                k.id === c.id
+                  ? deriveCheck({ ...k, ...rest, ...(closed === undefined ? {} : { closedAt: closed ? new Date().toISOString() : null }) }, dd.today)
+                  : k
+              ),
+            }),
+            () => send("PATCH", `/checks/${c.id}`, patch)
+          );
+          if (closed !== undefined) toast({ title: closed ? "Report marked as sent" : "File reopened", desc: `${c.ref} · ${c.subject}`, kind: "secure" });
+          return true;
+        } catch (err) {
+          fail(err);
+          return false;
+        }
+      },
+
+      deleteCheck: (c) =>
+        destroy({
+          title: `Delete ${c.ref}?`,
+          body: <>The file on {c.subject} and every check result on it will be deleted for good.</>,
+          confirmLabel: "Delete file",
+          path: `/checks/${c.id}`,
+          toast: "File deleted",
+        }),
+
+      addCheckItem: async (c, kind) => {
+        try {
+          await send("POST", `/checks/${c.id}/items`, { kind });
+          await refresh();
+        } catch (err) {
+          fail(err);
+        }
+      },
+
+      patchCheckItem: async (c, item, patch) => {
+        try {
+          const now = new Date().toISOString();
+          await mutate(
+            (dd) => ({
+              ...dd,
+              checks: dd.checks.map((k) =>
+                k.id === c.id
+                  ? deriveCheck(
+                      {
+                        ...k,
+                        items: k.items.map((i) =>
+                          i.id === item.id
+                            ? { ...i, ...patch, completedAt: patch.result === undefined ? i.completedAt : patch.result === "pending" ? null : i.completedAt ?? now }
+                            : i
+                        ),
+                      },
+                      dd.today
+                    )
+                  : k
+              ),
+            }),
+            () => send("PATCH", `/check-items/${item.id}`, patch)
+          );
+        } catch (err) {
+          fail(err);
+        }
+      },
+
+      removeCheckItem: async (c, item) => {
+        try {
+          await mutate(
+            (dd) => ({ ...dd, checks: dd.checks.map((k) => (k.id === c.id ? deriveCheck({ ...k, items: k.items.filter((i) => i.id !== item.id) }, dd.today) : k)) }),
+            () => send("DELETE", `/check-items/${item.id}`)
+          );
+          toast({ title: "Check removed", desc: checkType(item.kind).label, kind: "secure" });
+        } catch (err) {
+          fail(err);
+        }
+      },
 
       openForm: (spec) => setSpec(spec),
       report: (kind = "bug") => setReporting(kind),
@@ -1103,8 +1272,12 @@ export function ActionProvider({ children }: { children: ReactNode }) {
       },
 
       primaryFor: (pathname, search = "") => {
-        if (pathname === "/people")
-          return new URLSearchParams(search).get("view") === "recruitment" ? { label: "Create job", run: () => a.postRole() } : { label: "Add employee", run: () => a.addEmployee() };
+        if (pathname === "/people") {
+          const view = new URLSearchParams(search).get("view");
+          if (view === "recruitment") return { label: "Create job", run: () => a.postRole() };
+          if (view === "checks") return { label: "Order check", run: () => a.orderCheck() };
+          return { label: "Add employee", run: () => a.addEmployee() };
+        }
         const map: Record<string, { label: string; run: () => void }> = {
           "/": { label: "Raise work", run: () => a.raiseWork() },
           "/operations": { label: "Raise work", run: () => a.raiseWork() },
@@ -1116,7 +1289,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
       },
     };
     return a;
-  }, [data, done, destroy, fail, mutate, toast, confirm, navigate]);
+  }, [data, done, destroy, fail, mutate, refresh, toast, confirm, navigate]);
 
   return (
     <ActionContext.Provider value={actions}>

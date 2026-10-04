@@ -20,6 +20,18 @@ import {
 import type { AuthVariables } from "./auth";
 import { dayMonth, nowIso, shortDate, todaySydney } from "./dates";
 import { deleteThreatModel } from "./threatCleanup";
+import {
+  CHECK_PACKAGES,
+  CHECK_PURPOSES,
+  CHECK_RESULTS,
+  CHECK_SUBJECTS,
+  CHECK_TYPES,
+  appliesTo,
+  checkRef,
+  checkType,
+  type CheckPackage,
+  type CheckResult,
+} from "../shared/checks";
 
 export type Env = { Bindings: { DB: D1Database }; Variables: AuthVariables };
 export type Ctx = Context<Env>;
@@ -164,11 +176,31 @@ export const schemas = {
     verdict: z.enum(VERDICTS),
     body: optText(4000),
   }),
+  check: z.object({
+    clientId: id,
+    subject: text(120),
+    subjectKind: z.enum(CHECK_SUBJECTS).default("Individual"),
+    purpose: z.enum(CHECK_PURPOSES).default("Pre-employment"),
+    details: optText(1000),
+    consentDate: optDate,
+    dueDate: optDate,
+    owner: optInitials,
+    notes: optText(4000),
+    /** On create: the checks to start with. */
+    package: z.enum(CHECK_PACKAGES.map((p) => p.key) as [CheckPackage, ...CheckPackage[]]).default("none"),
+    /** On edit: true sends the report (closes the file), false reopens it. */
+    closed: z.boolean().optional(),
+  }),
+  checkItem: z.object({
+    kind: z.enum(CHECK_TYPES.map((t) => t.key) as [string, ...string[]]),
+    result: z.enum(CHECK_RESULTS.map(([k]) => k) as [CheckResult, ...CheckResult[]]).default("pending"),
+    finding: optText(2000),
+  }),
   intel: z.object({
     severity: z.enum(labels(INTEL_SEVERITIES)),
     regionKey: text(8),
     headline: text(400),
-    source: text(120),
+    source: text(500),
     place: optText(120),
     /** A point in or near Australia; null clears it (the item goes back to its region). */
     lat: z.union([z.coerce.number().min(-45).max(-9), z.null()]).default(null),
@@ -623,6 +655,8 @@ writes.delete("/clients/:id", async (c) => {
     db.prepare(`DELETE FROM deals WHERE client_id = ?`).bind(clientId),
     db.prepare(`DELETE FROM client_activity WHERE client_id = ?`).bind(clientId),
     ...deleteThreatModel(db, "client_id = ?", clientId),
+    db.prepare(`DELETE FROM background_check_items WHERE check_id IN (SELECT id FROM background_checks WHERE client_id = ?)`).bind(clientId),
+    db.prepare(`DELETE FROM background_checks WHERE client_id = ?`).bind(clientId),
     db.prepare(`DELETE FROM clients WHERE id = ?`).bind(clientId),
   ]);
   return c.json({ ok: true });
@@ -978,7 +1012,12 @@ writes.post("/intel", async (c) => {
 writes.patch("/intel/:id", async (c) => {
   const itemId = param(c);
   const v = await body(c, schemas.intel, true);
-  await mustExist(c, "intel_feed", itemId);
+  const row = await mustExist(c, "intel_feed", itemId);
+  // A new place moves the pin there, so an old exact spot doesn't hold it at the last place.
+  if (v.place !== undefined && v.place !== row.place && v.lat === undefined && v.lng === undefined) {
+    v.lat = null;
+    v.lng = null;
+  }
   if (v.regionKey !== undefined) await regionLabel(c, v.regionKey);
   if ((v.lat === undefined) !== (v.lng === undefined) || (v.lat !== undefined && (v.lat === null) !== (v.lng === null)))
     throw new BadRequest("A location needs both latitude and longitude.");
@@ -996,5 +1035,96 @@ writes.delete("/intel/:id", async (c) => {
   await c.env.DB.batch([
     c.env.DB.prepare(`DELETE FROM intel_feed WHERE id = ?`).bind(itemId),
   ]);
+  return c.json({ ok: true });
+});
+
+// ── Background checks ────────────────────────────────────────────────────────
+const CHECK_COLUMNS = {
+  clientId: "client_id",
+  subject: "subject",
+  subjectKind: "subject_kind",
+  purpose: "purpose",
+  details: "details",
+  consentDate: "consent_date",
+  dueDate: "due_date",
+  owner: "owner_initials",
+  notes: "notes",
+  closedAt: "closed_at",
+};
+
+writes.post("/checks", async (c) => {
+  const v = await body(c, schemas.check);
+  await mustExist(c, "clients", v.clientId);
+  const db = c.env.DB;
+  const ins = await db
+    .prepare(
+      `INSERT INTO background_checks (client_id, subject, subject_kind, purpose, details, consent_date, due_date, owner_initials, notes, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
+    )
+    .bind(v.clientId, v.subject, v.subjectKind, v.purpose, v.details, v.consentDate, v.dueDate, v.owner, v.notes, nowIso())
+    .first<{ id: number }>();
+  const checkId = ins!.id;
+  // A package only brings the checks that apply to this kind of subject.
+  const kinds = (CHECK_PACKAGES.find((p) => p.key === v.package)?.checks ?? []).filter((k) => appliesTo(checkType(k), v.subjectKind));
+  if (kinds.length)
+    await db.batch(kinds.map((k, i) => db.prepare(`INSERT INTO background_check_items (check_id, kind, sort_order) VALUES (?, ?, ?)`).bind(checkId, k, i + 1)));
+  return c.json({ id: checkId, ref: checkRef(checkId) }, 201);
+});
+
+writes.patch("/checks/:id", async (c) => {
+  const checkId = param(c);
+  const { package: _package, closed, ...v } = await body(c, schemas.check, true);
+  await mustExist(c, "background_checks", checkId);
+  if (v.clientId !== undefined) await mustExist(c, "clients", v.clientId);
+  const { sql, binds } = setClause({ ...v, closedAt: closed === undefined ? undefined : closed ? nowIso() : null }, CHECK_COLUMNS);
+  if (sql) await c.env.DB.prepare(`UPDATE background_checks SET ${sql} WHERE id = ?`).bind(...binds, checkId).run();
+  return c.json({ ok: true });
+});
+
+writes.delete("/checks/:id", async (c) => {
+  const checkId = param(c);
+  await mustExist(c, "background_checks", checkId);
+  const db = c.env.DB;
+  await db.batch([
+    db.prepare(`DELETE FROM background_check_items WHERE check_id = ?`).bind(checkId),
+    db.prepare(`DELETE FROM background_checks WHERE id = ?`).bind(checkId),
+  ]);
+  return c.json({ ok: true });
+});
+
+writes.post("/checks/:id/items", async (c) => {
+  const checkId = param(c);
+  const v = await body(c, schemas.checkItem);
+  const check = await mustExist(c, "background_checks", checkId);
+  if (!appliesTo(checkType(v.kind), check.subject_kind === "Company" ? "Company" : "Individual"))
+    throw new BadRequest("Some fields need attention.", { kind: `Not a check for ${check.subject_kind === "Company" ? "a company" : "a person"}` });
+  const db = c.env.DB;
+  const dup = await db.prepare(`SELECT id FROM background_check_items WHERE check_id = ? AND kind = ?`).bind(checkId, v.kind).first();
+  if (dup) throw new BadRequest("Some fields need attention.", { kind: "Already on this file" });
+  const ins = await db
+    .prepare(
+      `INSERT INTO background_check_items (check_id, kind, result, finding, completed_at, sort_order)
+       VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM background_check_items WHERE check_id = ?)) RETURNING id`
+    )
+    .bind(checkId, v.kind, v.result, v.finding, v.result === "pending" ? null : nowIso(), checkId)
+    .first<{ id: number }>();
+  return c.json({ id: ins!.id }, 201);
+});
+
+writes.patch("/check-items/:id", async (c) => {
+  const itemId = param(c);
+  const { kind: _kind, ...v } = await body(c, schemas.checkItem, true);
+  const row = await mustExist(c, "background_check_items", itemId);
+  // A result is dated when it's first given, and the date clears if it goes back to pending.
+  const completedAt = v.result === undefined ? undefined : v.result === "pending" ? null : v.result === row.result ? row.completed_at : nowIso();
+  const { sql, binds } = setClause({ ...v, completedAt }, { result: "result", finding: "finding", completedAt: "completed_at" });
+  if (sql) await c.env.DB.prepare(`UPDATE background_check_items SET ${sql} WHERE id = ?`).bind(...binds, itemId).run();
+  return c.json({ ok: true });
+});
+
+writes.delete("/check-items/:id", async (c) => {
+  const itemId = param(c);
+  await mustExist(c, "background_check_items", itemId);
+  await c.env.DB.prepare(`DELETE FROM background_check_items WHERE id = ?`).bind(itemId).run();
   return c.json({ ok: true });
 });
