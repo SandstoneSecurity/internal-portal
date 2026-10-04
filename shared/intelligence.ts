@@ -9,6 +9,13 @@ export function intelCategory(item: IntelItem): string {
   return isOpportunity(item) ? "Opportunity" : item.sev;
 }
 
+/** The existing report column stores the headline, then optional paragraphs. */
+export function intelReport(report: string) {
+  const clean = report.replace(/^OPPORTUNITY\s*\|\s*/i, "").trim();
+  const [headline, ...rest] = clean.split(/\r?\n/);
+  return { headline, details: rest.join("\n").trim() };
+}
+
 /** Pins represent regional coverage, never the precise location of an incident. */
 export function intelRegions(items: IntelItem[], regions: Region[]) {
   return regions.flatMap((region) => {

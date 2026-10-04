@@ -5,7 +5,7 @@ import { Maximize } from "lucide-react";
 import { mapStyle } from "../lib/map/style";
 import { useTheme } from "../lib/theme";
 import type { IntelItem, Region } from "../../shared/types";
-import { intelCategory, intelRegions } from "../../shared/intelligence";
+import { intelReport, intelRegions } from "../../shared/intelligence";
 
 /** New South Wales, with the ACT. */
 const NSW: LngLatBoundsLike = [
@@ -90,7 +90,7 @@ export default function IntelMap({ items, regions, selectedId, onSelect }: {
       for (const item of records) {
         const entry = document.createElement("button");
         entry.type = "button";
-        entry.textContent = `${intelCategory(item)} · ${item.headline}`;
+        entry.textContent = intelReport(item.headline).headline;
         entry.addEventListener("click", () => {
           onSelect(item.id);
           popup.remove();

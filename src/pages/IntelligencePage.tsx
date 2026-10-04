@@ -7,7 +7,7 @@ import { usePortal } from "../lib/DataProvider";
 import { pad2 } from "../lib/format";
 import { list, row, tween, DUR } from "../lib/motion";
 import { registerKeys, useSelection } from "../lib/selection";
-import { intelCategory } from "../../shared/intelligence";
+import { intelCategory, intelReport } from "../../shared/intelligence";
 
 const IntelMap = lazy(() => import("../components/IntelMap"));
 
@@ -101,9 +101,12 @@ export function IntelligencePage() {
                     <span className="pt-meta" style={{ marginLeft: "auto" }}>
                       {f.region}
                     </span>
-                    <RowMenu items={[{ label: "Remove from feed", onSelect: () => void actions.deleteIntel(f), danger: true }]} />
+                    <RowMenu items={[{ label: "Edit item", onSelect: () => actions.editIntel(f) }, { label: "Remove from feed", onSelect: () => void actions.deleteIntel(f), danger: true }]} />
                   </div>
-                  <div className="pt-feed__head">{f.headline}</div>
+                  <div className="pt-feed__head">{intelReport(f.headline).headline}</div>
+                  {intelReport(f.headline).details.split(/\n\s*\n/).filter(Boolean).map((paragraph, index) => (
+                    <p key={index} style={{ margin: "8px 0", fontSize: 13, lineHeight: 1.55, color: "var(--text-secondary)", whiteSpace: "pre-line" }}>{paragraph}</p>
+                  ))}
                   <div className="pt-feed__src">
                     {/^https?:\/\//i.test(f.source) ? (
                       <a href={f.source} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>View source</a>

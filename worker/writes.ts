@@ -167,8 +167,8 @@ export const schemas = {
   intel: z.object({
     severity: z.enum(labels(INTEL_SEVERITIES)),
     regionKey: text(8),
-    headline: text(400),
-    source: text(120),
+    headline: text(1200),
+    source: text(1000),
   }),
 };
 
@@ -962,6 +962,22 @@ writes.post("/intel", async (c) => {
       .bind(time, v.severity, kindFor(INTEL_SEVERITIES, v.severity), v.regionKey, v.headline, v.source, nowIso(now)),
   ]);
   return c.json({ id: (ins.results[0] as { id: number }).id }, 201);
+});
+
+writes.patch("/intel/:id", async (c) => {
+  const itemId = param(c);
+  const v = await body(c, schemas.intel, true);
+  await mustExist(c, "intel_feed", itemId);
+  if (v.regionKey !== undefined) {
+    const region = await c.env.DB.prepare("SELECT key FROM regions WHERE key = ?").bind(v.regionKey).first();
+    if (!region) throw new BadRequest("Some fields need attention.", { regionKey: "Choose a region" });
+  }
+  const { sql, binds } = setClause(
+    { ...v, kind: v.severity === undefined ? undefined : kindFor(INTEL_SEVERITIES, v.severity) },
+    { severity: "severity", kind: "severity_kind", regionKey: "region_key", headline: "headline", source: "source" }
+  );
+  if (sql) await c.env.DB.prepare(`UPDATE intel_feed SET ${sql} WHERE id = ?`).bind(...binds, itemId).run();
+  return c.json({ ok: true });
 });
 
 writes.delete("/intel/:id", async (c) => {

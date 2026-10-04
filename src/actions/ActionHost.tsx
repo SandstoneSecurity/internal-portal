@@ -26,6 +26,7 @@ import {
   type Role,
 } from "../../shared/types";
 import { send } from "../lib/api";
+import { intelCategory, intelReport } from "../../shared/intelligence";
 import { usePortalData } from "../lib/DataProvider";
 import { addDays, aud, dayMonth, initialsOf, money } from "../lib/format";
 import { useConfirm } from "../components/ui/Confirm";
@@ -89,6 +90,7 @@ export interface Actions {
   deleteCandidateEvent: (c: Candidate, ev: CandidateEvent) => Promise<void>;
   deleteCandidate: (c: Candidate) => Promise<boolean>;
   logIntel: (o?: { regionKey?: string }) => void;
+  editIntel: (i: IntelItem) => void;
   deleteIntel: (i: IntelItem) => Promise<boolean>;
   /** Opens any form in the side drawer. */
   openForm: (spec: FormSpec) => void;
@@ -175,6 +177,17 @@ export function ActionProvider({ children }: { children: ReactNode }) {
     const today = d?.today ?? new Date().toISOString().slice(0, 10);
     const me = initialsOf(d?.me.email ?? "");
     const regions = d?.regions ?? [];
+    const intelFields: FieldSpec[] = [
+      { name: "severity", label: "Category", type: "select", options: statusOpts(INTEL_SEVERITIES), required: true, half: true },
+      { name: "regionKey", label: "Region", type: "select", options: regions.map((r) => ({ value: r.key, label: r.label })), required: true, half: true },
+      { name: "headline", label: "Headline", required: true, max: 160, placeholder: "A short, specific headline" },
+      { name: "details", label: "Details", type: "textarea", max: 1000, placeholder: "Brief paragraphs describing the scope, timing and suitability." },
+      { name: "source", label: "Reference", required: true, max: 1000, placeholder: "Source URL or report reference" },
+    ];
+    const intelPayload = (v: FormValues) => ({
+      severity: v.severity, regionKey: v.regionKey, source: v.source,
+      headline: [String(v.headline).trim(), String(v.details ?? "").trim()].filter(Boolean).join("\n\n"),
+    });
     const roles = d?.roles ?? [];
     const columns = d?.opsColumns ?? [];
 
@@ -1025,18 +1038,25 @@ export function ActionProvider({ children }: { children: ReactNode }) {
           eyebrow: "Intelligence",
           title: "Log an item",
           submitLabel: "Log item",
-          fields: [
-            { name: "severity", label: "Severity", type: "select", options: statusOpts(INTEL_SEVERITIES), required: true, half: true },
-            { name: "regionKey", label: "Region", type: "select", options: regions.map((r) => ({ value: r.key, label: r.label })), required: true, half: true },
-            { name: "headline", label: "Report", type: "textarea", required: true, max: 400, placeholder: "What was observed, where, and what was done." },
-            { name: "source", label: "Source", required: true, max: 120, placeholder: "e.g. Patrol report · OP-231" },
-          ],
-          initial: { severity: "Advisory", regionKey: o?.regionKey ?? regions[0]?.key ?? "", headline: "", source: "" },
+          fields: intelFields,
+          initial: { severity: "Opportunity", regionKey: o?.regionKey ?? regions[0]?.key ?? "", headline: "", details: "", source: "" },
           submit: async (v) => {
-            const r = await send("POST", "/intel", v);
+            const r = await send("POST", "/intel", intelPayload(v));
             await done("Item logged", `${v.severity} · ${regions.find((x) => x.key === v.regionKey)?.label ?? ""}`, `/intelligence?item=${r.id}`);
           },
         }),
+
+      editIntel: (i) => setSpec({
+        eyebrow: "Intelligence",
+        title: "Edit item",
+        submitLabel: "Save changes",
+        fields: intelFields,
+        initial: { severity: intelCategory(i), regionKey: i.regionKey, ...intelReport(i.headline), source: i.source },
+        submit: async (v) => {
+          await send("PATCH", `/intel/${i.id}`, intelPayload(v));
+          await done("Item updated", String(v.headline), `/intelligence?item=${i.id}`);
+        },
+      }),
 
       deleteIntel: (i) =>
         destroy({
