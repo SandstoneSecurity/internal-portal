@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import maplibregl, { type LngLatBoundsLike, type Map as MlMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Maximize } from "lucide-react";
@@ -15,26 +14,11 @@ const NSW: LngLatBoundsLike = [
 /** Margin around NSW when the whole state is shown. */
 const FIT = 36;
 
-export interface MapMarker {
-  key: string;
-  label: string;
-  lat: number;
-  lng: number;
-  count: number;
-  worst?: "breach" | "advisory" | "info";
-  on: boolean;
-}
-
-/**
- * A real, pannable map of NSW with the monitored regions on it. Drag to move; scroll, pinch or the buttons
- * to zoom. `focus` moves the view: a region key flies there, null shows the whole state; bump `n`
- * to repeat a move.
- */
-export default function IntelMap({ markers, focus, onRegion }: { markers: MapMarker[]; focus: { key: string | null; n: number }; onRegion: (key: string) => void }) {
+/** A real, pannable map of NSW. Drag to move; scroll, pinch or the buttons to zoom. */
+export default function IntelMap() {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<MlMap | null>(null);
   const { theme } = useTheme();
-  const [, setFrame] = useState(0);
   const [tilesFailed, setTilesFailed] = useState(false);
   const [noWebGl, setNoWebGl] = useState(false);
   const shownTheme = useRef(theme);
@@ -64,26 +48,15 @@ export default function IntelMap({ markers, focus, onRegion }: { markers: MapMar
     }
     m.touchZoomRotate.disableRotation();
     m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-    // Markers are drawn over the canvas and follow it.
-    let raf = 0;
-    const redraw = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => setFrame((f) => f + 1));
-    };
-    m.on("move", redraw);
-    m.on("resize", redraw);
-    m.on("load", redraw);
     m.on("error", (e) => {
-      // Tiles, labels or the tile index not reachable (offline, blocked): the regions still work.
+      // Tiles, labels or the tile index not reachable (offline, blocked).
       if (/fetch|load|status|network|AJAXError/i.test(String((e as { error?: Error }).error?.message ?? e.error))) setTilesFailed(true);
     });
     m.on("data", (e) => {
       if ((e as { dataType?: string }).dataType === "source" && (e as { isSourceLoaded?: boolean }).isSourceLoaded) setTilesFailed(false);
     });
     map.current = m;
-    redraw();
     return () => {
-      cancelAnimationFrame(raf);
       m.remove();
       map.current = null;
     };
@@ -97,56 +70,17 @@ export default function IntelMap({ markers, focus, onRegion }: { markers: MapMar
     map.current.setStyle(mapStyle(theme));
   }, [theme]);
 
-  useEffect(() => {
-    const m = map.current;
-    if (!m || focus.n === 0) return;
-    const r = markers.find((x) => x.key === focus.key);
-    if (r) m.easeTo({ center: [r.lng, r.lat], zoom: Math.max(m.getZoom(), 7.5), duration: 700 });
-    else m.fitBounds(NSW, { padding: FIT, duration: 700 });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focus.n]);
-
-  const m = map.current;
-  const w = box.current?.clientWidth ?? 0;
-  const h = box.current?.clientHeight ?? 0;
-
   return (
     <div className="pt-imap">
       <div ref={box} className="pt-imap__canvas" role="region" aria-label="Map of New South Wales. Drag to move; scroll or use the zoom buttons to zoom." />
       {noWebGl ? (
-        <div className="pt-imap__notice">This browser can't draw the map (WebGL is off). The feed still filters by region.</div>
+        <div className="pt-imap__notice">This browser can't draw the map (WebGL is off).</div>
       ) : (
         <>
-          {/* Inside the map's own element, so a drag or scroll that starts on a marker still moves the map. */}
-          {m &&
-            createPortal(
-              <div className="pt-imap__markers">
-                {markers.map((r) => {
-                  const p = m.project([r.lng, r.lat]);
-                  if (p.x < -40 || p.y < -20 || p.x > w + 40 || p.y > h + 20) return null;
-                  return (
-                    <button
-                      key={r.key}
-                      type="button"
-                      className={`pt-imap__marker is-${r.worst ?? "none"}${r.on ? " is-on" : ""}`}
-                      style={{ transform: `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px)` }}
-                      aria-pressed={r.on}
-                      title={`${r.label} · ${r.count} ${r.count === 1 ? "item" : "items"}`}
-                      aria-label={`${r.label}: ${r.count} ${r.count === 1 ? "item" : "items"}. ${r.on ? "Showing only this region." : "Filter the feed to this region."}`}
-                      onClick={() => onRegion(r.key)}
-                    >
-                      {r.worst === "breach" && <span className="pt-imap__ping" aria-hidden />}
-                      <span className="pt-imap__dot" aria-hidden />
-                    </button>
-                  );
-                })}
-              </div>,
-              m.getCanvasContainer()
-            )}
-          <button type="button" className="pt-imap__reset" onClick={() => m?.fitBounds(NSW, { padding: FIT, duration: 700 })} title="Show all of NSW" aria-label="Show all of NSW">
+          <button type="button" className="pt-imap__reset" onClick={() => map.current?.fitBounds(NSW, { padding: FIT, duration: 700 })} title="Show all of NSW" aria-label="Show all of NSW">
             <Maximize size={13} /> NSW
           </button>
-          {tilesFailed && <div className="pt-imap__notice pt-imap__notice--soft">Map tiles couldn't load. Regions still filter the feed.</div>}
+          {tilesFailed && <div className="pt-imap__notice pt-imap__notice--soft">Map tiles couldn't load.</div>}
         </>
       )}
     </div>

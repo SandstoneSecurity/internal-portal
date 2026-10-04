@@ -504,23 +504,6 @@ input[type="date"].pt-input { font-family: var(--font-mono); font-size: 13px; }
 /* Two classes, so MapLibre's own .maplibregl-map { position: relative } (loaded later) can't shrink it. */
 .pt-imap > .pt-imap__canvas { position: absolute; inset: 0; }
 .pt-imap__canvas .maplibregl-canvas:focus-visible { outline: none; box-shadow: inset var(--focus-ring); }
-.pt-imap__markers { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
-.pt-imap__marker {
-  --dot: var(--border-strong);
-  position: absolute; left: 0; top: 0; display: flex; padding: 0; margin: -6px 0 0 -6px;
-  border: 0; background: none; cursor: pointer; pointer-events: auto; font: inherit; color: var(--text-secondary);
-}
-.pt-imap__marker.is-breach { --dot: var(--status-breach-dot); }
-.pt-imap__marker.is-advisory { --dot: var(--status-advisory-dot); }
-.pt-imap__marker.is-info { --dot: var(--status-info-dot); }
-.pt-imap__dot { position: relative; flex: none; width: 12px; height: 12px; border-radius: 999px; background: var(--dot); box-shadow: 0 0 0 2px var(--surface-raised), 0 1px 3px rgba(0, 0, 0, 0.25); transition: box-shadow var(--dur-base, 160ms) ease; }
-.pt-imap__marker.is-none .pt-imap__dot { width: 8px; height: 8px; margin: 2px; }
-.pt-imap__marker.is-on .pt-imap__dot { box-shadow: 0 0 0 2px var(--surface-raised), 0 0 0 4px var(--brass-500), 0 1px 4px rgba(0, 0, 0, 0.3); }
-.pt-imap__ping { position: absolute; left: 0; top: 0; width: 12px; height: 12px; border-radius: 999px; border: 1.5px solid var(--status-breach-dot); animation: pt-map-ping 2.8s var(--ease-out) infinite; pointer-events: none; }
-/* Dots only: the map names the places; a region's name and count show on hover and to screen readers. */
-.pt-imap__marker:hover .pt-imap__dot { box-shadow: 0 0 0 2px var(--surface-raised), 0 0 0 4px var(--border-strong), 0 1px 4px rgba(0, 0, 0, 0.3); }
-.pt-imap__marker:focus-visible { outline: none; }
-.pt-imap__marker:focus-visible .pt-imap__dot { box-shadow: 0 0 0 2px var(--surface-raised), 0 0 0 4px var(--brass-500), 0 0 0 6px color-mix(in srgb, var(--brass-500) 35%, transparent); }
 .pt-imap__reset {
   position: absolute; top: 10px; left: 10px; z-index: 3; display: inline-flex; align-items: center; gap: 5px; height: 29px; padding: 0 9px;
   border: var(--border-hair) solid var(--border-default); border-radius: var(--radius-sm); background: var(--surface-raised); color: var(--text-secondary);
@@ -541,7 +524,6 @@ input[type="date"].pt-input { font-family: var(--font-mono); font-size: 13px; }
 :root[data-theme="night"] .pt-imap .maplibregl-ctrl-attrib-button { filter: invert(0.85); }
 @media (max-width: 900px) { .pt-imap { height: 420px; } }
 @media (max-width: 640px) { .pt-imap { height: 340px; } }
-@keyframes pt-map-ping { 0% { transform: scale(0.6); opacity: 0.55; } 75%, 100% { transform: scale(3.2); opacity: 0; } }
 
 .pt-feed__item { position: relative; padding: 14px 12px; border-bottom: var(--border-hair) solid var(--border-subtle); cursor: pointer; transition: background-color var(--dur-fast); outline: none; }
 .pt-feed__item::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--brass-500); transform: scaleY(0); transition: transform var(--dur-base) var(--ease-out); }
@@ -622,7 +604,7 @@ input[type="date"].pt-input { font-family: var(--font-mono); font-size: 13px; }
   .pt-tabs__trailing .pt-search { width: 100% !important; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pt-badge__dot--pulse::after, .pt-imap__ping { animation: none; }
+  .pt-badge__dot--pulse::after { animation: none; }
 }
 
 /* ── Task board (Operations) ──────────────────────────────────────────────
