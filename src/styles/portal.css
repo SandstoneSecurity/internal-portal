@@ -499,7 +499,7 @@ input[type="date"].pt-input { font-family: var(--font-mono); font-size: 13px; }
 
 /* ── Intelligence map ─────────────────────────────────────────────────── */
 /* Intelligence map: a real, pannable map (MapLibre) with the regions drawn over it. */
-.pt-imap { position: relative; margin-top: 14px; height: 520px; background: var(--surface-sunken); border: var(--border-hair) solid var(--border-subtle); overflow: hidden; }
+.pt-imap { position: relative; height: 520px; background: var(--surface-sunken); overflow: hidden; }
 .pt-imap--loading { background: var(--surface-sunken); }
 /* Two classes, so MapLibre's own .maplibregl-map { position: relative } (loaded later) can't shrink it. */
 .pt-imap > .pt-imap__canvas { position: absolute; inset: 0; }
@@ -522,8 +522,112 @@ input[type="date"].pt-input { font-family: var(--font-mono); font-size: 13px; }
 .pt-imap .maplibregl-ctrl-attrib { font-size: 10px; background: color-mix(in srgb, var(--surface-raised) 85%, transparent); color: var(--text-tertiary); }
 .pt-imap .maplibregl-ctrl-attrib a { color: var(--text-secondary); }
 :root[data-theme="night"] .pt-imap .maplibregl-ctrl-attrib-button { filter: invert(0.85); }
-@media (max-width: 900px) { .pt-imap { height: 420px; } }
-@media (max-width: 640px) { .pt-imap { height: 340px; } }
+/* ── Intelligence: map beside the feed ─────────────────────────────── */
+.pt-intel { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(340px, 1fr); gap: 24px; align-items: start; }
+/* The map stays in view while the feed scrolls. */
+.pt-intel__map { position: sticky; top: 16px; padding: 0; overflow: hidden; }
+.pt-intel__map .pt-imap { height: max(440px, calc(100dvh - 190px)); }
+.pt-imap.is-placing .maplibregl-canvas { cursor: crosshair; }
+
+/* Kind colours: the pins, the feed glyphs and the filters share them. */
+.is-breach { --k: var(--status-breach-dot); }
+.is-advisory { --k: var(--status-advisory-dot); }
+.is-info { --k: var(--status-info-dot); }
+.is-secure { --k: var(--status-secure-dot); }
+
+.pt-imap__pins { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.pt-imap__pin {
+  position: absolute; left: 0; top: 0; width: 24px; height: 24px; margin: -12px 0 0 -12px; padding: 0;
+  display: grid; place-items: center; border: 0; background: none; color: #fff; cursor: pointer; pointer-events: auto;
+}
+.pt-imap__pin svg { position: relative; }
+.pt-imap__shape {
+  position: absolute; inset: 0; border-radius: 999px; background: var(--k);
+  box-shadow: 0 0 0 2px var(--surface-raised), 0 2px 6px rgba(0, 0, 0, 0.28); transition: box-shadow var(--dur-fast) ease;
+}
+/* Opportunity reads as a different thing at a glance: a diamond, not a disc. */
+.pt-imap__pin.is-secure .pt-imap__shape { inset: 3px; border-radius: 2px; transform: rotate(45deg); }
+.pt-imap__pin:hover .pt-imap__shape { box-shadow: 0 0 0 2px var(--surface-raised), 0 0 0 4px color-mix(in srgb, var(--k) 45%, transparent), 0 2px 6px rgba(0, 0, 0, 0.28); }
+.pt-imap__pin.is-on { z-index: 1; }
+.pt-imap__pin.is-on .pt-imap__shape { box-shadow: 0 0 0 2px var(--surface-raised), 0 0 0 4.5px var(--brass-500), 0 3px 10px rgba(0, 0, 0, 0.35); }
+.pt-imap__pin:focus-visible { outline: none; }
+.pt-imap__pin:focus-visible .pt-imap__shape { box-shadow: 0 0 0 2px var(--surface-raised), 0 0 0 4.5px var(--brass-500); }
+.pt-imap__ping { position: absolute; inset: 0; border-radius: 999px; border: 1.5px solid var(--status-breach-dot); animation: pt-map-ping 2.8s var(--ease-out) infinite; pointer-events: none; }
+@keyframes pt-map-ping { 0% { transform: scale(0.8); opacity: 0.6; } 75%, 100% { transform: scale(2.6); opacity: 0; } }
+.pt-imap__placing {
+  position: absolute; top: 10px; left: 50%; translate: -50% 0; z-index: 4; display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 12px;
+  background: var(--bark-800); color: var(--sand-100); font-size: 12.5px; border-left: 2px solid var(--brass-500); box-shadow: var(--shadow-lg); white-space: nowrap; max-width: calc(100% - 140px);
+}
+.pt-imap__placing span { overflow: hidden; text-overflow: ellipsis; }
+.pt-imap__placing .pt-iconbtn { color: var(--sand-100); }
+
+/* The feed */
+.pt-ifeed { min-width: 0; }
+/* Filters and search stay reachable while the list scrolls. */
+.pt-ifeed__head {
+  position: sticky; top: 0; z-index: 3; display: flex; flex-direction: column; gap: 12px; padding: 16px 0 14px; margin-top: -16px;
+  background: var(--surface-page); border-bottom: 2px solid var(--rule-strong);
+}
+/* Selected items scroll into view below the sticky head, not under it. */
+.pt-ifeed__item { scroll-margin-top: 200px; }
+.pt-ifeed__title { display: flex; align-items: center; justify-content: space-between; }
+.pt-ifeed__filters { display: flex; flex-wrap: wrap; gap: 5px; }
+.pt-ifeed__filter {
+  --k: var(--text-secondary);
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border: var(--border-hair) solid var(--border-default); border-radius: var(--radius-sm);
+  background: transparent; color: var(--text-secondary); font: inherit; font-size: 12px; cursor: pointer;
+}
+.pt-ifeed__filter:hover { border-color: var(--border-strong); color: var(--text-primary); }
+.pt-ifeed__filter[aria-checked="true"] { border-color: var(--k); background: color-mix(in srgb, var(--k) 12%, transparent); color: var(--text-primary); font-weight: 600; }
+.pt-ifeed__filter:not([class*="is-"])[aria-checked="true"] { border-color: var(--text-primary); background: var(--surface-sunken); }
+.pt-ifeed__filter:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.pt-ifeed__n { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-tertiary); font-weight: 400; }
+.pt-ifeed__glyph { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 999px; background: var(--k); color: #fff; flex: none; }
+/* Opportunity is a diamond here too, as on the map. */
+.pt-ifeed__filter.is-secure .pt-ifeed__glyph, .pt-ifeed__item.is-secure .pt-ifeed__glyph { border-radius: 2px; transform: rotate(45deg) scale(0.86); }
+.pt-ifeed__filter.is-secure .pt-ifeed__glyph svg, .pt-ifeed__item.is-secure .pt-ifeed__glyph svg { transform: rotate(-45deg); }
+.pt-ifeed__glyph--lg { width: 26px; height: 26px; margin-top: 1px; }
+.pt-ifeed__search { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 6px 0 10px; border: var(--border-hair) solid var(--field-border, var(--border-default)); background: var(--field-bg, var(--surface-raised)); color: var(--text-tertiary); }
+.pt-ifeed__search:focus-within { border-color: var(--brass-500); box-shadow: var(--focus-ring); }
+.pt-ifeed__search input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--text-primary); font: inherit; font-size: 13px; }
+.pt-ifeed__none { padding: 18px 2px; font: var(--type-small); color: var(--text-tertiary); }
+.pt-ifeed__day { display: flex; gap: 8px; padding: 18px 2px 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-tertiary); }
+.pt-ifeed__day span { color: var(--text-tertiary); opacity: 0.7; }
+.pt-ifeed__item {
+  position: relative; display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px; padding: 12px 12px 12px 10px; margin: 0 -2px;
+  border-top: var(--border-hair) solid var(--border-subtle); cursor: pointer; outline: none; transition: background-color var(--dur-fast);
+}
+.pt-ifeed__group .pt-ifeed__item:first-of-type { border-top-color: transparent; }
+.pt-ifeed__item::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--brass-500); transform: scaleY(0); transition: transform var(--dur-base) var(--ease-out); }
+.pt-ifeed__item:hover { background: var(--surface-sunken); }
+.pt-ifeed__item:focus-visible { box-shadow: inset var(--focus-ring); }
+.pt-ifeed__item.is-on { background: var(--surface-sunken); }
+.pt-ifeed__item.is-on::before { transform: scaleY(1); }
+.pt-ifeed__body { min-width: 0; }
+.pt-ifeed__meta { display: flex; align-items: baseline; gap: 10px; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.04em; color: var(--text-tertiary); white-space: nowrap; }
+.pt-ifeed__kind { color: var(--k); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+:root[data-theme="night"] .pt-ifeed__kind { filter: brightness(1.25); }
+.pt-ifeed__where { display: inline-flex; align-items: center; gap: 3px; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; }
+.pt-ifeed__text { margin: 5px 0 0; font-size: 13.5px; line-height: 1.5; color: var(--text-primary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pt-ifeed__item.is-on .pt-ifeed__text { -webkit-line-clamp: unset; display: block; }
+.pt-ifeed__src { margin-top: 4px; font: var(--type-small); color: var(--text-tertiary); }
+.pt-ifeed__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 10px; padding-top: 10px; border-top: var(--border-hair) dashed var(--border-subtle); cursor: default; }
+.pt-ifeed__act {
+  display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; border: var(--border-hair) solid var(--border-default); border-radius: var(--radius-sm);
+  background: var(--surface-raised); color: var(--text-secondary); font: inherit; font-size: 12px; cursor: pointer;
+}
+.pt-ifeed__act:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.pt-ifeed__act.is-active { border-color: var(--brass-500); color: var(--text-primary); background: color-mix(in srgb, var(--brass-500) 12%, var(--surface-raised)); }
+.pt-ifeed__act:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.pt-ifeed__act--danger:hover { color: var(--status-breach-fg); border-color: var(--status-breach-dot); }
+.pt-ifeed__spacer { flex: 1; }
+@media (max-width: 1100px) {
+  .pt-intel { grid-template-columns: 1fr; }
+  .pt-intel__map { position: static; }
+  .pt-intel__map .pt-imap { height: 420px; }
+}
+@media (max-width: 640px) { .pt-intel__map .pt-imap { height: 340px; } }
+
 
 .pt-feed__item { position: relative; padding: 14px 12px; border-bottom: var(--border-hair) solid var(--border-subtle); cursor: pointer; transition: background-color var(--dur-fast); outline: none; }
 .pt-feed__item::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--brass-500); transform: scaleY(0); transition: transform var(--dur-base) var(--ease-out); }
@@ -604,7 +708,7 @@ input[type="date"].pt-input { font-family: var(--font-mono); font-size: 13px; }
   .pt-tabs__trailing .pt-search { width: 100% !important; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pt-badge__dot--pulse::after { animation: none; }
+  .pt-badge__dot--pulse::after, .pt-imap__ping { animation: none; }
 }
 
 /* ── Task board (Operations) ──────────────────────────────────────────────

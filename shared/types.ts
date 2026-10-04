@@ -256,12 +256,19 @@ export interface Region {
 export interface IntelItem {
   id: number;
   time: string;
+  /** When it was logged (ISO); null for items from before that was recorded. */
+  createdAt: string | null;
   sev: string;
   kind: StatusKind;
   region: string;
   regionKey: string;
   headline: string;
   source: string;
+  /** Where it happened, when known; otherwise the map places it at its region. */
+  lat: number | null;
+  lng: number | null;
+  /** A place name, e.g. "Kent Street, Sydney"; "" when not given. */
+  place: string;
 }
 
 export interface PortalData {
@@ -438,6 +445,8 @@ export const INTEL_SEVERITIES = [
   ["Breach", "breach"],
   ["Advisory", "advisory"],
   ["Information", "info"],
+  // A lead rather than a threat: a tender, a new site, a client need. Eucalypt, like other good news.
+  ["Opportunity", "secure"],
 ] as const satisfies readonly (readonly [string, StatusKind])[];
 
 export const SERVICE_LINES = ["Ops", "Protective", "Advisory", "Tech", "Training"] as const;
