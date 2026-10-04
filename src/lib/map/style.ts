@@ -1,6 +1,6 @@
 /**
  * The Intelligence map's look: OpenFreeMap's Positron style (vector tiles from OpenStreetMap, no key needed),
- * recoloured to Sandstone. Limestone by day, ironbark for operations mode; the state border is brass.
+ * recoloured to Sandstone. Tiles, fonts and icons load through the portal (/api/map, worker/mapTiles.ts). Limestone by day, ironbark for operations mode; the state border is brass.
  */
 import type { StyleSpecification, LayerSpecification } from "maplibre-gl";
 import positron from "./positron.json";
@@ -80,7 +80,9 @@ function roleOf(id: string): { fill?: keyof Palette; line?: keyof Palette; outli
 
 export function mapStyle(theme: "light" | "night"): StyleSpecification {
   const c = theme === "night" ? NIGHT : LIGHT;
-  const base = structuredClone(positron) as unknown as StyleSpecification;
+  // Through the portal rather than straight from the tile host.
+  const here = `${window.location.origin}/api/map`;
+  const base = JSON.parse(JSON.stringify(positron).replaceAll("https://tiles.openfreemap.org", here)) as StyleSpecification;
   base.layers = base.layers.map((layer): LayerSpecification => {
     const role = roleOf(layer.id);
     const l = { ...layer, paint: { ...(layer as { paint?: Record<string, unknown> }).paint } } as LayerSpecification & { paint: Record<string, unknown>; layout?: Record<string, unknown> };

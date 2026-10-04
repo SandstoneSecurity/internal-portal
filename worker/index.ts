@@ -3,11 +3,12 @@ import { requireAccess, type AccessEnv, type AuthVariables } from "./auth";
 import { getPortal } from "./db";
 import { crime, scheduledRefresh } from "./crime";
 import { feedback, type GitHubEnv } from "./feedback";
+import { mapTiles, type MapEnv } from "./mapTiles";
 import { files } from "./files";
 import { threats } from "./threats";
 import { handleApiError, writes } from "./writes";
 
-interface Env extends AccessEnv, GitHubEnv {
+interface Env extends AccessEnv, GitHubEnv, MapEnv {
   DB: D1Database;
   ASSETS: Fetcher;
 }
@@ -37,6 +38,7 @@ app.route("/api", files);
 app.route("/api", threats);
 app.route("/api", crime);
 app.route("/api", feedback);
+app.route("/api", mapTiles);
 app.route("/api", writes);
 app.all("/api/*", (c) => c.json({ error: "Not found." }, 404));
 

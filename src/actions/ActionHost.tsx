@@ -24,6 +24,7 @@ import {
   type OpsSubtask,
   type PortalData,
   type Role,
+  type StatusKind,
 } from "../../shared/types";
 import { send } from "../lib/api";
 import { usePortalData } from "../lib/DataProvider";
@@ -89,7 +90,7 @@ export interface Actions {
   deleteCandidateEvent: (c: Candidate, ev: CandidateEvent) => Promise<void>;
   deleteCandidate: (c: Candidate) => Promise<boolean>;
   /** Log a new item, or edit `item`. */
-  logIntel: (o?: { regionKey?: string; item?: IntelItem }) => void;
+  logIntel: (o?: { regionKey?: string; item?: IntelItem; kind?: StatusKind }) => void;
   deleteIntel: (i: IntelItem) => Promise<boolean>;
   /** Puts an item's pin at a point, or back at its region (null). */
   moveIntel: (i: IntelItem, at: { lat: number; lng: number } | null) => Promise<boolean>;
@@ -1025,8 +1026,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
 
       logIntel: (o) => {
         const item = o?.item;
-        // Older items were logged as "Info"; the form's option is "Information".
-        const sev = INTEL_SEVERITIES.find(([, k]) => k === item?.kind)?.[0] ?? "Advisory";
+        const sev = INTEL_SEVERITIES.find(([, k]) => k === (item?.kind ?? o?.kind))?.[0] ?? "Incident";
         const initialRegion = o?.regionKey ?? (regions.find((r) => r.key === "syd") ?? regions[0])?.key ?? "";
         setSpec({
           eyebrow: "Intelligence",
@@ -1035,13 +1035,13 @@ export function ActionProvider({ children }: { children: ReactNode }) {
           fields: [
             { name: "severity", label: "Type", type: "select", options: statusOpts(INTEL_SEVERITIES), required: true, half: true },
             { name: "regionKey", label: "Region", type: "select", options: regions.map((r) => ({ value: r.key, label: r.label })), required: true, half: true },
-            { name: "place", label: "Place", max: 120, placeholder: "e.g. Kent Street, Sydney", hint: "Pin the exact spot on the map from the feed once it's logged." },
-            { name: "headline", label: "Report", type: "textarea", required: true, max: 400, placeholder: "What was observed, where, and what was done — or the opportunity and who to talk to." },
+            { name: "place", label: "Suburb or place", max: 120, placeholder: "e.g. Lakemba, or Haldon Street, Lakemba", hint: "The pin goes to the suburb named here (or in the report). Pin the exact spot from the feed." },
+            { name: "headline", label: "Report", type: "textarea", required: true, max: 400, placeholder: "What happened and what was done, the news, or the opportunity and who to talk to." },
             { name: "source", label: "Source", required: true, max: 120, placeholder: "e.g. Patrol report · OP-231" },
           ],
           initial: item
             ? { severity: sev, regionKey: item.regionKey, place: item.place, headline: item.headline, source: item.source }
-            : { severity: "Advisory", regionKey: initialRegion, place: "", headline: "", source: "" },
+            : { severity: sev, regionKey: initialRegion, place: "", headline: "", source: "" },
           submit: async (v) => {
             if (item) {
               await send("PATCH", `/intel/${item.id}`, v);
@@ -1060,7 +1060,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
       moveIntel: async (i, at) => {
         try {
           await send("PATCH", `/intel/${i.id}`, at ?? { lat: null, lng: null });
-          await done(at ? "Pin placed" : "Pin back at its region", i.headline.slice(0, 80));
+          await done(at ? "Pin placed" : "Unpinned", at ? i.headline.slice(0, 80) : "Back at the suburb or region it names.");
           return true;
         } catch (err) {
           fail(err);
