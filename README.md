@@ -215,7 +215,8 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
   - **Moving around:** drag to move the map. Zoom with the mouse wheel,
     a pinch or the buttons. "NSW" returns to the whole state.
   - **Regions** sit at their real coordinates (migration 0011) as a dot in
-    the worst severity's colour with a plain label; a breach pings.
+    the worst severity's colour (the map itself names the places; hover
+    for the region and its count); a breach pings.
     Picking one filters the feed and flies there, and opening a feed item
     centres its region.
   - **If tiles can't load,** the map says so and the regions still filter

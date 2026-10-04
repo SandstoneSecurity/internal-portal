@@ -54,7 +54,7 @@ export function IntelligencePage() {
   const markers = d.regions.map((r) => {
     const items = d.feed.filter((f) => f.regionKey === r.key);
     const worst = SEVERITY_ORDER.find((k) => items.some((f) => f.kind === k));
-    return { key: r.key, label: r.label, lat: r.lat, lng: r.lng, anchor: r.anchor, count: items.length, worst, on: sel?.regionKey === r.key || region === r.key };
+    return { key: r.key, label: r.label, lat: r.lat, lng: r.lng, count: items.length, worst, on: sel?.regionKey === r.key || region === r.key };
   });
   const regionLabel = d.regions.find((r) => r.key === region)?.label;
 

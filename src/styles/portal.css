@@ -507,10 +507,9 @@ input[type="date"].pt-input { font-family: var(--font-mono); font-size: 13px; }
 .pt-imap__markers { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
 .pt-imap__marker {
   --dot: var(--border-strong);
-  position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 7px; padding: 0; margin: -6px 0 0 -6px;
+  position: absolute; left: 0; top: 0; display: flex; padding: 0; margin: -6px 0 0 -6px;
   border: 0; background: none; cursor: pointer; pointer-events: auto; font: inherit; color: var(--text-secondary);
 }
-.pt-imap__marker.is-end { flex-direction: row-reverse; margin-left: auto; translate: calc(-100% + 12px) 0; }
 .pt-imap__marker.is-breach { --dot: var(--status-breach-dot); }
 .pt-imap__marker.is-advisory { --dot: var(--status-advisory-dot); }
 .pt-imap__marker.is-info { --dot: var(--status-info-dot); }
@@ -518,18 +517,10 @@ input[type="date"].pt-input { font-family: var(--font-mono); font-size: 13px; }
 .pt-imap__marker.is-none .pt-imap__dot { width: 8px; height: 8px; margin: 2px; }
 .pt-imap__marker.is-on .pt-imap__dot { box-shadow: 0 0 0 2px var(--surface-raised), 0 0 0 4px var(--brass-500), 0 1px 4px rgba(0, 0, 0, 0.3); }
 .pt-imap__ping { position: absolute; left: 0; top: 0; width: 12px; height: 12px; border-radius: 999px; border: 1.5px solid var(--status-breach-dot); animation: pt-map-ping 2.8s var(--ease-out) infinite; pointer-events: none; }
-.pt-imap__marker.is-end .pt-imap__ping { left: auto; right: 0; }
-/* Labels are plain text on the map, kept legible by a halo in the map's own background colour. */
-.pt-imap { --imap-halo: #F6F4F0; }
-:root[data-theme="night"] .pt-imap { --imap-halo: #1A1B19; }
-.pt-imap__label {
-  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.06em; white-space: nowrap; padding: 2px 0;
-  text-shadow: -1px -1px 0 var(--imap-halo), 1px -1px 0 var(--imap-halo), -1px 1px 0 var(--imap-halo), 1px 1px 0 var(--imap-halo), 0 0 4px var(--imap-halo);
-}
-.pt-imap__marker:hover .pt-imap__label, .pt-imap__marker.is-on .pt-imap__label { color: var(--text-primary); }
-.pt-imap__marker.is-on .pt-imap__label { font-weight: 600; }
+/* Dots only: the map names the places; a region's name and count show on hover and to screen readers. */
+.pt-imap__marker:hover .pt-imap__dot { box-shadow: 0 0 0 2px var(--surface-raised), 0 0 0 4px var(--border-strong), 0 1px 4px rgba(0, 0, 0, 0.3); }
 .pt-imap__marker:focus-visible { outline: none; }
-.pt-imap__marker:focus-visible .pt-imap__label { color: var(--text-primary); text-decoration: underline 1.5px var(--brass-500); text-underline-offset: 3px; }
+.pt-imap__marker:focus-visible .pt-imap__dot { box-shadow: 0 0 0 2px var(--surface-raised), 0 0 0 4px var(--brass-500), 0 0 0 6px color-mix(in srgb, var(--brass-500) 35%, transparent); }
 .pt-imap__reset {
   position: absolute; top: 10px; left: 10px; z-index: 3; display: inline-flex; align-items: center; gap: 5px; height: 29px; padding: 0 9px;
   border: var(--border-hair) solid var(--border-default); border-radius: var(--radius-sm); background: var(--surface-raised); color: var(--text-secondary);
