@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import maplibregl, { type LngLatBoundsLike, type Map as MlMap } from "maplibre-gl";
+import maplibregl, { type LngLatBoundsLike, type Map as MlMap, type Marker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Maximize, X } from "lucide-react";
 import type { StatusKind } from "../../shared/types";
@@ -28,9 +28,9 @@ export interface MapPin {
 }
 
 /**
- * A real, pannable map of NSW with a pin for each feed item. Drag to move; scroll, pinch or the buttons
- * to zoom. `focus` brings an item's pin into view (bump `n` to repeat). While `placing`, a click on the
- * map reports where.
+ * A real, pannable map of NSW with a pin for each feed item. Pins are MapLibre markers, so they move in
+ * the same frame as the map. Drag to move; scroll, pinch or the buttons to zoom. `focus` brings an item's
+ * pin into view (bump `n` to repeat). While `placing`, a click on the map reports where.
  */
 export default function IntelMap({
   pins,
@@ -52,12 +52,15 @@ export default function IntelMap({
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<MlMap | null>(null);
   const { theme } = useTheme();
-  const [, setFrame] = useState(0);
-  const [tilesFailed, setTilesFailed] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [tilesFailed, setTilesFailed] = useState<string | null>(null);
   const [noWebGl, setNoWebGl] = useState(false);
   const shownTheme = useRef(theme);
-  const place = useRef({ placing, onPlace });
-  place.current = { placing, onPlace };
+  const latest = useRef({ placing, onPlace, onSelect });
+  latest.current = { placing, onPlace, onSelect };
+  // One marker per pin, kept across renders; React fills each marker's element through a portal.
+  const markers = useRef(new Map<number, { marker: Marker; el: HTMLDivElement }>());
+  const [, setMarkerSet] = useState(0);
 
   useEffect(() => {
     let m: MlMap;
@@ -84,29 +87,28 @@ export default function IntelMap({
     }
     m.touchZoomRotate.disableRotation();
     m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-    // Pins are drawn over the canvas and follow it.
-    let raf = 0;
-    const redraw = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => setFrame((f) => f + 1));
-    };
-    m.on("move", redraw);
-    m.on("resize", redraw);
-    m.on("load", redraw);
     m.on("click", (e) => {
-      if (place.current.placing) place.current.onPlace(e.lngLat.lat, e.lngLat.lng);
+      if (latest.current.placing) latest.current.onPlace(e.lngLat.lat, e.lngLat.lng);
     });
     m.on("error", (e) => {
-      // Tiles, labels or the tile index not reachable (offline, blocked): the pins still work.
-      if (/fetch|load|status|network|AJAXError/i.test(String((e as { error?: Error }).error?.message ?? e.error))) setTilesFailed(true);
+      // Only a failed tile or tile index counts; a missing icon or label font doesn't blank the map.
+      const ev = e as { sourceId?: string; tile?: unknown; error?: { status?: number; message?: string; url?: string } };
+      if (ev.sourceId || ev.tile || /\/api\/map\/planet/.test(ev.error?.url ?? "")) {
+        console.warn("Map tiles failed:", ev.error?.status ?? "", ev.error?.message ?? ev.error);
+        setTilesFailed(ev.error?.status ? `the tile server answered ${ev.error.status}` : "the tile server couldn't be reached");
+      }
     });
     m.on("data", (e) => {
-      if ((e as { dataType?: string }).dataType === "source" && (e as { isSourceLoaded?: boolean }).isSourceLoaded) setTilesFailed(false);
+      if ((e as { dataType?: string }).dataType === "source" && (e as { isSourceLoaded?: boolean }).isSourceLoaded) setTilesFailed(null);
     });
+    // Fanned-out pins regroup once a zoom settles.
+    m.on("zoomend", () => setMarkerSet((n) => n + 1));
     map.current = m;
-    redraw();
+    setReady(true);
+    const ms = markers.current;
     return () => {
-      cancelAnimationFrame(raf);
+      for (const { marker } of ms.values()) marker.remove();
+      ms.clear();
       m.remove();
       map.current = null;
     };
@@ -120,7 +122,49 @@ export default function IntelMap({
     map.current.setStyle(mapStyle(theme));
   }, [theme]);
 
-  // Bring a pin into view: pan only if it's off screen or hard to make out.
+  // Add, move and remove markers to match the pins; fan out the ones that share a spot.
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    const ms = markers.current;
+    const ids = new Set(pins.map((p) => p.id));
+    for (const [id, { marker }] of ms) {
+      if (!ids.has(id)) {
+        marker.remove();
+        ms.delete(id);
+      }
+    }
+    let added = false;
+    for (const p of pins) {
+      let entry = ms.get(p.id);
+      if (!entry) {
+        const el = document.createElement("div");
+        el.className = "pt-imap__marker";
+        entry = { marker: new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([p.lng, p.lat]).addTo(m), el };
+        ms.set(p.id, entry);
+        added = true;
+      } else entry.marker.setLngLat([p.lng, p.lat]);
+    }
+    // Fan out: group by projected position at the current zoom, then offset around the group's spot.
+    const pts = pins.map((p) => ({ p, at: m.project([p.lng, p.lat]) }));
+    const groups: (typeof pts)[] = [];
+    for (const pt of pts) {
+      const g = groups.find((g) => Math.hypot(g[0]!.at.x - pt.at.x, g[0]!.at.y - pt.at.y) < CROWD);
+      if (g) g.push(pt);
+      else groups.push([pt]);
+    }
+    for (const g of groups) {
+      const r = g.length > 1 ? 10 + 2.5 * g.length : 0;
+      g.forEach((pt, i) => {
+        const a = (2 * Math.PI * i) / g.length - Math.PI / 2;
+        const base = g[0]!.at;
+        ms.get(pt.p.id)!.marker.setOffset([base.x - pt.at.x + r * Math.cos(a), base.y - pt.at.y + r * Math.sin(a)]);
+      });
+    }
+    if (added) setMarkerSet((n) => n + 1);
+  });
+
+  // Bring a pin into view: pan only if it's off screen or near the edge.
   useEffect(() => {
     const m = map.current;
     if (!m || focus.n === 0) return;
@@ -140,30 +184,10 @@ export default function IntelMap({
     return () => window.removeEventListener("keydown", esc);
   }, [placing, onCancelPlace]);
 
-  const m = map.current;
-  const w = box.current?.clientWidth ?? 0;
-  const h = box.current?.clientHeight ?? 0;
-
-  // Project, then fan out pins that land on top of each other.
-  const placed: { pin: MapPin; x: number; y: number }[] = [];
-  if (m) {
-    const pts = pins.map((pin) => ({ pin, ...m.project([pin.lng, pin.lat]) }));
-    const groups: (typeof pts)[] = [];
-    for (const p of pts) {
-      const g = groups.find((g) => Math.hypot(g[0]!.x - p.x, g[0]!.y - p.y) < CROWD);
-      if (g) g.push(p);
-      else groups.push([p]);
-    }
-    for (const g of groups) {
-      const r = g.length > 1 ? 10 + 2.5 * g.length : 0;
-      g.forEach((p, i) => {
-        const a = (2 * Math.PI * i) / g.length - Math.PI / 2;
-        placed.push({ pin: p.pin, x: g[0]!.x + r * Math.cos(a), y: g[0]!.y + r * Math.sin(a) });
-      });
-    }
-  }
-  // The selected pin draws last, on top.
-  placed.sort((a, b) => Number(a.pin.id === selectedId) - Number(b.pin.id === selectedId));
+  // The selected pin sits above the rest.
+  useEffect(() => {
+    for (const [id, { el }] of markers.current) el.style.zIndex = id === selectedId ? "3" : "";
+  });
 
   return (
     <div className={`pt-imap${placing ? " is-placing" : ""}`}>
@@ -172,36 +196,34 @@ export default function IntelMap({
         <div className="pt-imap__notice">This browser can't draw the map (WebGL is off). The feed still lists every item.</div>
       ) : (
         <>
-          {/* Inside the map's own element, so a drag or scroll that starts on a pin still moves the map. */}
-          {m &&
-            createPortal(
-              <div className="pt-imap__pins">
-                {placed.map(({ pin, x, y }) => {
-                  if (x < -30 || y < -30 || x > w + 30 || y > h + 30) return null;
-                  const k = intelKind(pin.kind);
-                  const Icon = k.icon;
-                  const on = pin.id === selectedId;
-                  return (
-                    <button
-                      key={pin.id}
-                      type="button"
-                      className={`pt-imap__pin is-${pin.kind}${on ? " is-on" : ""}`}
-                      style={{ transform: `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)` }}
-                      title={`${k.label} · ${pin.title}`}
-                      aria-label={`${k.label}: ${pin.title}`}
-                      aria-pressed={on}
-                      onClick={() => !placing && onSelect(pin.id)}
-                    >
-                      {pin.kind === "breach" && <span className="pt-imap__ping" aria-hidden />}
-                      <span className="pt-imap__shape" aria-hidden />
-                      <Icon size={12} strokeWidth={2.25} aria-hidden />
-                    </button>
-                  );
-                })}
-              </div>,
-              m.getCanvasContainer()
-            )}
-          <button type="button" className="pt-imap__reset" onClick={() => m?.fitBounds(NSW, { padding: FIT, duration: 700 })} title="Show all of NSW" aria-label="Show all of NSW">
+          {ready &&
+            pins.map((pin) => {
+              const el = markers.current.get(pin.id)?.el;
+              if (!el) return null;
+              const k = intelKind(pin.kind);
+              const Icon = k.icon;
+              const on = pin.id === selectedId;
+              return createPortal(
+                <button
+                  type="button"
+                  className={`pt-imap__pin is-${pin.kind}${on ? " is-on" : ""}`}
+                  title={`${k.label} · ${pin.title}`}
+                  aria-label={`${k.label}: ${pin.title}`}
+                  aria-pressed={on}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!latest.current.placing) latest.current.onSelect(pin.id);
+                  }}
+                >
+                  {pin.kind === "breach" && <span className="pt-imap__ping" aria-hidden />}
+                  <span className="pt-imap__shape" aria-hidden />
+                  <Icon size={12} strokeWidth={2.25} aria-hidden />
+                </button>,
+                el,
+                String(pin.id)
+              );
+            })}
+          <button type="button" className="pt-imap__reset" onClick={() => map.current?.fitBounds(NSW, { padding: FIT, duration: 700 })} title="Show all of NSW" aria-label="Show all of NSW">
             <Maximize size={13} /> NSW
           </button>
           {placing && (
@@ -214,7 +236,7 @@ export default function IntelMap({
               </button>
             </div>
           )}
-          {tilesFailed && <div className="pt-imap__notice pt-imap__notice--soft">Map tiles couldn't load.</div>}
+          {tilesFailed && <div className="pt-imap__notice pt-imap__notice--soft">Map tiles couldn't load: {tilesFailed}.</div>}
         </>
       )}
     </div>

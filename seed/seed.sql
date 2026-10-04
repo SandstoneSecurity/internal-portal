@@ -229,14 +229,14 @@ INSERT INTO regions (key, label, map_x, map_y, label_anchor, label_dx, label_dy,
 ('tam', 'Tamworth', 582, 195, 'end', -10, 4, -31.0927, 150.9320);
 
 INSERT INTO intel_feed (id, time_label, severity, severity_kind, region_key, headline, source, sort_order, lat, lng, place) VALUES
-(1, '05:40', 'Breach', 'breach', 'syd', 'Attempted forced entry at commercial tower loading dock, Kent Street. Officer on scene 05:44; police attended 05:58.', 'Patrol report · OP-231 raised', 1, -33.867, 151.2045, 'Kent Street, Sydney'),
-(2, '04:15', 'Advisory', 'advisory', 'new', 'Copper theft on rail corridor near Hamilton — third incident this month. Adjacent industrial sites advised.', 'NSW Police media', 2, -32.923, 151.749, 'Hamilton, Newcastle'),
-(3, 'YEST 22:10', 'Advisory', 'advisory', 'wol', 'Aggravated trespass at Port Kembla industrial estate. Client site perimeter held; debrief 1 September.', 'Patrol report · OP-233', 3, -34.471, 150.893, 'Port Kembla'),
-(4, 'YEST 18:00', 'Info', 'info', 'syd', 'Authorised assembly Saturday, Hyde Park to Town Hall. Road closures 10:00–14:00; two client sites on route.', 'City of Sydney notice', 4, -33.8731, 151.2111, 'Hyde Park, Sydney'),
-(5, 'YEST 16:45', 'Advisory', 'advisory', 'cof', 'Severe weather warning, damaging winds on the northern rivers. Perimeter and signage checks advised.', 'Bureau of Meteorology', 5, -28.81, 153.277, 'Northern Rivers'),
-(6, 'YEST 11:20', 'Info', 'info', 'dub', 'SLED announces regional licensing audit round for October. Fourteen officer renewals fall in window.', 'SLED circular', 6, NULL, NULL, ''),
-(7, '28 AUG', 'Advisory', 'advisory', 'wag', 'Cluster of vehicle break-ins, Bomen industrial precinct. Mobile patrol frequency increased.', 'NSW Police media', 7, -35.066, 147.413, 'Bomen, Wagga Wagga'),
-(8, '27 AUG', 'Info', 'info', 'bhq', 'Mine site contractor inductions resume 7 September; two officers to re-induct.', 'Client notice', 8, NULL, NULL, ''),
+(1, '05:40', 'Incident', 'breach', 'syd', 'Attempted forced entry at commercial tower loading dock, Kent Street. Officer on scene 05:44; police attended 05:58.', 'Patrol report · OP-231 raised', 1, -33.867, 151.2045, 'Kent Street, Sydney'),
+(2, '04:15', 'Incident', 'breach', 'new', 'Copper theft on rail corridor near Hamilton — third incident this month. Adjacent industrial sites advised.', 'NSW Police media', 2, -32.923, 151.749, 'Hamilton, Newcastle'),
+(3, 'YEST 22:10', 'Incident', 'breach', 'wol', 'Aggravated trespass at Port Kembla industrial estate. Client site perimeter held; debrief 1 September.', 'Patrol report · OP-233', 3, -34.471, 150.893, 'Port Kembla'),
+(4, 'YEST 18:00', 'News', 'info', 'syd', 'Authorised assembly Saturday, Hyde Park to Town Hall. Road closures 10:00–14:00; two client sites on route.', 'City of Sydney notice', 4, -33.8731, 151.2111, 'Hyde Park, Sydney'),
+(5, 'YEST 16:45', 'News', 'info', 'cof', 'Severe weather warning, damaging winds on the northern rivers. Perimeter and signage checks advised.', 'Bureau of Meteorology', 5, -28.81, 153.277, 'Northern Rivers'),
+(6, 'YEST 11:20', 'News', 'info', 'dub', 'SLED announces regional licensing audit round for October. Fourteen officer renewals fall in window.', 'SLED circular', 6, NULL, NULL, ''),
+(7, '28 AUG', 'Incident', 'breach', 'wag', 'Cluster of vehicle break-ins, Bomen industrial precinct. Mobile patrol frequency increased.', 'NSW Police media', 7, -35.066, 147.413, 'Bomen, Wagga Wagga'),
+(8, '27 AUG', 'News', 'info', 'bhq', 'Mine site contractor inductions resume 7 September; two officers to re-induct.', 'Client notice', 8, NULL, NULL, ''),
 (9, '26 AUG', 'Opportunity', 'secure', 'tam', 'Regional saleyards precinct upgrade — expression of interest window opens for site security tender.', 'Tender watch', 9, -31.117, 150.879, 'Tamworth saleyards');
 
 -- Threat models: a logistics yard with three years of incident history, and a CBD office tower.

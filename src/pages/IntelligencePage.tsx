@@ -6,7 +6,7 @@ import { useActions } from "../actions/ActionHost";
 import { Empty } from "../components/ui/Bits";
 import { usePortal } from "../lib/DataProvider";
 import { addDays } from "../lib/format";
-import { INTEL_KINDS, intelKind, pinOf } from "../lib/intel";
+import { INTEL_KINDS, intelKind } from "../lib/intel";
 import { tween, DUR } from "../lib/motion";
 import { useSelection } from "../lib/selection";
 
@@ -57,10 +57,9 @@ export function IntelligencePage() {
     return c;
   }, [d.feed]);
 
-  const pins = shown.flatMap((f) => {
-    const at = pinOf(f, d.regions);
-    return at ? [{ id: f.id, lat: at.lat, lng: at.lng, kind: f.kind, title: f.headline.length > 90 ? `${f.headline.slice(0, 88)}…` : f.headline }] : [];
-  });
+  const pins = shown.flatMap((f) =>
+    f.pin ? [{ id: f.id, lat: f.pin.lat, lng: f.pin.lng, kind: f.kind, title: f.headline.length > 90 ? `${f.headline.slice(0, 88)}…` : f.headline }] : []
+  );
 
   const groups = (["Today", "Yesterday", "Earlier"] as const)
     .map((label) => ({ label, items: shown.filter((f) => dayGroup(f, d.today) === label) }))
@@ -106,7 +105,7 @@ export function IntelligencePage() {
         <header className="pt-ifeed__head">
           <div className="pt-ifeed__title">
             <span className="pt-eyebrow">Feed</span>
-            <button className="sds-btn sds-btn--sm sds-btn--primary" onClick={() => actions.logIntel()}>
+            <button className="sds-btn sds-btn--sm sds-btn--primary" onClick={() => actions.logIntel({ kind: filter === "all" ? undefined : filter })}>
               <Plus size={14} /> Log item
             </button>
           </div>
@@ -138,7 +137,7 @@ export function IntelligencePage() {
           <Empty
             index="00"
             title="Nothing logged yet."
-            body="Log patrol reports, police media, notices and opportunities as they come in. Each one is pinned on the map and graded breach, advisory, information or opportunity."
+            body="Log incidents, news and opportunities as they come in. Each one is pinned on the map at the suburb it names."
             action={
               <button className="sds-btn sds-btn--md sds-btn--primary" onClick={() => actions.logIntel()}>
                 Log an item
@@ -192,11 +191,11 @@ export function IntelligencePage() {
 
 function FeedItem({ item: f, on, onSelect, onShow, onPlace, placing }: { item: IntelItem; on: boolean; onSelect: () => void; onShow: () => void; onPlace: () => void; placing: boolean }) {
   const actions = useActions();
-  const d = usePortal();
   const k = intelKind(f.kind);
   const Icon = k.icon;
-  const exact = f.lat !== null && f.lng !== null;
-  const where = f.place || `${d.regions.find((r) => r.key === f.regionKey)?.label ?? f.region} region`;
+  const exact = f.pin?.how === "pinned";
+  const where = f.place || (f.pin?.how === "suburb" ? f.pin.label : `${f.pin?.label ?? f.region} region`);
+  const whereTitle = exact ? "Pinned at this spot" : f.pin?.how === "suburb" ? `Placed at ${f.pin.label}; pin the exact spot to move it` : "Placed at its region; add a suburb or pin the exact spot";
   return (
     <motion.article
       layout="position"
@@ -222,7 +221,7 @@ function FeedItem({ item: f, on, onSelect, onShow, onPlace, placing }: { item: I
         <div className="pt-ifeed__meta">
           <span className="pt-ifeed__kind">{k.label}</span>
           <span>{f.time}</span>
-          <span className="pt-ifeed__where" title={exact ? "Pinned at this spot" : "Pinned at its region; set the exact spot to move it"}>
+          <span className={`pt-ifeed__where${f.pin?.how === "region" ? " is-rough" : ""}`} title={whereTitle}>
             {exact ? <MapPin size={10} aria-hidden /> : null}
             {where}
           </span>
@@ -239,7 +238,7 @@ function FeedItem({ item: f, on, onSelect, onShow, onPlace, placing }: { item: I
             </button>
             {exact && (
               <button className="pt-ifeed__act" onClick={() => void actions.moveIntel(f, null)}>
-                Reset to region
+                Unpin
               </button>
             )}
             <span className="pt-ifeed__spacer" />

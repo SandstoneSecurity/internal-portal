@@ -1,3 +1,4 @@
+import { findSuburb } from "./geocode";
 import type {
   Candidate,
   CandidateEvent,
@@ -529,7 +530,7 @@ export async function getFeed(db: D1Database, today: string): Promise<IntelItem[
   const { results } = await db
     .prepare(
       `SELECT f.id, f.time_label, f.created_at, f.severity, f.severity_kind, f.region_key, r.label as region_label,
-              f.headline, f.source, f.lat, f.lng, f.place
+              f.headline, f.source, f.lat, f.lng, f.place, r.lat AS region_lat, r.lng AS region_lng
        FROM intel_feed f JOIN regions r ON r.key = f.region_key
        ORDER BY COALESCE(f.created_at, '') DESC, f.sort_order, f.id DESC`
     )
@@ -546,6 +547,8 @@ export async function getFeed(db: D1Database, today: string): Promise<IntelItem[
       lat: number | null;
       lng: number | null;
       place: string;
+      region_lat: number | null;
+      region_lng: number | null;
     }>();
   return results.map((r) => ({
     id: r.id,
@@ -560,7 +563,17 @@ export async function getFeed(db: D1Database, today: string): Promise<IntelItem[
     lat: r.lat,
     lng: r.lng,
     place: r.place ?? "",
+    pin: pinFor(r),
   }));
+}
+
+/** The pinned spot; else the suburb its place or report names; else its region. */
+function pinFor(r: { lat: number | null; lng: number | null; place: string; headline: string; region_label: string; region_lat: number | null; region_lng: number | null }): IntelItem["pin"] {
+  if (r.lat !== null && r.lng !== null) return { lat: r.lat, lng: r.lng, how: "pinned", label: r.place };
+  const region = r.region_lat !== null && r.region_lng !== null ? { lat: r.region_lat, lng: r.region_lng } : null;
+  const s = (r.place && findSuburb(r.place, region, false)) || findSuburb(r.headline, region, true);
+  if (s) return { lat: s.lat, lng: s.lng, how: "suburb", label: s.name };
+  return region ? { ...region, how: "region", label: r.region_label } : null;
 }
 
 function money(n: number): string {

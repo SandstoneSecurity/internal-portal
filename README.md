@@ -212,27 +212,33 @@ Clients (CRM) and Intelligence — implemented from the Claude Design handoff
   vector tiles from OpenStreetMap; no key or account needed), recoloured to
   Sandstone, with a dark version for operations mode and the state border
   in brass (`src/lib/map/style.ts`), beside the feed.
-  - **Every feed item is a pin**, coloured and marked by type: breach
-    (pings), advisory, information, and **opportunity** (a eucalypt
-    diamond: a tender, a new site, a client need). Pins sharing a spot fan
-    out so each can be clicked. An item sits at its exact spot when one is
-    set (migration 0012), otherwise at its region.
+  - **Three types:** Incident (clay; pings), News (slate) and Opportunity
+    (a eucalypt diamond: a tender, a new site, a client need). Migration
+    0013 turned older advisories into opportunities, breaches into
+    incidents and information into news.
+  - **Every item is a pin, at the suburb it names.** The server places it
+    (`worker/geocode.ts`, with 4,655 NSW and ACT suburbs from the ABS 2016
+    Census via michalsn/australian-suburbs, MIT) from the Suburb or place
+    field, or else a suburb named in the report ("…in Auburn…"; proper
+    names only, nearest the item's region). "Pin exact spot" overrides it
+    with a click on the map; Unpin goes back. With no suburb, an item sits
+    at its region. Pins are MapLibre markers, so they move with the map in
+    the same frame; pins sharing a spot fan out.
   - **Map and feed work together:** clicking a pin selects its item;
     selecting an item rings its pin and brings it into view. Filters and
     search narrow the pins and the list together.
   - **The feed:** type filters with counts (they double as the map's
     legend), search across reports, places and sources, items grouped
     Today / Yesterday / Earlier, and Up/Down to move through them. The
-    selected item opens to "Show on map", "Pin exact spot" / "Move pin"
-    (then click the map; Esc cancels), "Reset to region", Edit and Remove.
-    The filters stay in view while the list scrolls; the map stays beside
-    it.
-  - **Logging:** type (including Opportunity), region, an optional place,
-    the report and its source. A place that names a region ("Barangaroo,
-    Sydney") files it there.
+    selected item opens to Show on map, Pin exact spot / Move pin, Unpin,
+    Edit and Remove. The filters stay in view while the list scrolls.
+  - **Tiles load through the portal** (`/api/map`, `worker/mapTiles.ts`):
+    the Worker fetches the tile index, tiles, label fonts and icons from
+    OpenFreeMap and Cloudflare caches them, so an ad blocker or a web
+    filter that blocks third-party map hosts can't blank the map. If the
+    tile host fails, the map says how.
   - **Moving around:** drag to move the map. Zoom with the mouse wheel,
-    a pinch or the buttons. "NSW" returns to the whole state. If tiles
-    can't load the map says so; the map's code loads only on this page.
+    a pinch or the buttons. "NSW" returns to the whole state.
 - **Drag and drop** updates the screen at once and rolls back if the save
   fails.
 - **Command palette:** press `Ctrl K` / `⌘K` or `/`. From there you can jump
@@ -402,6 +408,7 @@ input returns `400 {error, fields}`.
 | DELETE | `/api/candidate-events/:id` | Delete a comment or scorecard |
 | GET | `/api/files/:id[?download=1]` | A candidate's CV, reassembled from its chunks and checked against its SHA-256 |
 | POST · PATCH · DELETE | `/api/intel[/:id]` | Intelligence feed (PATCH edits or moves a pin) |
+| GET | `/api/map/*` | Map tiles, fonts and icons, fetched from OpenFreeMap and cached |
 | POST | `/api/clients/:id/sites` | Add a site (it starts with a ground floor) |
 | PATCH · DELETE | `/api/sites/:id` | Edit or delete a site and everything modelled at it |
 | POST · PATCH · DELETE | `/api/sites/:id/levels`, `/api/levels/:id` | Levels (stack order, height, plan width in metres) |

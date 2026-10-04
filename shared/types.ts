@@ -264,11 +264,16 @@ export interface IntelItem {
   regionKey: string;
   headline: string;
   source: string;
-  /** Where it happened, when known; otherwise the map places it at its region. */
+  /** The exact spot it was pinned to, if anyone has; otherwise null (see `pin`). */
   lat: number | null;
   lng: number | null;
   /** A place name, e.g. "Kent Street, Sydney"; "" when not given. */
   place: string;
+  /**
+   * Where it goes on the map: the pinned spot; else the suburb named in its place or report; else its
+   * region. `label` names the suburb or region.
+   */
+  pin: { lat: number; lng: number; how: "pinned" | "suburb" | "region"; label: string } | null;
 }
 
 export interface PortalData {
@@ -442,10 +447,11 @@ export const ROLE_STATUSES = [
 ] as const satisfies readonly (readonly [string, StatusKind])[];
 
 export const INTEL_SEVERITIES = [
-  ["Breach", "breach"],
-  ["Advisory", "advisory"],
-  ["Information", "info"],
-  // A lead rather than a threat: a tender, a new site, a client need. Eucalypt, like other good news.
+  // Something that happened: a break-in, a theft, an assault (clay, like a breach).
+  ["Incident", "breach"],
+  // Something worth knowing: police media, notices, weather, licensing (slate).
+  ["News", "info"],
+  // A lead: a tender, a new site, a client need (eucalypt).
   ["Opportunity", "secure"],
 ] as const satisfies readonly (readonly [string, StatusKind])[];
 

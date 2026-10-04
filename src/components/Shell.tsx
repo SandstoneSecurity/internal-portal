@@ -33,7 +33,10 @@ function useHeading(pathname: string, search: string): { title: string; meta: st
         : { title: "People", meta: `Licensed personnel register · ${d.employees.length} on file · ${onShift} on shift · ${expiring} licences due` },
     "/clients": { title: "Clients", meta: `${d.clients.length} companies · ${active} customers · ${openDeals.length} open deals` },
     "/risk": { title: "Threat Modelling", meta: `${d.sites.length} ${d.sites.length === 1 ? "site" : "sites"} · ${new Set(d.tmScenarios.map((x) => x.clientId)).size} clients modelled · physical, personnel & cyber` },
-    "/intelligence": { title: "Intelligence", meta: `Monitored activity across New South Wales · ${d.feed.length} items · ${breaches} breach` },
+    "/intelligence": {
+      title: "Intelligence",
+      meta: `Incidents, news and opportunities across New South Wales · ${d.feed.length} ${d.feed.length === 1 ? "item" : "items"} · ${breaches} ${breaches === 1 ? "incident" : "incidents"}`,
+    },
   };
   return map[pathname] ?? map["/"]!;
 }
