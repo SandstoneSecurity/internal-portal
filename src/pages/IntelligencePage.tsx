@@ -226,8 +226,17 @@ function FeedItem({ item: f, on, onSelect, onShow, onPlace, placing }: { item: I
             {where}
           </span>
         </div>
-        <p className="pt-ifeed__text">{f.headline}</p>
-        <div className="pt-ifeed__src">{f.source}</div>
+        <div className="pt-ifeed__text">
+          <strong style={{ display: "block" }}>{f.headline.split(/\r?\n/)[0]}</strong>
+          {f.headline.split(/\r?\n/).slice(1).join("\n").trim().split(/\n\s*\n/).filter(Boolean).map((paragraph, index) => (
+            <p key={index} style={{ margin: "8px 0 0", whiteSpace: "pre-line" }}>{paragraph}</p>
+          ))}
+        </div>
+        <div className="pt-ifeed__src">
+          {/^https?:\/\//i.test(f.source) ? (
+            <a href={f.source} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>View reference</a>
+          ) : f.source}
+        </div>
         {on && (
           <div className="pt-ifeed__actions" onClick={(e) => e.stopPropagation()}>
             <button className="pt-ifeed__act" onClick={onShow}>
