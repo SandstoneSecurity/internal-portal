@@ -4,6 +4,8 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { Maximize } from "lucide-react";
 import { mapStyle } from "../lib/map/style";
 import { useTheme } from "../lib/theme";
+import type { IntelItem, Region } from "../../shared/types";
+import { intelCategory, intelRegions } from "../../shared/intelligence";
 
 /** New South Wales, with the ACT. */
 const NSW: LngLatBoundsLike = [
@@ -15,7 +17,12 @@ const NSW: LngLatBoundsLike = [
 const FIT = 36;
 
 /** A real, pannable map of NSW. Drag to move; scroll, pinch or the buttons to zoom. */
-export default function IntelMap() {
+export default function IntelMap({ items, regions, selectedId, onSelect }: {
+  items: IntelItem[];
+  regions: Region[];
+  selectedId: number | null;
+  onSelect: (id: number) => void;
+}) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<MlMap | null>(null);
   const { theme } = useTheme();
@@ -62,6 +69,41 @@ export default function IntelMap() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // DOM markers survive style changes and are rebuilt when data or filters change.
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    const markers = intelRegions(items, regions).map(({ region, records, opportunities }) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "pt-imap__marker";
+      button.dataset.selected = String(records.some((item) => item.id === selectedId));
+      button.textContent = `${region.label} · ${records.length}`;
+      button.setAttribute("aria-label", `${region.label}: ${records.length} items, ${opportunities} opportunities. Approximate regional marker.`);
+
+      const content = document.createElement("div");
+      content.className = "pt-imap__popup";
+      const heading = document.createElement("strong");
+      heading.textContent = `${region.label} · regional location only`;
+      content.append(heading);
+      for (const item of records) {
+        const entry = document.createElement("button");
+        entry.type = "button";
+        entry.textContent = `${intelCategory(item)} · ${item.headline}`;
+        entry.addEventListener("click", () => {
+          onSelect(item.id);
+          popup.remove();
+        });
+        content.append(entry);
+      }
+      const popup = new maplibregl.Popup({ offset: 18, maxWidth: "340px" }).setDOMContent(content);
+      popup.on("open", () => content.querySelector("button")?.focus());
+      const marker = new maplibregl.Marker({ element: button }).setLngLat([region.lng, region.lat]).setPopup(popup).addTo(m);
+      return marker;
+    });
+    return () => markers.forEach((marker) => marker.remove());
+  }, [items, regions, selectedId, onSelect]);
 
   // Day and night palettes follow the portal's theme.
   useEffect(() => {

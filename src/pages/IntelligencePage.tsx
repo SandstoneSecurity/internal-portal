@@ -7,10 +7,11 @@ import { usePortal } from "../lib/DataProvider";
 import { pad2 } from "../lib/format";
 import { list, row, tween, DUR } from "../lib/motion";
 import { registerKeys, useSelection } from "../lib/selection";
+import { intelCategory } from "../../shared/intelligence";
 
 const IntelMap = lazy(() => import("../components/IntelMap"));
 
-const FILTERS = ["All", "Breach", "Advisory", "Information"] as const;
+const FILTERS = ["All", "Opportunity", "Breach", "Advisory", "Information"] as const;
 
 export function IntelligencePage() {
   const d = usePortal();
@@ -18,8 +19,8 @@ export function IntelligencePage() {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("All");
   const [itemParam, setItem] = useSelection("item");
 
-  const shown = d.feed.filter((f) => filter === "All" || f.sev === filter);
-  const selId = d.feed.some((f) => f.id === itemParam) ? itemParam : shown[0]?.id ?? null;
+  const shown = d.feed.filter((f) => filter === "All" || intelCategory(f) === filter);
+  const selId = shown.some((f) => f.id === itemParam) ? itemParam : shown[0]?.id ?? null;
 
   useEffect(() => {
     if (itemParam !== null) document.querySelector(`[data-record="intel-${itemParam}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -28,9 +29,10 @@ export function IntelligencePage() {
   const counts = useMemo(
     () => ({
       All: d.feed.length,
-      Breach: d.feed.filter((f) => f.kind === "breach").length,
-      Advisory: d.feed.filter((f) => f.kind === "advisory").length,
-      Information: d.feed.filter((f) => f.kind === "info").length,
+      Opportunity: d.feed.filter((f) => intelCategory(f) === "Opportunity").length,
+      Breach: d.feed.filter((f) => intelCategory(f) === "Breach").length,
+      Advisory: d.feed.filter((f) => intelCategory(f) === "Advisory").length,
+      Information: d.feed.filter((f) => intelCategory(f) === "Information").length,
     }),
     [d.feed]
   );
@@ -42,8 +44,12 @@ export function IntelligencePage() {
           <span className="pt-eyebrow">New South Wales</span>
         </div>
         <Suspense fallback={<div className="pt-imap pt-imap--loading" aria-hidden />}>
-          <IntelMap />
+          <IntelMap items={shown} regions={d.regions} selectedId={selId} onSelect={setItem} />
         </Suspense>
+        <p className="pt-meta" style={{ marginTop: 10 }}>
+          Regional markers group the visible feed. They are not exact property or incident locations.
+          Select a marker to choose an item.
+        </p>
       </div>
 
       <div style={{ minWidth: 0 }}>
@@ -62,7 +68,7 @@ export function IntelligencePage() {
             <Empty
               index="00"
               title="Nothing logged yet."
-              body="Log patrol reports, police media and other sources as they come in. Each item is tagged with its region and graded breach, advisory or information."
+              body="Log opportunities, patrol reports and police media with their source and region."
               action={
                 <button className="sds-btn sds-btn--md sds-btn--primary" onClick={() => actions.logIntel()}>
                   Log an item
@@ -91,14 +97,18 @@ export function IntelligencePage() {
                     <span className="pt-mono pt-dim" style={{ fontSize: 10.5 }}>
                       {f.time}
                     </span>
-                    <Badge kind={f.kind} label={f.sev} pulse={f.kind === "breach" && f.id === selId} />
+                    <Badge kind={f.kind} label={intelCategory(f)} pulse={f.kind === "breach" && f.id === selId} />
                     <span className="pt-meta" style={{ marginLeft: "auto" }}>
                       {f.region}
                     </span>
                     <RowMenu items={[{ label: "Remove from feed", onSelect: () => void actions.deleteIntel(f), danger: true }]} />
                   </div>
                   <div className="pt-feed__head">{f.headline}</div>
-                  <div className="pt-feed__src">{f.source}</div>
+                  <div className="pt-feed__src">
+                    {/^https?:\/\//i.test(f.source) ? (
+                      <a href={f.source} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>View source</a>
+                    ) : f.source}
+                  </div>
                 </motion.div>
               ))}
             </AnimatePresence>

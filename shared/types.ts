@@ -435,6 +435,7 @@ export const ROLE_STATUSES = [
 ] as const satisfies readonly (readonly [string, StatusKind])[];
 
 export const INTEL_SEVERITIES = [
+  ["Opportunity", "advisory"],
   ["Breach", "breach"],
   ["Advisory", "advisory"],
   ["Information", "info"],
