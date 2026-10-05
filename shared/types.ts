@@ -418,7 +418,7 @@ export interface TmIncident {
 }
 
 /** Recruitment pipeline stages, in order; Candidate.stage indexes this list. */
-export const STAGES = ["Sourced", "Applied", "Phone screen", "Licence check", "Interview", "Offer", "Hired"] as const;
+export const STAGES = ["Sourced", "Applied", "Phone screen", "Background check", "Interview", "Offer", "Hired"] as const;
 export const HIRED_STAGE = STAGES.length - 1;
 
 export const EMPLOYMENT_TYPES = ["Full time", "Part time", "Casual", "Contract"] as const;
