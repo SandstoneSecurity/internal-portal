@@ -60,7 +60,7 @@ recruitment and background checks), Clients (CRM) and Intelligence — implement
 - **People → Recruitment (applicant tracking, in the style of Workable):**
   - **Jobs list:** each job shows its state (Draft, Published, On hold,
     Closed) and candidate counts for all seven pipeline stages. Those stages
-    are Sourced, Applied, Phone screen, Licence check, Interview, Offer and
+    are Sourced, Applied, Phone screen, Background check, Interview, Offer and
     Hired; clicking a count opens the job at that stage.
   - **Job page:** a stage bar, a list/profile split view and a drag-and-drop
     pipeline board.

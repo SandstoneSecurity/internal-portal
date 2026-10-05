@@ -108,7 +108,7 @@ function JobsList({ today }: { today: string }) {
       <Empty
         index="00"
         title="No jobs yet."
-        body="Create a job to start a hiring pipeline. Candidates move from sourced through phone screen, SLED licence check, interview and offer to hired, with scorecards and comments along the way."
+        body="Create a job to start a hiring pipeline. Candidates move from sourced through phone screen, background check, interview and offer to hired, with scorecards and comments along the way."
         action={
           <button className="sds-btn sds-btn--md sds-btn--primary" onClick={actions.postRole}>
             Create job
