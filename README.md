@@ -16,7 +16,9 @@ recruitment and background checks), Clients (CRM) and Intelligence — implement
   validated writes (zod).
 - **Data:** Cloudflare D1. Production starts empty; every figure on Control is
   computed from the records you keep (officers on shift, sites, open and
-  past-due work, licences expiring in 90 days). `seed/seed.sql` holds the
+  past-due work, licences expiring in 90 days). "Sites under order" counts
+  the site records added to companies whose stage is Customer; a company's
+  site count is never typed in. `seed/seed.sql` holds the
   fictional demo data for local use only.
 
 ## Using the portal

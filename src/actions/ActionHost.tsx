@@ -122,7 +122,7 @@ export interface Actions {
 export type WorkPatch = Partial<Pick<OpsCard, "title" | "site" | "line" | "description" | "priority" | "startDate" | "dueDate" | "milestone">> & {
   owner?: string;
 };
-export type ClientPatch = Partial<Pick<Client, "org" | "sector" | "sites" | "status" | "meta" | "domain" | "phone" | "city" | "owner">> & { valuePa?: number };
+export type ClientPatch = Partial<Pick<Client, "org" | "sector" | "status" | "meta" | "domain" | "phone" | "city" | "owner">> & { valuePa?: number };
 export type CheckPatch = Partial<Pick<BackgroundCheck, "consentDate" | "dueDate" | "notes" | "details">> & { closed?: boolean };
 export type EngagementInput = {
   kind: Engagement["kind"];
@@ -241,7 +241,6 @@ export function ActionProvider({ children }: { children: ReactNode }) {
       { name: "owner", label: "Owner (initials)", type: "initials", half: true, placeholder: "WC" },
       { name: "city", label: "City", half: true, max: 60 },
       { name: "phone", label: "Phone", half: true, mono: true, max: 30 },
-      { name: "sites", label: "Sites", type: "number", half: true, mono: true },
       { name: "valuePa", label: "Annual contract value (AUD)", type: "number", mono: true },
       { name: "meta", label: "Description", type: "textarea", max: 400 },
     ];
@@ -627,7 +626,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
           title: "Create company",
           submitLabel: "Create company",
           fields: clientFields,
-          initial: { org: "", domain: "", sector: "", status: "Lead", owner: me, city: "", phone: "", sites: 1, valuePa: 0, meta: "" },
+          initial: { org: "", domain: "", sector: "", status: "Lead", owner: me, city: "", phone: "", valuePa: 0, meta: "" },
           submit: async (v) => {
             const r = await send("POST", "/clients", v);
             await done("Company created", String(v.org), `/clients?id=${r.id}`);
@@ -640,7 +639,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
           title: c.org,
           submitLabel: "Save company",
           fields: clientFields,
-          initial: { org: c.org, domain: c.domain, sector: c.sector, status: c.status, owner: c.owner, city: c.city, phone: c.phone, sites: c.sites, valuePa: c.valueNum, meta: c.meta },
+          initial: { org: c.org, domain: c.domain, sector: c.sector, status: c.status, owner: c.owner, city: c.city, phone: c.phone, valuePa: c.valueNum, meta: c.meta },
           submit: async (v) => {
             await send("PATCH", `/clients/${c.id}`, v);
             await done("Company saved", String(v.org));

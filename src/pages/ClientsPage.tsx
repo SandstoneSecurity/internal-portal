@@ -609,7 +609,9 @@ function CompanyRecord({ c }: { c: Client }) {
             <EditableText className="pt-crm-edit" value={c.city} maxLength={60} placeholder="Add city" ariaLabel="City" onSave={(v) => void actions.patchClient(c, { city: v })} />
           </Prop>
           <Prop label="Sites">
-            <EditableText className="pt-crm-edit pt-mono" value={String(c.sites)} maxLength={4} ariaLabel="Sites" onSave={(v) => void actions.patchClient(c, { sites: num(v) })} />
+            <span className="pt-crm-edit pt-mono" title="Counted from the sites added to this company">
+              {c.sites}
+            </span>
           </Prop>
           <Prop label="Annual contract value">
             <EditableText className="pt-crm-edit pt-mono" value={c.value} maxLength={16} ariaLabel="Annual contract value" onSave={(v) => void actions.patchClient(c, { valuePa: num(v) })} />

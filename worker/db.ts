@@ -119,8 +119,8 @@ export async function getClients(db: D1Database): Promise<Client[]> {
   const [{ results: rows }, { results: contactRows }, { results: activityRows }] = await Promise.all([
     db
       .prepare(
-        `SELECT id, org, sector, sites, value_pa, owner_initials, status, status_kind, meta, domain, phone, city, created_at,
-                staff, revenue, history_years
+        `SELECT id, org, sector, (SELECT count(*) FROM client_sites s WHERE s.client_id = clients.id) AS sites, value_pa,
+                owner_initials, status, status_kind, meta, domain, phone, city, created_at, staff, revenue, history_years
          FROM clients ORDER BY org COLLATE NOCASE`
       )
       .all<{
@@ -625,8 +625,9 @@ export function computeMetrics(
     {
       key: "sites",
       label: "Sites under order",
+      // Counted from the sites actually added to customers, not a typed-in figure.
       value: sites,
-      unit: `${active.length} ${active.length === 1 ? "customer" : "customers"}`,
+      unit: `across ${active.length} ${active.length === 1 ? "customer" : "customers"}`,
       note: `CONTRACT VALUE ${money(value)} P.A.`,
       noteKind: "neutral",
     },
