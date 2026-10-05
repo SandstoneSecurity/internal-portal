@@ -78,6 +78,7 @@ export interface Client {
   org: string;
   /** Industry. */
   sector: string;
+  /** How many sites have been added for it (counted from its site records, not typed in). */
   sites: number;
   /** Annual contract value, display form ("$840,000"). */
   value: string;

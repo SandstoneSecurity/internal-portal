@@ -104,7 +104,6 @@ export const schemas = {
   client: z.object({
     org: text(80),
     sector: optText(60),
-    sites: z.coerce.number().int().min(0).max(999).default(0),
     valuePa: z.coerce.number().int().min(0).max(1_000_000_000).default(0),
     owner: optInitials,
     status: z.enum(labels(CLIENT_STATUSES)).default("Lead"),
@@ -599,7 +598,6 @@ writes.post("/employees/:id/shifts", async (c) => {
 const CLIENT_COLUMNS = {
   org: "org",
   sector: "sector",
-  sites: "sites",
   valuePa: "value_pa",
   owner: "owner_initials",
   status: "status",
@@ -620,9 +618,9 @@ writes.post("/clients", async (c) => {
     db
       .prepare(
         `INSERT INTO clients (org, sector, sites, value_pa, owner_initials, status, status_kind, meta, domain, phone, city, created_at, staff, revenue, history_years)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
+         VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
       )
-      .bind(v.org, v.sector, v.sites, aud(v.valuePa), v.owner, v.status, kindFor(CLIENT_STATUSES, v.status), v.meta, v.domain, v.phone, v.city, nowIso(), v.staff, v.revenue, v.historyYears),
+      .bind(v.org, v.sector, aud(v.valuePa), v.owner, v.status, kindFor(CLIENT_STATUSES, v.status), v.meta, v.domain, v.phone, v.city, nowIso(), v.staff, v.revenue, v.historyYears),
   ]);
   return c.json({ id: (ins.results[0] as { id: number }).id }, 201);
 });
