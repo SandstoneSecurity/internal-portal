@@ -2,7 +2,7 @@ import { useEffect, useId, useState, type ReactNode } from "react";
 import { ApiError } from "../../lib/api";
 import { Drawer } from "./Overlay";
 
-export type FieldType = "text" | "textarea" | "select" | "date" | "number" | "checkbox" | "initials";
+export type FieldType = "text" | "textarea" | "select" | "date" | "datetime" | "number" | "checkbox" | "initials" | "multi";
 
 export interface FieldSpec {
   name: string;
@@ -18,6 +18,8 @@ export interface FieldSpec {
   max?: number;
   /** Number fields: the smallest step; a fraction brings up the decimal keypad. */
   step?: number;
+  /** Text fields: common answers offered as you type (any other text is allowed). */
+  suggest?: readonly string[];
 }
 
 export type FormValues = Record<string, string | number | boolean>;
@@ -154,7 +156,33 @@ export function FormDrawer({ spec, onClose }: { spec: FormSpec | null; onClose: 
               const cls = `pt-input${f.mono || f.type === "initials" ? " pt-input--mono" : ""}${err ? " pt-input--invalid" : ""}`;
               return (
                 <div key={f.name} className={`pt-field${f.half ? " pt-field--half" : ""}${f.type === "checkbox" ? " pt-field--check" : ""}`}>
-                  {f.type === "checkbox" ? (
+                  {f.type === "multi" ? (
+                    <fieldset className="pt-multi" aria-describedby={common["aria-describedby"]}>
+                      <legend className="pt-field__label">{f.label}</legend>
+                      {f.options?.length ? (
+                        f.options.map((o) => {
+                          const picked = String(v ?? "").split(",").filter(Boolean);
+                          const on = picked.includes(o.value);
+                          return (
+                            <label key={o.value} className={`pt-multi__opt${on ? " is-on" : ""}`}>
+                              <input
+                                type="checkbox"
+                                name={f.name}
+                                value={o.value}
+                                checked={on}
+                                onChange={(e) => set(f, (e.target.checked ? [...picked, o.value] : picked.filter((x) => x !== o.value)).join(","))}
+                              />
+                              {o.label}
+                            </label>
+                          );
+                        })
+                      ) : (
+                        <span className="pt-dim" style={{ fontSize: 12.5 }}>
+                          Nothing to choose yet.
+                        </span>
+                      )}
+                    </fieldset>
+                  ) : f.type === "checkbox" ? (
                     <label className="pt-check" htmlFor={id}>
                       <input {...common} type="checkbox" checked={Boolean(v)} onChange={(e) => set(f, e.target.checked)} />
                       <span className="pt-check__box" aria-hidden />
@@ -191,7 +219,8 @@ export function FormDrawer({ spec, onClose }: { spec: FormSpec | null; onClose: 
                         <input
                           {...common}
                           className={cls}
-                          type={f.type === "date" ? "date" : f.type === "number" ? "number" : "text"}
+                          type={f.type === "date" ? "date" : f.type === "datetime" ? "datetime-local" : f.type === "number" ? "number" : "text"}
+                          list={f.suggest ? `${id}-suggest` : undefined}
                           inputMode={f.type === "number" ? (f.step && f.step < 1 ? "decimal" : "numeric") : undefined}
                           step={f.type === "number" ? f.step ?? "any" : undefined}
                           maxLength={f.type === "initials" ? 3 : f.max}
@@ -200,6 +229,13 @@ export function FormDrawer({ spec, onClose }: { spec: FormSpec | null; onClose: 
                           onChange={(e) => set(f, e.target.value)}
                           autoComplete="off"
                         />
+                      )}
+                      {f.suggest && (
+                        <datalist id={`${id}-suggest`}>
+                          {f.suggest.map((o) => (
+                            <option key={o} value={o} />
+                          ))}
+                        </datalist>
                       )}
                     </>
                   )}

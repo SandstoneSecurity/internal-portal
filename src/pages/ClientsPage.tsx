@@ -745,6 +745,26 @@ function CompanyRecord({ c }: { c: Client }) {
             </Link>
           )}
         </div>
+
+        <div className="pt-crm-section">
+          <div className="pt-crm-section__head">
+            <span>Investigations ({d.cases.filter((x) => x.clientId === c.id).length})</span>
+            <button className="pt-addlink" onClick={() => actions.openCase({ clientId: c.id })}>
+              + Open
+            </button>
+          </div>
+          {d.cases
+            .filter((x) => x.clientId === c.id)
+            .map((x) => (
+              <Link key={x.id} className="pt-crm-sitelink" to={`/investigations?case=${x.id}`}>
+                <span className="pt-crm-deal__name">{x.title}</span>
+                <span className="pt-meta">
+                  {x.ref} · {x.status}
+                </span>
+              </Link>
+            ))}
+          {!d.cases.some((x) => x.clientId === c.id) && <p className="pt-dim" style={{ fontSize: 12.5, margin: 0 }}>No investigations for this company.</p>}
+        </div>
       </aside>
     </div>
   );

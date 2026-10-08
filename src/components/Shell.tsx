@@ -24,6 +24,8 @@ function useHeading(pathname: string, search: string): { title: string; meta: st
   const active = d.clients.filter((c) => c.status === "Customer").length;
   const openDeals = d.deals.filter((x) => x.stage !== "Closed won" && x.stage !== "Closed lost");
   const openJobs = d.roles.filter((r) => r.status === "Published").length;
+  const openCases = d.cases.filter((c) => c.status !== "Closed").length;
+  const lateCases = d.cases.filter((c) => c.late).length;
   const openChecks = d.checks.filter((c) => !c.closedAt).length;
   const awaitingConsent = d.checks.filter((c) => c.status === "Awaiting consent").length;
   const flaggedChecks = d.checks.filter((c) => !c.closedAt && c.items.some((i) => i.result === "flag")).length;
@@ -38,6 +40,10 @@ function useHeading(pathname: string, search: string): { title: string; meta: st
           : { title: "People", meta: `Licensed personnel register · ${d.employees.length} on file · ${onShift} on shift · ${expiring} licences due` },
     "/clients": { title: "Clients", meta: `${d.clients.length} companies · ${active} customers · ${openDeals.length} open deals` },
     "/risk": { title: "Threat Modelling", meta: `${d.sites.length} ${d.sites.length === 1 ? "site" : "sites"} · ${new Set(d.tmScenarios.map((x) => x.clientId)).size} clients modelled · physical, personnel & cyber` },
+    "/investigations": {
+      title: "Investigations",
+      meta: `Cases opened on client requests · ${openCases} open · ${d.cases.filter((c) => c.status === "Reporting").length} reporting${lateCases ? ` · ${lateCases} overdue` : ""}`,
+    },
     "/intelligence": {
       title: "Intelligence",
       meta: `Incidents, news and opportunities across New South Wales · ${d.feed.length} ${d.feed.length === 1 ? "item" : "items"} · ${breaches} ${breaches === 1 ? "incident" : "incidents"}`,
@@ -73,6 +79,7 @@ export function Shell({ children }: { children: ReactNode }) {
     "/clients": d.clients.length ? { n: d.clients.length } : undefined,
     "/risk": d.sites.length ? { n: d.sites.length } : undefined,
     "/intelligence": breaches ? { n: breaches, alert: true } : undefined,
+    "/investigations": d.cases.some((c) => c.status !== "Closed") ? { n: d.cases.filter((c) => c.status !== "Closed").length, alert: d.cases.some((c) => c.late) } : undefined,
   };
   const onShift = d.employees.filter((e) => e.status === "On shift").length;
 

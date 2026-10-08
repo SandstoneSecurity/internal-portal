@@ -1,7 +1,7 @@
 # Sandstone internal portal
 
 The Sandstone admin portal — Control, Operations, People (employees,
-recruitment and background checks), Clients (CRM) and Intelligence — implemented from the Claude Design handoff
+recruitment and background checks), Clients (CRM), Intelligence and Investigations — implemented from the Claude Design handoff
 (`Sandstone Admin Portal.dc.html`) as a real application:
 
 - **Frontend:** React + TypeScript (Vite), routed with `react-router`, styled
@@ -362,6 +362,69 @@ rates per 100,000 by LGA.
   columns in `crime_meta.detail`, so a change in BOCSAR's layout can be
   diagnosed.
 
+## Investigations
+
+**Investigations** (`/investigations`) holds cases for private-investigator work, each opened on a
+client's request. The client is chosen from Clients, and their record lists their cases.
+Everything lives in `worker/investigations.ts`, `shared/investigations.ts` and migration 0015.
+
+### The case record
+
+- **What it holds:** the instructions (what the client asked for, the scope), the lawful basis, who
+  asked and when, the lead investigator, the report due date and a status (Intake, Active, On hold,
+  Reporting, Closed).
+- **Closed cases are locked as a record.** Set the status back to Active to change anything.
+- **Who can see a case:** list emails under "Who can see this case" and only those people (and
+  whoever set the list) can see the case, its evidence or its files. Everyone else gets "not found".
+  An empty list means everyone with portal access.
+
+### Evidence register
+
+- **Numbering and grading:** items are numbered EV-001 onwards per case, and numbers are never
+  reused. Each item is graded on the Admiralty scale: source reliability A–F and information
+  credibility 1–6.
+- **Files:** a file of up to 20 MB can be attached once and is stored in D1 with its SHA-256. The
+  hash is checked every time the file is opened, and a mismatch is refused and logged.
+- **Web capture:** the Worker fetches a page itself (pages up to 5 MB, http/https only). It keeps
+  exactly what came back with:
+  - its SHA-256;
+  - the original and final address;
+  - the HTTP status, content type and time.
+
+  A captured page can only be viewed as plain text or downloaded, never rendered. That keeps the
+  "Hunchly" property: every finding traces back to captured material.
+- **Chain of custody:** each item shows its own trail, taken from the audit log.
+
+### Link chart
+
+- **Nodes:** people, companies, accounts, addresses, phones, emails and vehicles.
+- **Links:** each is labelled with the exact relationship (director of, employed by, communicated
+  with, appeared alongside…) and can cite the evidence that shows it. A link without evidence draws
+  dashed.
+- **Layout:** a small force layout places new nodes. Dragging a node keeps it where you put it.
+
+### Timeline
+
+- **Events:** each is either *Documented* (borne out by evidence) or *Claimed* (someone's account).
+  Events are linked to people and things and to evidence.
+- **What the tests flag** (`analyseTimeline`):
+  - a claim that puts someone more than 1 km from where documented events about the same person
+    put them within 30 minutes;
+  - a person or thing documented in two places faster than 130 km/h;
+  - an hour or more with nothing documented;
+  - overlapping events of the same kind about the same people.
+
+### Map, reports and audit log
+
+- **Map:** events placed by coordinates or by the suburb named, numbered in time order. The
+  documented movements are joined up, and a time window narrows the view.
+- **Reports:** versions v1, v2… are never edited or deleted. Each can carry its document.
+- **Audit log:** every change, file opening, download and capture is recorded with who and when, in
+  the same batch as the change. Nothing in the API can edit or delete a log entry. The log exports
+  as CSV.
+
+Deleting a client keeps its investigations (without a client). Deleting a case deletes everything in it.
+
 ## People
 
 Employees, Recruitment and Background checks are one module, **People**,
@@ -445,6 +508,11 @@ input returns `400 {error, fields}`.
 | POST · PATCH · DELETE | `/api/intel[/:id]` | Intelligence feed (a new `place` re-places the pin) |
 | POST · PATCH · DELETE | `/api/checks[/:id]` | Background check files (`package` on create; `consentDate`, `closed` to send or reopen) |
 | POST · PATCH · DELETE | `/api/checks/:id/items`, `/api/check-items/:id` | Checks on a file (`kind`, `result`, `finding`) |
+| GET · POST · PATCH · DELETE | `/api/investigations[/:id]` | Cases (GET one returns the whole case; access-checked) |
+| POST | `/api/investigations/:id/evidence`, `…/captures`, `…/entities`, `…/links`, `…/events`, `…/reports` | Add evidence, capture a web page, add to the link chart and timeline, issue a report version |
+| PATCH · DELETE | `/api/inv-evidence/:id`, `/api/inv-entities/:id`, `/api/inv-links/:id`, `/api/inv-events/:id` | Edit or remove (logged) |
+| PUT | `/api/inv-evidence/:id/file?name=`, `/api/inv-reports/:id/file?name=` | Attach a file (raw body, up to 20 MB; once) |
+| GET | `/api/inv-files/:id[?download=1][&as=text]` | A case file, checked against its SHA-256 and logged |
 | GET | `/api/map/*` | Map tiles, fonts and icons, fetched from OpenFreeMap and cached |
 | POST | `/api/clients/:id/sites` | Add a site (it starts with a ground floor) |
 | PATCH · DELETE | `/api/sites/:id` | Edit or delete a site and everything modelled at it |

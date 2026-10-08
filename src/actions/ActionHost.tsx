@@ -35,6 +35,7 @@ import { useToast } from "../components/ui/Toast";
 import { ReportDrawer, type ReportKind } from "../components/ReportDrawer";
 import { TaskPane } from "../components/TaskPane";
 import { guessArea, siteFields, siteInitial } from "./threatFields";
+import { caseBody, caseFields } from "../pages/investigations/forms";
 import {
   CHECK_PACKAGES,
   CHECK_PURPOSES,
@@ -101,6 +102,8 @@ export interface Actions {
   /** Log a new item, or edit `item`. */
   logIntel: (o?: { regionKey?: string; item?: IntelItem; kind?: StatusKind }) => void;
   deleteIntel: (i: IntelItem) => Promise<boolean>;
+  /** Open an investigation on a client's request. */
+  openCase: (o?: { clientId?: number }) => void;
   /** Order a background check for a client. */
   orderCheck: (o?: { clientId?: number }) => void;
   editCheck: (c: BackgroundCheck) => void;
@@ -675,7 +678,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
       closeClient: async (c) => {
         const ok = await destroy({
           title: `Delete ${c.org}?`,
-          body: "The company, its contacts, deals, activity, threat model and background checks will be deleted.",
+          body: "The company, its contacts, deals, activity, threat model and background checks will be deleted. Its investigations are kept, without a client.",
           confirmLabel: "Delete company",
           path: `/clients/${c.id}`,
           toast: `${c.org} deleted`,
@@ -1108,6 +1111,36 @@ export function ActionProvider({ children }: { children: ReactNode }) {
           toast: "Item removed",
         }),
 
+      openCase: (o) => {
+        if (!clientsList.length) {
+          toast({ title: "Add a company first", desc: "Investigations are opened on a client's request. Create the company in Clients.", kind: "advisory" });
+          return;
+        }
+        setSpec({
+          eyebrow: "Investigations",
+          title: "Open a case",
+          submitLabel: "Open case",
+          intro: "Record what the client asked for and the lawful basis for the work. Use only public, consented or otherwise lawfully obtained records.",
+          fields: caseFields(clientsList, true),
+          initial: {
+            clientId: String(o?.clientId ?? clientsList.find((c) => c.status === "Customer")?.id ?? clientsList[0]!.id),
+            title: "",
+            kind: "Fraud",
+            lead: me,
+            requestedAt: today,
+            requestedBy: "",
+            dueDate: addDays(today, 21),
+            instructions: "",
+            legalBasis: "",
+            access: "",
+          },
+          submit: async (v) => {
+            const r = await send("POST", "/investigations", caseBody(v));
+            await done(`${r.ref} opened`, String(v.title), `/investigations?case=${r.id}`);
+          },
+        });
+      },
+
       orderCheck: (o) => {
         if (!clientsList.length) {
           toast({ title: "Add a company first", desc: "Checks are run for a client. Create the company in Clients.", kind: "advisory" });
@@ -1283,6 +1316,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
           "/clients": { label: "Create company", run: () => a.newClient() },
           "/intelligence": { label: "Log an item", run: () => a.logIntel() },
           "/risk": { label: "Add site", run: () => a.addSite() },
+          "/investigations": { label: "Open case", run: () => a.openCase() },
         };
         return map[pathname] ?? null;
       },

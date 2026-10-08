@@ -1,4 +1,5 @@
 import { findSuburb } from "./geocode";
+import { getCases } from "./investigations";
 import type {
   Candidate,
   CandidateEvent,
@@ -853,7 +854,7 @@ export async function getThreatModels(db: D1Database) {
 
 export async function getPortal(db: D1Database, email: string, now = new Date()): Promise<PortalData> {
   const today = todaySydney(now);
-  const [employees, clients, deals, opsColumns, roles, candidates, regions, feed, models, crime, checks] = await Promise.all([
+  const [employees, clients, deals, opsColumns, roles, candidates, regions, feed, models, crime, checks, cases] = await Promise.all([
     getEmployees(db, today),
     getClients(db),
     getDeals(db),
@@ -865,6 +866,7 @@ export async function getPortal(db: D1Database, email: string, now = new Date())
     getThreatModels(db),
     getCrime(db),
     getChecks(db, today),
+    getCases(db, email, today),
   ]);
   return {
     me: { email },
@@ -881,5 +883,6 @@ export async function getPortal(db: D1Database, email: string, now = new Date())
     ...models,
     crime,
     checks,
+    cases,
   };
 }
