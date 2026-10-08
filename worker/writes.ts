@@ -47,18 +47,18 @@ const initials = z
   .trim()
   .transform((s) => s.toUpperCase())
   .pipe(z.string().regex(/^[A-Z]{1,3}$/, "One to three letters"));
-const optInitials = z
+export const optInitials = z
   .string()
   .trim()
   .transform((s) => s.toUpperCase())
   .pipe(z.string().regex(/^[A-Z]{0,3}$/, "One to three letters"))
   .default("");
 /** A date that may be cleared: "" or null both mean "no date". */
-const optDate = z
+export const optDate = z
   .union([isoDate, z.literal(""), z.null()])
   .transform((v) => v || null)
   .default(null);
-const id = z.coerce.number().int().positive();
+export const id = z.coerce.number().int().positive();
 
 export const schemas = {
   work: z.object({
@@ -655,6 +655,8 @@ writes.delete("/clients/:id", async (c) => {
     ...deleteThreatModel(db, "client_id = ?", clientId),
     db.prepare(`DELETE FROM background_check_items WHERE check_id IN (SELECT id FROM background_checks WHERE client_id = ?)`).bind(clientId),
     db.prepare(`DELETE FROM background_checks WHERE client_id = ?`).bind(clientId),
+    // Investigations are records in their own right: they stay, without a client.
+    db.prepare(`UPDATE inv_cases SET client_id = NULL WHERE client_id = ?`).bind(clientId),
     db.prepare(`DELETE FROM clients WHERE id = ?`).bind(clientId),
   ]);
   return c.json({ ok: true });

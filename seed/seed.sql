@@ -3,6 +3,15 @@
 -- the business has data to load — the schema in migrations/0001_init.sql
 -- does not need to change to do that.
 
+DELETE FROM inv_log;
+DELETE FROM inv_links;
+DELETE FROM inv_events;
+DELETE FROM inv_entities;
+DELETE FROM inv_reports;
+DELETE FROM inv_evidence;
+DELETE FROM inv_file_chunks;
+DELETE FROM inv_files;
+DELETE FROM inv_cases;
 DELETE FROM background_check_items;
 DELETE FROM background_checks;
 DELETE FROM intel_feed;
@@ -368,3 +377,55 @@ INSERT INTO background_check_items (check_id, kind, result, finding, completed_a
 (4, 'right_to_work', 'clear', '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-28 days'), 3),
 (4, 'employment', 'clear', 'Two prior employers confirmed dates and roles.', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-22 days'), 4),
 (4, 'references', 'clear', '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-21 days'), 5);
+
+-- An investigation opened on Port Kembla Logistics' request (fictional).
+INSERT INTO inv_cases (id, client_id, title, kind, instructions, legal_basis, requested_at, requested_by, status, lead, access, due_date, evidence_seq, created_by, created_at) VALUES
+(1, 4, 'Copper stock losses at the Port Kembla yard', 'Fraud',
+ 'Establish how about 4.2 t of copper cathode left the yard between 1 and 14 September 2026, who was involved, and whether the night supervisor''s account of 8 September holds up.',
+ 'Engagement letter signed 15 Sep 2026. Client records (weighbridge, gate camera, rosters) provided by the client; company and court records from public registers.',
+ date('now', '-23 days'), 'Tom Ashby, operations manager', 'Active', 'WC', '', date('now', '+12 days'), 4, 'william@sandstonesecurity.com', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-22 days')),
+(2, 1, 'Concierge contractor conduct, Kent Street', 'Workplace misconduct', 'Review complaints about the after-hours concierge contractor.', 'Client instruction under the services agreement.', date('now', '-60 days'), 'Fiona Standish', 'Closed', 'MK', '', date('now', '-30 days'), 0, 'william@sandstonesecurity.com', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-58 days'));
+UPDATE inv_cases SET closed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-29 days') WHERE id = 2;
+
+INSERT INTO inv_evidence (id, case_id, seq, title, kind, source, source_url, obtained_at, obtained_by, reliability, credibility, notes, created_by, created_at) VALUES
+(1, 1, 1, 'Weighbridge dockets 1–14 Sep', 'Document', 'Client records', '', date('now', '-21 days'), 'WC', 'A', '2', 'Three outbound loads on 8 Sep with no matching sales order.', 'william@sandstonesecurity.com', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-21 days')),
+(2, 1, 2, 'Gate camera stills, 8 Sep 22:00–23:59', 'Photo', 'Client CCTV', '', date('now', '-20 days'), 'WC', 'A', '1', 'White Hilux, plate CX-12-QR, enters 22:10 and leaves 23:34.', 'william@sandstonesecurity.com', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-20 days')),
+(3, 1, 3, 'ASIC extract: Coastal Freight Pty Ltd', 'Record search', 'ASIC', 'https://connectonline.asic.gov.au/', date('now', '-18 days'), 'WC', 'A', '1', 'Mark Feeney appointed director 2019.', 'william@sandstonesecurity.com', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-18 days')),
+(4, 1, 4, 'Interview notes: M. Feeney', 'Statement', 'Interview', '', date('now', '-12 days'), 'WC', 'C', '4', 'Says he was home in Kiama from 21:30 on 8 Sep.', 'william@sandstonesecurity.com', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-12 days'));
+
+INSERT INTO inv_entities (id, case_id, kind, name, detail, x, y) VALUES
+(1, 1, 'Person', 'Mark Feeney', 'Night yard supervisor; DOB 1979', NULL, NULL),
+(2, 1, 'Company', 'Coastal Freight Pty Ltd', 'ABN 12 345 678 901', NULL, NULL),
+(3, 1, 'Vehicle', 'White Hilux CX-12-QR', 'Registered to Coastal Freight', NULL, NULL),
+(4, 1, 'Company', 'Port Kembla Logistics', 'The client', NULL, NULL),
+(5, 1, 'Account', 'CBA ••4471', 'Coastal Freight operating account', NULL, NULL),
+(6, 1, 'Person', 'Dean Ruiz', 'Scrap buyer, Unanderra', NULL, NULL);
+
+INSERT INTO inv_links (case_id, from_id, to_id, label, evidence_id, note) VALUES
+(1, 1, 2, 'director of', 3, ''),
+(1, 1, 4, 'employed by', NULL, 'Per roster; employment file not yet obtained.'),
+(1, 3, 2, 'registered to', 2, ''),
+(1, 1, 3, 'uses', 2, ''),
+(1, 2, 5, 'account holder of', NULL, ''),
+(1, 6, 5, 'paid', NULL, 'Reported by a source; not yet evidenced.'),
+(1, 1, 6, 'communicated with', NULL, '');
+
+INSERT INTO inv_events (case_id, starts_at, ends_at, title, detail, basis, place, lat, lng, evidence_id, entity_ids) VALUES
+(1, '2026-09-08T18:00', '2026-09-08T19:10', 'Feeney signs on for night shift', '', 'Documented', 'Port Kembla', NULL, NULL, 1, '1'),
+(1, '2026-09-08T21:30', '2026-09-08T23:59', 'Says he was at home in Kiama', 'Went home sick at 21:30 and stayed in.', 'Claimed', 'Kiama', NULL, NULL, 4, '1'),
+(1, '2026-09-08T22:10', NULL, 'White Hilux enters the yard', 'Gate camera 2.', 'Documented', 'Port Kembla', -34.4705, 150.8960, 2, '1,3'),
+(1, '2026-09-08T22:40', '2026-09-08T23:30', 'Weighbridge: 1.1 t out, no sales order', '', 'Documented', 'Port Kembla', -34.4672, 150.8990, 1, '3'),
+(1, '2026-09-08T23:50', NULL, 'Hilux seen at scrap yard', 'Witness sighting.', 'Documented', 'Unanderra', NULL, NULL, NULL, '3,6');
+
+INSERT INTO inv_reports (case_id, version, title, summary, created_by, created_at) VALUES
+(1, 1, 'Interim findings', 'Movements on 8 Sep don''t match the account given.', 'william@sandstonesecurity.com', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-5 days'));
+
+INSERT INTO inv_log (case_id, at, actor, action, detail) VALUES
+(1, strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-22 days'), 'william@sandstonesecurity.com', 'Opened case', 'INV-0001 · Copper stock losses at the Port Kembla yard'),
+(1, strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-21 days'), 'william@sandstonesecurity.com', 'Added EV-001', 'Document · Weighbridge dockets 1–14 Sep · graded A2'),
+(1, strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-20 days'), 'william@sandstonesecurity.com', 'Added EV-002', 'Photo · Gate camera stills · graded A1'),
+(1, strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-18 days'), 'william@sandstonesecurity.com', 'Added EV-003', 'Record search · ASIC extract · graded A1'),
+(1, strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-12 days'), 'william@sandstonesecurity.com', 'Added EV-004', 'Statement · Interview notes · graded C4'),
+(1, strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-5 days'), 'william@sandstonesecurity.com', 'Issued report v1', 'Interim findings'),
+(2, strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-58 days'), 'william@sandstonesecurity.com', 'Opened case', 'INV-0002'),
+(2, strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-29 days'), 'william@sandstonesecurity.com', 'Closed case', 'status Reporting → Closed');

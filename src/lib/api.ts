@@ -59,3 +59,14 @@ export async function putPlan(levelId: number, blob: Blob, w: number, h: number,
   });
   return parse(res);
 }
+
+/** Uploads a file as the raw request body (evidence, report files). */
+export async function sendFile<T = { fileId: number; sha256: string }>(path: string, file: File): Promise<T> {
+  const res = await fetch(`/api${path}${path.includes("?") ? "&" : "?"}name=${encodeURIComponent(file.name)}`, {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: { "X-Sandstone-Portal": "1", "Content-Type": file.type || "application/octet-stream" },
+    body: file,
+  });
+  return parse<T>(res);
+}

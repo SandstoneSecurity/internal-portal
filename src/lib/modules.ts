@@ -1,4 +1,4 @@
-import { Building2, LayoutDashboard, MapPin, Route, ShieldHalf, Users } from "lucide-react";
+import { Building2, FolderSearch, LayoutDashboard, MapPin, Route, ShieldHalf, Users } from "lucide-react";
 
 /** The portal's modules, in navigation order. */
 export const MODULES = [
@@ -8,6 +8,7 @@ export const MODULES = [
   { to: "/clients", label: "Clients", icon: Building2 },
   { to: "/risk", label: "Threat Modelling", icon: ShieldHalf },
   { to: "/intelligence", label: "Intelligence", icon: MapPin },
+  { to: "/investigations", label: "Investigations", icon: FolderSearch },
 ] as const;
 
 /** The module a path belongs to. */

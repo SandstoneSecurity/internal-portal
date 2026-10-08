@@ -2,6 +2,7 @@ import type { CrimeData } from "./crime";
 import type { CameraSpec } from "./cameras";
 import type { LevelGeometry } from "./geometry";
 import type { BackgroundCheck } from "./checks";
+import type { CaseSummary } from "./investigations";
 export type StatusKind = "secure" | "advisory" | "breach" | "info" | "neutral";
 
 export interface Metric {
@@ -306,6 +307,8 @@ export interface PortalData {
   tmIncidents: TmIncident[];
   crime: CrimeData;
   checks: BackgroundCheck[];
+  /** Investigations this person may see. */
+  cases: CaseSummary[];
 }
 
 // ── Threat modelling ────────────────────────────────────────────────────────

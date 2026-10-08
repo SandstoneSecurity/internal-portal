@@ -5,6 +5,7 @@ import { crime, scheduledRefresh } from "./crime";
 import { feedback, type GitHubEnv } from "./feedback";
 import { mapTiles, type MapEnv } from "./mapTiles";
 import { files } from "./files";
+import { investigations } from "./investigations";
 import { threats } from "./threats";
 import { handleApiError, writes } from "./writes";
 
@@ -39,6 +40,7 @@ app.route("/api", threats);
 app.route("/api", crime);
 app.route("/api", feedback);
 app.route("/api", mapTiles);
+app.route("/api", investigations);
 app.route("/api", writes);
 app.all("/api/*", (c) => c.json({ error: "Not found." }, 404));
 

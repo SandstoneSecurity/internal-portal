@@ -13,6 +13,7 @@ import { PeoplePage, PeopleRedirect } from "./pages/PeoplePage";
 
 // The threat-modelling workspace is large and only some visits need it.
 const RiskPage = lazy(() => import("./pages/risk/RiskPage").then((m) => ({ default: m.RiskPage })));
+const InvestigationsPage = lazy(() => import("./pages/investigations/InvestigationsPage").then((m) => ({ default: m.InvestigationsPage })));
 
 function Boot() {
   return (
@@ -72,6 +73,14 @@ export function App() {
                 }
               />
               <Route path="/intelligence" element={<IntelligencePage />} />
+              <Route
+                path="/investigations"
+                element={
+                  <Suspense fallback={<div className="pt-skeleton" style={{ height: 420 }} />}>
+                    <InvestigationsPage />
+                  </Suspense>
+                }
+              />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </motion.main>
