@@ -59,7 +59,10 @@ const schemas = {
     title: text(200),
     kind: z.enum(EVIDENCE_KINDS).default("Document"),
     source: optText(200),
-    sourceUrl: z.union([z.literal(""), z.string().trim().url("Use a full web address").max(2000)]).default(""),
+    // Shown as a link, so only ever a web address: never javascript: or data:.
+    sourceUrl: z
+      .union([z.literal(""), z.string().trim().url("Use a full web address").max(2000).refine((u) => /^https?:\/\//i.test(u), "Use an http or https address")])
+      .default(""),
     obtainedAt: optDate,
     obtainedBy: optText(120),
     reliability: z.enum(labels(RELIABILITY)).default("F"),

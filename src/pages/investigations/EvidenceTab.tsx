@@ -10,6 +10,8 @@ const grade = (e: Evidence) => `${e.reliability}${e.credibility}`;
 const gradeTitle = (e: Evidence) =>
   `${e.reliability}: ${RELIABILITY.find(([k]) => k === e.reliability)?.[1] ?? ""}. ${e.credibility}: ${CREDIBILITY.find(([k]) => k === e.credibility)?.[1] ?? ""}.`;
 const gradeTone = (e: Evidence) => (/[AB]/.test(e.reliability) && /[12]/.test(e.credibility) ? "secure" : /[EF]/.test(e.reliability) || /[56]/.test(e.credibility) ? "neutral" : "advisory");
+/** Only web addresses become links, whatever is stored. */
+const web = (u: string) => (/^https?:\/\//i.test(u) ? u : undefined);
 const when = (iso: string) => new Date(iso).toLocaleString("en-AU", { timeZone: "Australia/Sydney", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
 /**
@@ -173,7 +175,7 @@ function EvidenceFile({ d, e, act, onEdit, readOnly }: { d: CaseDetail; e: Evide
         {e.capture && (
           <div className="pt-ev__capture">
             <span className="pt-meta">Captured {when(e.capture.fetchedAt)}</span>
-            <a href={e.capture.url} target="_blank" rel="noopener noreferrer">
+            <a href={web(e.capture.url)} target="_blank" rel="noopener noreferrer">
               {e.capture.url}
             </a>
             {e.capture.finalUrl !== e.capture.url && <span className="pt-dim">→ {e.capture.finalUrl}</span>}
@@ -183,7 +185,7 @@ function EvidenceFile({ d, e, act, onEdit, readOnly }: { d: CaseDetail; e: Evide
           </div>
         )}
         {!e.capture && e.sourceUrl && (
-          <a className="pt-ev__url" href={e.sourceUrl} target="_blank" rel="noopener noreferrer">
+          <a className="pt-ev__url" href={web(e.sourceUrl)} target="_blank" rel="noopener noreferrer">
             {e.sourceUrl}
           </a>
         )}
