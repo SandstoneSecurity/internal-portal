@@ -7,7 +7,8 @@ import { DEFAULT_CAMERA } from "../../shared/cameras";
 import type { FieldSpec, FormValues } from "../components/ui/FormDrawer";
 import { useConfirm } from "../components/ui/Confirm";
 import { useToast } from "../components/ui/Toast";
-import { ApiError, send } from "../lib/api";
+import { ApiError, send, sendFile } from "../lib/api";
+import { shrinkImage } from "../lib/shrinkImage";
 import { usePortalData } from "../lib/DataProvider";
 import { compactAud, frequencyLabel, meanOf } from "../lib/riskModel";
 import { OFFENCE_LABEL, threatLocation } from "../../shared/crime";
@@ -248,6 +249,19 @@ export function useThreatActions() {
           fail(err);
         }
       },
+
+      /** Attach a still from the real camera (replaces any earlier one). */
+      setSnapshot: async (c: TmCamera, f: File) => {
+        try {
+          const { file } = await shrinkImage(f, 2560);
+          await sendFile(`/cameras/${c.id}/snapshot`, file);
+          await done("Real camera view attached", `${c.name}: compare it with the modelled view in 3D.`);
+        } catch (err) {
+          fail(err);
+        }
+      },
+      removeSnapshot: (c: TmCamera) =>
+        destroy({ title: `Remove ${c.name}'s snapshot?`, body: "The still from the real camera is deleted. The camera stays.", path: `/cameras/${c.id}/snapshot`, toast: "Snapshot removed", label: "Remove" }),
 
       deleteCamera: (c: TmCamera) =>
         destroy({ title: `Delete ${c.name}?`, body: "Its view and coverage are removed from the plan and 3D model.", path: `/cameras/${c.id}`, toast: "Camera deleted" }),

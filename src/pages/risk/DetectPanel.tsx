@@ -116,7 +116,8 @@ export function DetectPanel({
     if (!result || !img.current) return;
     const { w, h } = img.current;
     const g = toGeometry(result, w, h, mPerPx(), newId);
-    onAccept(mode === "replace" ? g : { walls: [...geo.walls, ...g.walls], openings: [...geo.openings, ...g.openings] });
+    // Detection only ever touches walls and openings; the level's devices and photos stay.
+    onAccept(mode === "replace" ? { ...geo, ...g } : { ...geo, walls: [...geo.walls, ...g.walls], openings: [...geo.openings, ...g.openings] });
   };
 
   const doors = result?.openings.filter((o) => o.kind === "door").length ?? 0;

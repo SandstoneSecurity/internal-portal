@@ -2,7 +2,8 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { CONTROL_BY_KEY, DOMAINS, ENTRY_TYPES, SITE_KINDS, THREAT_BY_KEY, ZONE_CLASSES, ASSET_TYPES } from "../shared/threatLibrary";
 import { CAMERA_KINDS } from "../shared/cameras";
-import { GEOMETRY_LIMITS, OPENING_KINDS, WALL_KINDS, tidy } from "../shared/geometry";
+import { GEOMETRY_LIMITS, OPENING_KINDS, WALL_KINDS, parseGeometry, tidy } from "../shared/geometry";
+import { DEVICE_KEYS, deviceDef } from "../shared/devices";
 import { nowIso, todaySydney } from "./dates";
 import { deleteThreatModel } from "./threatCleanup";
 import { BadRequest, NotFound, body, handleApiError, isoDate, mustExist, optText, param, setClause, text, type Ctx, type Env } from "./writes";
@@ -64,6 +65,35 @@ const schemas = {
         })
       )
       .max(GEOMETRY_LIMITS.openings),
+    // Left out (an older editor, or a save of walls alone), a level keeps the devices and photos it has.
+    devices: z
+      .array(
+        z.object({
+          id: z.string().regex(/^[a-z0-9]{1,24}$/),
+          kind: z.enum(DEVICE_KEYS),
+          a: z.tuple([planCoord, planCoord]),
+          b: z.union([z.null(), z.tuple([planCoord, planCoord])]).default(null),
+          rot: z.number().min(-720).max(720).default(0),
+          label: z.string().trim().max(80).default(""),
+          range: z.union([z.null(), z.number().min(0.5).max(200)]).default(null),
+        })
+      )
+      .max(GEOMETRY_LIMITS.devices)
+      .optional(),
+    photos: z
+      .array(
+        z.object({
+          id: z.string().regex(/^[a-z0-9]{1,24}$/),
+          file: id,
+          at: z.tuple([planCoord, planCoord]),
+          yaw: z.number().min(-720).max(720).default(0),
+          caption: z.string().trim().max(200).default(""),
+          w: z.number().int().min(1).max(20_000),
+          h: z.number().int().min(1).max(20_000),
+        })
+      )
+      .max(GEOMETRY_LIMITS.photos)
+      .optional(),
   }),
   camera: z.object({
     name: text(80),
@@ -79,6 +109,8 @@ const schemas = {
     resH: z.coerce.number().int().min(120).max(16_000).default(1440),
     rangeM: z.coerce.number().min(0).max(1000).default(30),
     notes: optText(1000),
+    /** Where to watch the real camera (a VMS or NVR page); shown as a link, so only ever http(s). */
+    feedUrl: z.union([z.literal(""), z.string().trim().url("Use a full web address").max(500).refine((u) => /^https?:\/\//i.test(u), "Use an http or https address")]).default(""),
   }),
   element: z.object({
     kind: z.enum(["zone", "asset", "entry"]),
@@ -145,6 +177,7 @@ const CAMERA_COLUMNS = {
   resH: "res_h",
   rangeM: "range_m",
   notes: "notes",
+  feedUrl: "feed_url",
 };
 const ELEMENT_COLUMNS = { kind: "kind", name: "name", subtype: "subtype", value: "value", criticality: "criticality", levelId: "level_id", zoneId: "zone_id", x: "x", y: "y", w: "w", h: "h", notes: "notes" };
 const SCENARIO_COLUMNS = {
@@ -256,8 +289,11 @@ threats.delete("/levels/:id", async (c) => {
   const levelId = param(c);
   const level = await mustExist(c, "site_levels", levelId);
   const db = c.env.DB;
+  const photoFiles = parseGeometry(level.geometry as string | null).photos.map((p) => p.file);
+  const { results: snaps } = await db.prepare(`SELECT snapshot_file_id AS f FROM tm_cameras WHERE level_id = ? AND snapshot_file_id IS NOT NULL`).bind(levelId).all<{ f: number }>();
   await db.batch([
     ...removePlan(db, level.plan_file_id as number | null),
+    ...[...photoFiles, ...snaps.map((r) => r.f)].flatMap((f) => removeFile(db, f)),
     db.prepare(`UPDATE tm_elements SET level_id = NULL WHERE level_id = ?`).bind(levelId),
     db.prepare(`DELETE FROM tm_cameras WHERE level_id = ?`).bind(levelId),
     db.prepare(`DELETE FROM site_levels WHERE id = ?`).bind(levelId),
@@ -271,16 +307,35 @@ const GEOMETRY_MAX = 900_000;
 threats.put("/levels/:id/geometry", async (c) => {
   const levelId = param(c);
   const v = await body(c, schemas.geometry);
-  await mustExist(c, "site_levels", levelId);
+  const level = await mustExist(c, "site_levels", levelId);
   const walls = new Set(v.walls.map((w) => w.id));
   if (walls.size !== v.walls.length) throw new BadRequest("Two walls share an id.");
   if (new Set(v.openings.map((o) => o.id)).size !== v.openings.length) throw new BadRequest("Two openings share an id.");
-  const g = tidy(v as Parameters<typeof tidy>[0]);
+  const stored = parseGeometry((await c.env.DB.prepare(`SELECT geometry FROM site_levels WHERE id = ?`).bind(levelId).first<{ geometry: string | null }>())?.geometry);
+  const devices = v.devices ?? stored.devices;
+  const photos = v.photos ?? stored.photos;
+  if (new Set(devices.map((d) => d.id)).size !== devices.length) throw new BadRequest("Two devices share an id.");
+  for (const d of devices) if ((deviceDef(d.kind).shape === "line") !== (d.b !== null)) throw new BadRequest(`A ${deviceDef(d.kind).label.toLowerCase()} needs ${d.b ? "one point" : "two points"}.`);
+  if (new Set(photos.map((p) => p.id)).size !== photos.length) throw new BadRequest("Two photos share an id.");
+  // A photo can only show an image stored for this site.
+  const files = [...new Set(photos.map((p) => p.file))];
+  if (files.length) {
+    const { results } = await c.env.DB.prepare(`SELECT id FROM site_files WHERE site_id = ? AND id IN (${files.map(() => "?").join(",")})`)
+      .bind(level.site_id, ...files)
+      .all<{ id: number }>();
+    if (results.length !== files.length) throw new BadRequest("A photo refers to an image that isn't on this site.");
+  }
+  const g = tidy({ ...(v as Parameters<typeof tidy>[0]), devices: devices as Parameters<typeof tidy>[0]["devices"], photos });
   const json = JSON.stringify(g);
   if (json.length > GEOMETRY_MAX) throw new BadRequest("That level has too much geometry to save. Simplify the walls or split the plan into levels.");
   await c.env.DB.prepare(`UPDATE site_levels SET geometry = ? WHERE id = ?`).bind(json, levelId).run();
-  return c.json({ ok: true, walls: g.walls.length, openings: g.openings.length });
+  return c.json({ ok: true, walls: g.walls.length, openings: g.openings.length, devices: g.devices.length, photos: g.photos.length });
 });
+
+/** Removes a stored site file (a photo or a camera snapshot). */
+function removeFile(db: D1Database, fileId: number): D1PreparedStatement[] {
+  return [db.prepare(`DELETE FROM site_file_chunks WHERE file_id = ?`).bind(fileId), db.prepare(`DELETE FROM site_files WHERE id = ?`).bind(fileId)];
+}
 
 function removePlan(db: D1Database, fileId: number | null): D1PreparedStatement[] {
   if (!fileId) return [];
@@ -381,10 +436,10 @@ threats.post("/sites/:id/cameras", async (c) => {
   await mustExist(c, "client_sites", siteId);
   await checkCameraLevel(c, siteId, v.levelId);
   const row = await c.env.DB.prepare(
-    `INSERT INTO tm_cameras (site_id, level_id, name, kind, x, y, height_m, yaw, tilt, hfov, res_w, res_h, range_m, notes, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
+    `INSERT INTO tm_cameras (site_id, level_id, name, kind, x, y, height_m, yaw, tilt, hfov, res_w, res_h, range_m, notes, feed_url, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
   )
-    .bind(siteId, v.levelId, v.name, v.kind, v.x, v.y, v.heightM, v.yaw, v.tilt, v.hfov, v.resW, v.resH, v.rangeM, v.notes, nowIso())
+    .bind(siteId, v.levelId, v.name, v.kind, v.x, v.y, v.heightM, v.yaw, v.tilt, v.hfov, v.resW, v.resH, v.rangeM, v.notes, v.feedUrl, nowIso())
     .first<{ id: number }>();
   return c.json({ id: row!.id }, 201);
 });
@@ -401,8 +456,69 @@ threats.patch("/cameras/:id", async (c) => {
 
 threats.delete("/cameras/:id", async (c) => {
   const camId = param(c);
-  await mustExist(c, "tm_cameras", camId);
-  await c.env.DB.prepare(`DELETE FROM tm_cameras WHERE id = ?`).bind(camId).run();
+  const cam = await mustExist(c, "tm_cameras", camId);
+  await c.env.DB.batch([
+    c.env.DB.prepare(`DELETE FROM tm_cameras WHERE id = ?`).bind(camId),
+    ...(cam.snapshot_file_id ? removeFile(c.env.DB, cam.snapshot_file_id as number) : []),
+  ]);
+  return c.json({ ok: true });
+});
+
+/** Stores an uploaded image as a site file; returns its id and pixel size. */
+async function storeImage(c: Ctx, siteId: number, what: string): Promise<{ fileId: number; stmts: D1PreparedStatement[] }> {
+  const bytes = new Uint8Array(await c.req.arrayBuffer());
+  if (bytes.length === 0) throw new BadRequest(`The ${what} is empty.`);
+  if (bytes.length > PLAN_MAX) throw new BadRequest(`Images can be up to 8 MB.`);
+  const mime = sniffImage(bytes);
+  if (!mime) throw new BadRequest(`Upload the ${what} as a PNG, JPEG or WebP image.`);
+  const name = (c.req.query("name") ?? what).replace(/[\\/]/g, "_").slice(0, 120) || what;
+  const sha = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((x) => x.toString(16).padStart(2, "0")).join("");
+  const db = c.env.DB;
+  const file = await db
+    .prepare(`INSERT INTO site_files (site_id, filename, mime, size, sha256, chunks, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`)
+    .bind(siteId, name, mime, bytes.length, sha, Math.ceil(bytes.length / CHUNK), nowIso())
+    .first<{ id: number }>();
+  const fileId = file!.id;
+  const stmts: D1PreparedStatement[] = [];
+  for (let seq = 0, at = 0; at < bytes.length; seq++, at += CHUNK) stmts.push(db.prepare(`INSERT INTO site_file_chunks (file_id, seq, data) VALUES (?, ?, ?)`).bind(fileId, seq, bytes.slice(at, at + CHUNK).buffer));
+  return { fileId, stmts };
+}
+
+async function runOrDrop(c: Ctx, fileId: number, stmts: D1PreparedStatement[]) {
+  try {
+    await c.env.DB.batch(stmts);
+  } catch (err) {
+    await c.env.DB.batch(removeFile(c.env.DB, fileId));
+    throw err;
+  }
+}
+
+// A site photo, uploaded before it's placed: the editor then adds it to the level's geometry.
+threats.put("/levels/:id/photos", async (c) => {
+  const level = await mustExist(c, "site_levels", param(c));
+  const { fileId, stmts } = await storeImage(c, level.site_id as number, "photo");
+  await runOrDrop(c, fileId, stmts);
+  return c.json({ fileId }, 201);
+});
+
+// A still from the real camera, to compare with the modelled view. Replaces any earlier one.
+threats.put("/cameras/:id/snapshot", async (c) => {
+  const camId = param(c);
+  const cam = await mustExist(c, "tm_cameras", camId);
+  const { fileId, stmts } = await storeImage(c, cam.site_id as number, "snapshot");
+  await runOrDrop(c, fileId, [
+    ...stmts,
+    c.env.DB.prepare(`UPDATE tm_cameras SET snapshot_file_id = ? WHERE id = ?`).bind(fileId, camId),
+    ...(cam.snapshot_file_id ? removeFile(c.env.DB, cam.snapshot_file_id as number) : []),
+  ]);
+  return c.json({ fileId }, 201);
+});
+
+threats.delete("/cameras/:id/snapshot", async (c) => {
+  const camId = param(c);
+  const cam = await mustExist(c, "tm_cameras", camId);
+  if (cam.snapshot_file_id)
+    await c.env.DB.batch([c.env.DB.prepare(`UPDATE tm_cameras SET snapshot_file_id = NULL WHERE id = ?`).bind(camId), ...removeFile(c.env.DB, cam.snapshot_file_id as number)]);
   return c.json({ ok: true });
 });
 

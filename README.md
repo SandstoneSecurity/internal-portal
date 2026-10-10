@@ -167,13 +167,39 @@ recruitment and background checks), Clients (CRM), Intelligence and Investigatio
       - **Summaries:** the inspector lists the distance each band reaches
         and the zones and entry points the camera covers. The level summary
         gives zone coverage and entries identified.
+      - **Real camera:** attach a snapshot from the real camera (shrunk to
+        2560 px in the browser) and a link to its live feed (http or https
+        only). Viewing through the camera lays the snapshot over the model
+        at the same framing, with a model-to-real opacity slider, so you can
+        check the simulated view against what the camera really sees.
+    - **Security items:** the Security item tool (key S) places 20 kinds of
+      physical security, grouped Perimeter, Access, Detection, Alarm,
+      Lighting and Guarding (`shared/devices.ts`). Point items (readers,
+      keypads, intercoms, locks, turnstiles, motion and glass-break
+      sensors, duress buttons, panels, sirens, floodlights, guard posts,
+      safes, signs, single bollards) are placed with a click. Runs
+      (bollards every 1.4 m, vehicle barriers, sliding gates, boom gates,
+      IR beams) are drawn from one point to another. Motion sensors,
+      glass-break sensors and floodlights show their reach, which can be
+      changed per item. Items can be moved, aimed, labelled, retyped and
+      deleted, and they share the level's undo history.
+    - **Site photos:** the Photo tool (key P) uploads a photo (shrunk to
+      2400 px), then takes a click for where it was taken and one for which
+      way it looks. On the plan it shows as a thumbnail with a view cone;
+      in 3D it is a framed print standing at that spot, and clicking it
+      opens it full size.
     - **3D:** built from the walls. Thicknesses and heights are real; door
       and window openings are cut out, doors stand ajar, and glazing is
       transparent. A cutaway (with a cut-height slider) shows the rooms, or
       switch to full height. Also: shadows, coverage on the floor, and
       camera bodies with their view frustums. "View through camera" shows
-      the camera's picture as an inset or full view. Levels stack with
-      adjustable spacing.
+      the camera's picture as an inset or full view. Security items are
+      modelled at real size (bollards with reflective bands, precast
+      barrier blocks, gates, booms, beams, readers, sensors, floodlight
+      poles, guard huts), sensor and light reach is shown on the floor,
+      and photos stand where they were taken. Clicking an item or photo
+      selects it, and Security items and Photos can each be hidden. Levels
+      stack with adjustable spacing.
     - **Attack paths:** derived rather than hand-drawn, running threat →
       entry point → zone → asset. Physical threats use physical entries and
       cyber threats use network and remote access. Line weight is expected
@@ -519,8 +545,10 @@ input returns `400 {error, fields}`.
 | POST · PATCH · DELETE | `/api/sites/:id/levels`, `/api/levels/:id` | Levels (stack order, height, plan width in metres) |
 | PUT · DELETE | `/api/levels/:id/plan?w=&h=&name=` | Floor plan, as the raw image body (PNG, JPEG or WebP, up to 8 MB, checked by its bytes) |
 | GET | `/api/plans/:id` | A floor plan image |
-| PUT | `/api/levels/:id/geometry` | A level's walls and openings, saved whole (points as plan fractions, sizes in metres) |
-| POST · PATCH · DELETE | `/api/sites/:id/cameras`, `/api/cameras/:id` | Cameras (position, height, yaw, tilt, field of view, resolution, range) |
+| PUT | `/api/levels/:id/geometry` | A level's walls, openings, security items and photos, saved whole (points as plan fractions, sizes in metres). Items and photos left out of the body are kept |
+| PUT | `/api/levels/:id/photos?name=` | Upload a site photo (raw image body, up to 8 MB); returns its file id for the level's geometry |
+| POST · PATCH · DELETE | `/api/sites/:id/cameras`, `/api/cameras/:id` | Cameras (position, height, yaw, tilt, field of view, resolution, range, live feed link) |
+| PUT · DELETE | `/api/cameras/:id/snapshot?name=` | A snapshot from the real camera (raw image body); replacing it deletes the old one |
 | POST · PATCH · DELETE | `/api/sites/:id/elements`, `/api/elements/:id` | Zones, assets and entry points (positions as fractions of the plan) |
 | POST · PATCH · DELETE | `/api/clients/:id/scenarios`, `/api/scenarios/:id` | Scenarios (library `threatKey` or `custom`; rate and loss overrides) |
 | POST | `/api/clients/:id/scenarios/bulk` | Several library threats at once; duplicates skipped |
@@ -579,10 +607,11 @@ could be left on in production.
 worker/         Cloudflare Worker (Hono): auth, reads (db.ts), writes (writes.ts), files (files.ts), threat modelling (threats.ts)
 shared/threatLibrary.ts, shared/risk.ts, shared/crime.ts  Threat and control library; quantification engine; NSW crime location factors
 shared/geometry.ts, shared/cameras.ts                    Walls and openings; camera optics, DORI and coverage with occlusion
+shared/devices.ts, src/pages/risk/deviceModels.ts         Security item library; their three.js models
 src/lib/wallDetect.ts                                    Wall, door and window detection on raster plans
 shared/types.ts Types shared between the Worker and the React app
 src/            React app (pages/, components/, actions/, lib/)
 src/styles/ds/  Sandstone design system tokens + component CSS (ported as-is)
-migrations/     D1 schema (0002: dates, audit log, regions; 0003: three-section board, task fields, subtasks; 0004: milestones, dependencies; 0005: applicant tracking and CRM; 0006: CV tables shared with the careers site; 0007: drops the audit log, as the portal has one user; 0008: threat modelling; 0009: NSW crime statistics and site LGAs; 0010: level geometry, plan scale and cameras)
+migrations/     D1 schema (0002: dates, audit log, regions; 0003: three-section board, task fields, subtasks; 0004: milestones, dependencies; 0005: applicant tracking and CRM; 0006: CV tables shared with the careers site; 0007: drops the audit log, as the portal has one user; 0008: threat modelling; 0009: NSW crime statistics and site LGAs; 0010: level geometry, plan scale and cameras; 0011–0013: Intelligence map coordinates, item locations and types; 0014: background checks and intel ageing; 0015: investigations; 0016: real-camera snapshots and live feed links)
 seed/           Fictional demo data for local development
 ```

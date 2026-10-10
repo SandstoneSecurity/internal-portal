@@ -3,6 +3,7 @@ import {
   Camera,
   DoorOpen,
   Hand,
+  ImagePlus,
   Layers,
   Maximize,
   MousePointer2,
@@ -10,6 +11,7 @@ import {
   PanelTop,
   Redo2,
   Ruler,
+  ShieldPlus,
   Square,
   Undo2,
   Upload,
@@ -38,6 +40,9 @@ import {
   type WallKind,
 } from "../../../shared/geometry";
 import type { ClientSite, SiteLevel, TmCamera, TmElement } from "../../../shared/types";
+import { BOLLARD_SPACING, DEVICES, DEVICE_GROUPS, GROUP_HUE, deviceDef, fanOf, reachOf, type Device, type Photo } from "../../../shared/devices";
+import { sendFile } from "../../lib/api";
+import { shrinkImage } from "../../lib/shrinkImage";
 import { useThreatActions } from "../../actions/threatActions";
 import { useToast } from "../../components/ui/Toast";
 import { send } from "../../lib/api";
@@ -48,8 +53,8 @@ import { DetectPanel, type Proposal } from "./DetectPanel";
 import { PlanImport, type ImportSource } from "./PlanImport";
 import { GuideButton, Term } from "./Guide";
 
-export type Tool = "select" | "wall" | "door" | "window" | "measure" | "camera" | "zone" | "asset" | "entry";
-export type Pick = { kind: "wall" | "opening"; id: string } | { kind: "camera"; id: number };
+export type Tool = "select" | "wall" | "door" | "window" | "measure" | "camera" | "device" | "photo" | "zone" | "asset" | "entry";
+export type Pick = { kind: "wall" | "opening" | "device" | "photo"; id: string } | { kind: "camera"; id: number };
 
 interface ToolDef {
   key: Tool;
@@ -67,6 +72,14 @@ const BUILD: ToolDef[] = [
 ];
 const SECURITY: ToolDef[] = [
   { key: "camera", label: "Camera", icon: Camera, key1: "C", hint: "Click where the camera is mounted, then click where it should look." },
+  {
+    key: "device",
+    label: "Security item",
+    icon: ShieldPlus,
+    key1: "S",
+    hint: "Pick an item, then click to place it. For a run (bollards, barrier, gate, boom, beam) click where it starts and where it ends.",
+  },
+  { key: "photo", label: "Photo", icon: ImagePlus, key1: "P", hint: "Choose a photo of the site, then click where it was taken and click the way the camera faced." },
   { key: "zone", label: "Zone", icon: Layers, key1: "Z", hint: "Drag a rectangle to draw a security zone." },
   { key: "asset", label: "Asset", icon: Package, key1: "A", hint: "Click where the asset is." },
   { key: "entry", label: "Entry", icon: DoorOpen, key1: "E", hint: "Click an entry point: door, gate, dock or roof hatch." },
@@ -118,6 +131,10 @@ type Drag =
   | { kind: "camera"; id: number; x: number; y: number; dx: number; dy: number; moved: boolean }
   | { kind: "aim"; id: number; yaw: number }
   | { kind: "el"; id: number; dx: number; dy: number; x: number; y: number }
+  | { kind: "dev"; id: string; from: Pt; d: Pt }
+  | { kind: "photo"; id: string; from: Pt; d: Pt }
+  | { kind: "devaim"; id: string; rot: number }
+  | { kind: "photoaim"; id: string; rot: number }
   | { kind: "zone"; x0: number; y0: number; x1: number; y1: number };
 
 export function PlanView({
@@ -155,6 +172,13 @@ export function PlanView({
   const [wallKind, setWallKind] = useState<WallKind>("wall");
   const [doorKind, setDoorKind] = useState<OpeningKind>("door");
   const [windowKind, setWindowKind] = useState<OpeningKind>("window");
+  const [deviceKind, setDeviceKind] = useState("reader");
+  /** The start of a run (bollards, barrier…) while it's being drawn, in metres. */
+  const [devStart, setDevStart] = useState<Pt | null>(null);
+  /** A photo uploaded and waiting to be placed: first where it was taken, then the way it faced. */
+  const [photoDraft, setPhotoDraft] = useState<{ file: number; w: number; h: number; name: string; at: Pt | null } | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const photoInput = useRef<HTMLInputElement>(null);
   const [chain, setChain] = useState<Pt[]>([]);
   const [hover, setHover] = useState<Pt | null>(null);
   const [typed, setTyped] = useState("");
@@ -184,7 +208,18 @@ export function PlanView({
   const f: Frame = level ? frameOf(level) : { W: 40, D: 25 };
   const geo = geoApi.geo;
   const onLevel = elements.filter((e) => (level ? e.levelId === level.id : true) && e.x != null && e.y != null);
-  const hint = ALL_TOOLS.find((x) => x.key === tool)!.hint;
+  const hint =
+    tool === "photo"
+      ? photoBusy
+        ? "Uploading the photo…"
+        : !photoDraft
+          ? "Choose a photo of the site to place."
+          : !photoDraft.at
+            ? `Click where “${photoDraft.name}” was taken.`
+            : "Click the way the camera faced."
+      : tool === "device" && devStart
+        ? `Click where the ${deviceDef(deviceKind).label.toLowerCase()} ends. Esc to cancel.`
+        : ALL_TOOLS.find((x) => x.key === tool)!.hint;
 
   // Fit the plan inside the viewport; zoom and pan move it from there.
   useEffect(() => {
@@ -313,8 +348,10 @@ export function PlanView({
   };
   const deletePick = () => {
     if (!pick) return;
-    if (pick.kind === "wall") commit({ walls: geo.walls.filter((w) => w.id !== pick.id), openings: geo.openings.filter((o) => o.wall !== pick.id) });
+    if (pick.kind === "wall") commit({ ...geo, walls: geo.walls.filter((w) => w.id !== pick.id), openings: geo.openings.filter((o) => o.wall !== pick.id) });
     else if (pick.kind === "opening") commit({ ...geo, openings: geo.openings.filter((o) => o.id !== pick.id) });
+    else if (pick.kind === "device") commit({ ...geo, devices: geo.devices.filter((d) => d.id !== pick.id) });
+    else if (pick.kind === "photo") commit({ ...geo, photos: geo.photos.filter((x) => x.id !== pick.id) });
     else {
       const c = cameras.find((x) => x.id === pick.id);
       if (c) void t.deleteCamera(c);
@@ -330,7 +367,25 @@ export function PlanView({
     finishChain();
     setMeasure([]);
     setAiming(null);
+    setDevStart(null);
+    if (k !== "photo") setPhotoDraft(null);
     setTool(k);
+    // The photo tool starts by choosing the photo.
+    if (k === "photo" && !photoDraft) photoInput.current?.click();
+  };
+  const choosePhoto = async (fl: File | undefined) => {
+    if (!fl || !level) return;
+    setPhotoBusy(true);
+    try {
+      const img = await shrinkImage(fl);
+      const r = await sendFile<{ fileId: number }>(`/levels/${level.id}/photos`, img.file);
+      setPhotoDraft({ file: r.fileId, w: img.w, h: img.h, name: fl.name.replace(/\.[^.]+$/, ""), at: null });
+      setTool("photo");
+    } catch (err) {
+      toast({ title: "Couldn't add that photo", desc: (err as Error).message, kind: "breach" });
+    } finally {
+      setPhotoBusy(false);
+    }
   };
 
   useEffect(() => {
@@ -380,7 +435,9 @@ export function PlanView({
         return;
       }
       if (e.key === "Escape") {
-        if (chain.length || typed) finishChain();
+        if (devStart) setDevStart(null);
+        else if (photoDraft?.at) setPhotoDraft({ ...photoDraft, at: null });
+        else if (chain.length || typed) finishChain();
         else if (aiming != null) setAiming(null);
         else if (measure.length) setMeasure([]);
         else if (tool !== "select") chooseTool("select");
@@ -402,6 +459,11 @@ export function PlanView({
   // ── Pointer ───────────────────────────────────────────────────────────────
   const hitTest = (p: Pt): Pick | "end" | null => {
     for (const c of cams) if (dist(p, [c.x, c.y]) <= px(12)) return { kind: "camera", id: c.id };
+    for (const ph of geo.photos) if (dist(p, toM(ph.at, f)) <= px(14)) return { kind: "photo", id: ph.id };
+    for (const d of geo.devices) {
+      const a = toM(d.a, f);
+      if (d.b ? project(p, a, toM(d.b, f)).d <= px(8) : dist(p, a) <= px(10)) return { kind: "device", id: d.id };
+    }
     for (const run of runs)
       for (const g of run.gaps) {
         const mid = (g.s0 + g.s1) / 2;
@@ -471,6 +533,48 @@ export function PlanView({
       });
       return;
     }
+    if (tool === "device") {
+      const def = deviceDef(deviceKind);
+      if (def.shape === "point") {
+        const dv: Device = { id: newId("d"), kind: def.key, a: fr, b: null, rot: 0, label: "", range: null };
+        commit({ ...geo, devices: [...geo.devices, dv] });
+        onPick({ kind: "device", id: dv.id });
+        return;
+      }
+      const s = snapPoint(p, devStart, e.shiftKey).p;
+      if (!devStart) setDevStart(s);
+      else if (dist(devStart, s) > 0.2) {
+        const dv: Device = { id: newId("d"), kind: def.key, a: toF(devStart, f), b: toF(s, f), rot: 0, label: "", range: null };
+        commit({ ...geo, devices: [...geo.devices, dv] });
+        onPick({ kind: "device", id: dv.id });
+        setDevStart(null);
+      }
+      return;
+    }
+    if (tool === "photo") {
+      if (!photoDraft) {
+        photoInput.current?.click();
+        return;
+      }
+      if (!photoDraft.at) {
+        setPhotoDraft({ ...photoDraft, at: p });
+        return;
+      }
+      const ph: Photo = {
+        id: newId("p"),
+        file: photoDraft.file,
+        at: toF(photoDraft.at, f),
+        yaw: Math.round(deg(Math.atan2(p[1] - photoDraft.at[1], p[0] - photoDraft.at[0]))),
+        caption: photoDraft.name,
+        w: photoDraft.w,
+        h: photoDraft.h,
+      };
+      commit({ ...geo, photos: [...geo.photos, ph] });
+      setPhotoDraft(null);
+      setTool("select");
+      onPick({ kind: "photo", id: ph.id });
+      return;
+    }
     if (tool === "zone") {
       setDrag({ kind: "zone", x0: fr[0], y0: fr[1], x1: fr[0], y1: fr[1] });
       return;
@@ -486,6 +590,20 @@ export function PlanView({
       const c = cams.find((x) => x.id === pick.id);
       if (c && dist(p, aimHandle(c)) <= px(10)) {
         setDrag({ kind: "aim", id: c.id, yaw: c.yaw });
+        return;
+      }
+    }
+    if (pick?.kind === "device") {
+      const d = geo.devices.find((x) => x.id === pick.id);
+      if (d && !d.b && reachOf(d) && reachOf(d)!.angle < 360 && dist(p, devHandle(d)) <= px(10)) {
+        setDrag({ kind: "devaim", id: d.id, rot: d.rot });
+        return;
+      }
+    }
+    if (pick?.kind === "photo") {
+      const ph = geo.photos.find((x) => x.id === pick.id);
+      if (ph && dist(p, photoHandle(ph)) <= px(10)) {
+        setDrag({ kind: "photoaim", id: ph.id, rot: ph.yaw });
         return;
       }
     }
@@ -510,6 +628,8 @@ export function PlanView({
         const c = cams.find((x) => x.id === hit.id)!;
         setDrag({ kind: "camera", id: c.id, x: c.x, y: c.y, dx: p[0] - c.x, dy: p[1] - c.y, moved: false });
       } else if (hit.kind === "wall") setDrag({ kind: "wall", wall: hit.id, from: p, d: [0, 0] });
+      else if (hit.kind === "device") setDrag({ kind: "dev", id: hit.id, from: p, d: [0, 0] });
+      else if (hit.kind === "photo") setDrag({ kind: "photo", id: hit.id, from: p, d: [0, 0] });
       else {
         const o = geo.openings.find((x) => x.id === hit.id)!;
         setDrag({ kind: "opening", id: o.id, at: o.at });
@@ -521,6 +641,18 @@ export function PlanView({
     setDrag({ kind: "pan", x: e.clientX, y: e.clientY, px: pan[0], py: pan[1], moved: false });
   };
 
+  const devHandle = (d: Device): Pt => {
+    const a = toM(d.a, f);
+    const r = Math.max(px(40), 1.2);
+    const rot = drag?.kind === "devaim" && drag.id === d.id ? drag.rot : d.rot;
+    return [a[0] + Math.cos((rot * Math.PI) / 180) * r, a[1] + Math.sin((rot * Math.PI) / 180) * r];
+  };
+  const photoHandle = (ph: Photo): Pt => {
+    const a = toM(ph.at, f);
+    const r = Math.max(px(40), 1.2);
+    const rot = drag?.kind === "photoaim" && drag.id === ph.id ? drag.rot : ph.yaw;
+    return [a[0] + Math.cos((rot * Math.PI) / 180) * r, a[1] + Math.sin((rot * Math.PI) / 180) * r];
+  };
   const aimHandle = (c: PlacedCamera): Pt => {
     const r = Math.max(px(46), 1.5);
     const a = (c.yaw * Math.PI) / 180;
@@ -540,7 +672,8 @@ export function PlanView({
     if (tool === "wall" || tool === "measure") {
       const from = tool === "wall" ? chain[chain.length - 1] ?? null : measure.length === 1 ? measure[0]! : null;
       setHover(snapPoint(p, from, e.shiftKey).p);
-    } else setHover(p);
+    } else if (tool === "device" && deviceDef(deviceKind).shape === "line") setHover(snapPoint(p, devStart, e.shiftKey).p);
+    else setHover(p);
     if (aiming != null) {
       const c = cams.find((x) => x.id === aiming);
       if (c) setAimYaw(deg(Math.atan2(p[1] - c.y, p[0] - c.x)));
@@ -561,6 +694,14 @@ export function PlanView({
       if (c) setDrag({ ...drag, yaw: deg(Math.atan2(p[1] - c.y, p[0] - c.x)) });
     } else if (drag.kind === "el") setDrag({ ...drag, x: clamp01(p[0] / f.W - drag.dx), y: clamp01(p[1] / f.D - drag.dy) });
     else if (drag.kind === "zone") setDrag({ ...drag, x1: clamp01(p[0] / f.W), y1: clamp01(p[1] / f.D) });
+    else if (drag.kind === "dev" || drag.kind === "photo") setDrag({ ...drag, d: [p[0] - drag.from[0], p[1] - drag.from[1]] });
+    else if (drag.kind === "devaim") {
+      const d = geo.devices.find((x) => x.id === drag.id);
+      if (d) setDrag({ ...drag, rot: Math.round(deg(Math.atan2(p[1] - toM(d.a, f)[1], p[0] - toM(d.a, f)[0]))) });
+    } else if (drag.kind === "photoaim") {
+      const ph = geo.photos.find((x) => x.id === drag.id);
+      if (ph) setDrag({ ...drag, rot: Math.round(deg(Math.atan2(p[1] - toM(ph.at, f)[1], p[0] - toM(ph.at, f)[0]))) });
+    }
   };
 
   const onUp = () => {
@@ -590,6 +731,16 @@ export function PlanView({
         const zone = el.kind === "zone" ? undefined : zoneAt(d.x, d.y);
         void t.placeElement(el, { x: d.x, y: d.y, ...(zone && zone.id !== el.zoneId ? { zoneId: zone.id } : {}) });
       }
+    } else if ((d.kind === "dev" || d.kind === "photo") && Math.hypot(d.d[0], d.d[1]) > px(3)) {
+      const sh = (q: Pt): Pt => toF([toM(q, f)[0] + d.d[0], toM(q, f)[1] + d.d[1]], f);
+      if (d.kind === "dev") commit({ ...geo, devices: geo.devices.map((x) => (x.id === d.id ? { ...x, a: sh(x.a), b: x.b ? sh(x.b) : null } : x)) });
+      else commit({ ...geo, photos: geo.photos.map((x) => (x.id === d.id ? { ...x, at: sh(x.at) } : x)) });
+    } else if (d.kind === "devaim") {
+      const dv = geo.devices.find((x) => x.id === d.id);
+      if (dv && dv.rot !== d.rot) commit({ ...geo, devices: geo.devices.map((x) => (x.id === d.id ? { ...x, rot: d.rot } : x)) });
+    } else if (d.kind === "photoaim") {
+      const ph = geo.photos.find((x) => x.id === d.id);
+      if (ph && ph.yaw !== d.rot) commit({ ...geo, photos: geo.photos.map((x) => (x.id === d.id ? { ...x, yaw: d.rot } : x)) });
     } else if (d.kind === "zone") {
       const x = Math.min(d.x0, d.x1);
       const y = Math.min(d.y0, d.y1);
@@ -677,6 +828,25 @@ export function PlanView({
     return walls.map((w) => wallRun(w, openings, f));
   }, [runs, drag, geo, f.W, f.D]);
 
+  // Devices and photos as drawn while one is being moved or turned.
+  const shownDevices = useMemo(() => {
+    if (drag?.kind !== "dev" && drag?.kind !== "devaim") return geo.devices;
+    return geo.devices.map((d) => {
+      if (d.id !== drag.id) return d;
+      if (drag.kind === "devaim") return { ...d, rot: drag.rot };
+      const sh = (q: Pt): Pt => toF([toM(q, f)[0] + drag.d[0], toM(q, f)[1] + drag.d[1]], f);
+      return { ...d, a: sh(d.a), b: d.b ? sh(d.b) : null };
+    });
+  }, [geo.devices, drag, f.W, f.D]);
+  const shownPhotos = useMemo(() => {
+    if (drag?.kind !== "photo" && drag?.kind !== "photoaim") return geo.photos;
+    return geo.photos.map((ph) => {
+      if (ph.id !== drag.id) return ph;
+      if (drag.kind === "photoaim") return { ...ph, yaw: drag.rot };
+      return { ...ph, at: toF([toM(ph.at, f)[0] + drag.d[0], toM(ph.at, f)[1] + drag.d[1]], f) };
+    });
+  }, [geo.photos, drag, f.W, f.D]);
+
   const from = chain[chain.length - 1] ?? null;
   const rubber = tool === "wall" && from && hover ? hover : null;
   const typedLen = Number(typed);
@@ -732,6 +902,34 @@ export function PlanView({
                 ))}
               </select>
             </div>
+          )}
+          {tool === "device" && (
+            <div className="pt-select pt-select--sm">
+              <select
+                value={deviceKind}
+                onChange={(e) => {
+                  setDeviceKind(e.target.value);
+                  setDevStart(null);
+                }}
+                aria-label="Security item"
+              >
+                {DEVICE_GROUPS.map((g) => (
+                  <optgroup key={g} label={g}>
+                    {DEVICES.filter((d) => d.group === g).map((d) => (
+                      <option key={d.key} value={d.key}>
+                        {d.label}
+                        {d.shape === "line" ? " (draw)" : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+          )}
+          {tool === "photo" && !photoBusy && (
+            <button className="sds-btn sds-btn--sm sds-btn--secondary" onClick={() => photoInput.current?.click()}>
+              <ImagePlus size={13} /> {photoDraft ? "Choose another" : "Choose photo"}
+            </button>
           )}
           {(tool === "door" || tool === "window") && (
             <div className="pt-select pt-select--sm">
@@ -864,6 +1062,12 @@ export function PlanView({
                 <polygon key={v.id} className={`pt-pl-view${pick?.kind === "camera" && pick.id === v.id ? " is-sel" : ""}`} points={v.poly.map((q) => q.join(",")).join(" ")} vectorEffect="non-scaling-stroke" />
               ) : null
             )}
+            {/* Where motion sensors and floodlights reach. */}
+            {shownDevices
+              .filter((d) => !d.b && reachOf(d))
+              .map((d) => (
+                <polygon key={`fan${d.id}`} className={`pt-pl-fan ${hueClass(GROUP_HUE[deviceDef(d.kind).group])}`} points={fanOf(d, toM(d.a, f)).map((q) => q.join(",")).join(" ")} vectorEffect="non-scaling-stroke" />
+              ))}
             {shownRuns.map((r) => (
               <WallShape key={r.wall.id} run={r} sel={pick?.kind === "wall" && pick.id === r.wall.id} pickOpening={pick?.kind === "opening" ? pick.id : null} px={px} />
             ))}
@@ -906,6 +1110,24 @@ export function PlanView({
             {cams.map((c) => (
               <CameraMark key={c.id} c={c} sel={pick?.kind === "camera" && pick.id === c.id} px={px} handle={pick?.kind === "camera" && pick.id === c.id ? aimHandle(c) : null} />
             ))}
+            {shownDevices.map((d) => {
+              const sel = pick?.kind === "device" && pick.id === d.id;
+              const aimable = !d.b && (reachOf(d)?.angle ?? 360) < 360;
+              return <DeviceMark key={d.id} d={d} f={f} px={px} sel={sel} handle={sel && aimable ? devHandle(d) : null} />;
+            })}
+            {tool === "device" && devStart && hover && (
+              <line className={`pt-pl-dev-rubber ${hueClass(GROUP_HUE[deviceDef(deviceKind).group])}`} x1={devStart[0]} y1={devStart[1]} x2={hover[0]} y2={hover[1]} vectorEffect="non-scaling-stroke" />
+            )}
+            {shownPhotos.map((ph) => {
+              const sel = pick?.kind === "photo" && pick.id === ph.id;
+              return <PhotoMark key={ph.id} ph={ph} f={f} px={px} sel={sel} handle={sel ? photoHandle(ph) : null} />;
+            })}
+            {tool === "photo" && photoDraft?.at && hover && (
+              <g className="pt-pl-photo is-draft">
+                <line className="pt-pl-aim" x1={photoDraft.at[0]} y1={photoDraft.at[1]} x2={hover[0]} y2={hover[1]} vectorEffect="non-scaling-stroke" />
+                <circle cx={photoDraft.at[0]} cy={photoDraft.at[1]} r={px(6)} vectorEffect="non-scaling-stroke" />
+              </g>
+            )}
           </svg>
 
           {onLevel
@@ -958,7 +1180,7 @@ export function PlanView({
           )}
         </div>
 
-        {!plan && (
+        {!plan && !geo.walls.length && !geo.devices.length && !geo.photos.length && (
           <div className="pt-pl-empty">
             <b>{busy ? "Reading the plan…" : "No floor plan on this level yet"}</b>
             <span>Drop a PDF or image of the plan here, or draw walls straight onto the grid. PDFs from architects give the sharpest result.</span>
@@ -1013,6 +1235,17 @@ export function PlanView({
             </>
           )}
         </span>
+        <input
+          ref={photoInput}
+          type="file"
+          accept="image/*"
+          hidden
+          aria-label="Choose a site photo"
+          onChange={(e) => {
+            void choosePhoto(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+        />
         <span className="pt-pl-upload">
           <input
             ref={file}
@@ -1140,6 +1373,66 @@ function CameraMark({ c, sel, px, handle }: { c: PlacedCamera; sel: boolean; px:
       {handle && <line className="pt-pl-aim" x1={c.x} y1={c.y} x2={handle[0]} y2={handle[1]} vectorEffect="non-scaling-stroke" />}
       {c.kind !== "fisheye" && <polygon points={`${nose.join(",")} ${side(1.1).join(",")} ${side(-1.1).join(",")}`} />}
       <circle cx={c.x} cy={c.y} r={r} vectorEffect="non-scaling-stroke" />
+      {handle && <circle className="pt-pl-handle pt-pl-handle--aim" cx={handle[0]} cy={handle[1]} r={px(6)} vectorEffect="non-scaling-stroke" />}
+    </g>
+  );
+}
+
+/** A security item on the plan: a coded disc at its spot, or a run drawn in its own line style. */
+function DeviceMark({ d, f, px, sel, handle }: { d: Device; f: Frame; px: (n: number) => number; sel: boolean; handle: Pt | null }) {
+  const def = deviceDef(d.kind);
+  const a = toM(d.a, f);
+  const cls = `pt-pl-dev pt-pl-dev--${d.kind} ${hueClass(GROUP_HUE[def.group])}${sel ? " is-sel" : ""}`;
+  if (d.b) {
+    const b = toM(d.b, f);
+    const len = dist(a, b);
+    const n = Math.max(2, Math.floor(len / BOLLARD_SPACING) + 1);
+    const posts: Pt[] = d.kind === "bollards" ? Array.from({ length: n }, (_, i): Pt => [a[0] + ((b[0] - a[0]) * i) / (n - 1), a[1] + ((b[1] - a[1]) * i) / (n - 1)]) : [];
+    return (
+      <g className={cls} data-device={d.id}>
+        <title>{d.label || def.label}</title>
+        {sel && <line className="pt-pl-dev-sel" x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} vectorEffect="non-scaling-stroke" />}
+        {d.kind !== "bollards" && <line className="pt-pl-dev-line" x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} vectorEffect="non-scaling-stroke" />}
+        {posts.map((q, i) => (
+          <circle key={i} className="pt-pl-dev-post" cx={q[0]} cy={q[1]} r={Math.max(0.12, px(2.5))} />
+        ))}
+        {(d.kind === "boom" || d.kind === "beam") && <circle className="pt-pl-dev-post" cx={a[0]} cy={a[1]} r={px(3.5)} />}
+        {d.kind === "beam" && <circle className="pt-pl-dev-post" cx={b[0]} cy={b[1]} r={px(3.5)} />}
+      </g>
+    );
+  }
+  const r = px(8);
+  const rot = (d.rot * Math.PI) / 180;
+  return (
+    <g className={cls} data-device={d.id}>
+      <title>{d.label || def.label}</title>
+      {handle && <line className="pt-pl-aim" x1={a[0]} y1={a[1]} x2={handle[0]} y2={handle[1]} vectorEffect="non-scaling-stroke" />}
+      {reachOf(d) && reachOf(d)!.angle < 360 && <line className="pt-pl-dev-dir" x1={a[0]} y1={a[1]} x2={a[0] + Math.cos(rot) * r * 1.7} y2={a[1] + Math.sin(rot) * r * 1.7} vectorEffect="non-scaling-stroke" />}
+      <circle className="pt-pl-dev-dot" cx={a[0]} cy={a[1]} r={r} vectorEffect="non-scaling-stroke" />
+      <text x={a[0]} y={a[1] + r * 0.36} fontSize={r * (def.code.length > 1 ? 0.95 : 1.15)} textAnchor="middle" className="pt-pl-dev-code">
+        {def.code}
+      </text>
+      {handle && <circle className="pt-pl-handle pt-pl-handle--aim" cx={handle[0]} cy={handle[1]} r={px(6)} vectorEffect="non-scaling-stroke" />}
+    </g>
+  );
+}
+
+/** A site photo: a small thumbnail where it was taken, with the way it looks. */
+function PhotoMark({ ph, f, px, sel, handle }: { ph: Photo; f: Frame; px: (n: number) => number; sel: boolean; handle: Pt | null }) {
+  const a = toM(ph.at, f);
+  const s = px(26);
+  const ar = ph.w / Math.max(1, ph.h);
+  const w = ar >= 1 ? s : s * ar, h = ar >= 1 ? s / ar : s;
+  const rot = (ph.yaw * Math.PI) / 180;
+  const half = 0.42;
+  const cone = [a, [a[0] + Math.cos(rot - half) * s * 1.5, a[1] + Math.sin(rot - half) * s * 1.5], [a[0] + Math.cos(rot + half) * s * 1.5, a[1] + Math.sin(rot + half) * s * 1.5]] as Pt[];
+  return (
+    <g className={`pt-pl-photo${sel ? " is-sel" : ""}`} data-photo={ph.id}>
+      <title>{ph.caption || "Site photo"}</title>
+      <polygon className="pt-pl-photo-cone" points={cone.map((q) => q.join(",")).join(" ")} vectorEffect="non-scaling-stroke" />
+      {handle && <line className="pt-pl-aim" x1={a[0]} y1={a[1]} x2={handle[0]} y2={handle[1]} vectorEffect="non-scaling-stroke" />}
+      <rect className="pt-pl-photo-frame" x={a[0] - w / 2 - px(2)} y={a[1] - h / 2 - px(2)} width={w + px(4)} height={h + px(4)} vectorEffect="non-scaling-stroke" />
+      <image href={`/api/plans/${ph.file}`} x={a[0] - w / 2} y={a[1] - h / 2} width={w} height={h} preserveAspectRatio="xMidYMid slice" />
       {handle && <circle className="pt-pl-handle pt-pl-handle--aim" cx={handle[0]} cy={handle[1]} r={px(6)} vectorEffect="non-scaling-stroke" />}
     </g>
   );

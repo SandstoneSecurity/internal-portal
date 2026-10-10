@@ -742,8 +742,8 @@ export async function getThreatModels(db: D1Database) {
       .prepare(`SELECT id, client_id, site_id, threat_key, occurred_on, loss, description FROM tm_incidents ORDER BY occurred_on DESC, id DESC`)
       .all<{ id: number; client_id: number; site_id: number | null; threat_key: string; occurred_on: string; loss: number; description: string }>(),
     db
-      .prepare(`SELECT id, site_id, level_id, name, kind, x, y, height_m, yaw, tilt, hfov, res_w, res_h, range_m, notes FROM tm_cameras ORDER BY site_id, id`)
-      .all<{ id: number; site_id: number; level_id: number | null; name: string; kind: string; x: number; y: number; height_m: number; yaw: number; tilt: number; hfov: number; res_w: number; res_h: number; range_m: number; notes: string }>(),
+      .prepare(`SELECT id, site_id, level_id, name, kind, x, y, height_m, yaw, tilt, hfov, res_w, res_h, range_m, notes, snapshot_file_id, feed_url FROM tm_cameras ORDER BY site_id, id`)
+      .all<{ id: number; site_id: number; level_id: number | null; name: string; kind: string; x: number; y: number; height_m: number; yaw: number; tilt: number; hfov: number; res_w: number; res_h: number; range_m: number; notes: string; snapshot_file_id: number | null; feed_url: string }>(),
   ]);
   const levelsBySite = new Map<number, SiteLevel[]>();
   for (const l of levels.results) {
@@ -844,6 +844,8 @@ export async function getThreatModels(db: D1Database) {
         resH: r.res_h,
         rangeM: r.range_m,
         notes: r.notes,
+        snapshotFileId: r.snapshot_file_id,
+        feedUrl: r.feed_url ?? "",
       })
     ),
     tmIncidents: incidents.results.map(

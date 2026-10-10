@@ -100,7 +100,7 @@ const TOPICS: { key: GuideTopic; label: string }[] = [
 
 export const STEPS = [
   { icon: Building2, title: "Profile the client", text: "Staff and revenue set which loss ranges apply and how big a hit is. Incident history lets real events calibrate the model." },
-  { icon: Map, title: "Map each site", text: "Upload the floor plan (PDF is best), detect or draw its walls, then place zones, assets, entry points and cameras. The site is modelled to scale in 3D." },
+  { icon: Map, title: "Map each site", text: "Upload the floor plan (PDF is best), detect or draw its walls, then place zones, assets, entry points, cameras and security items. The site is modelled to scale in 3D." },
   { icon: ListChecks, title: "Add threats", text: "Pick from the library of physical, personnel and cyber threats. Each is priced for this client from Australian incident data and the site's local crime." },
   { icon: ShieldCheck, title: "Apply controls", text: "Record what's in place and what's proposed. The model shows the loss each removes, its return on spend, and the best next step." },
 ] as const;
@@ -317,11 +317,19 @@ export function GuideDrawer() {
             <Section title="4. Cameras">
               <p>
                 Choose <b>Camera</b>, click where it's mounted, then click where it looks. In the inspector set the lens, resolution, mounting height and tilt. The plan shades what it sees, stopped by walls and closed doors, in four bands of detail. <b>View through camera</b> shows its
-                picture in 3D.
+                picture in 3D. Attach a <b>snapshot</b> from the real camera and its <b>live feed</b> link: viewing through the camera then lays the real picture over the model, with a slider between the two, so you can check the model against what the camera really sees.
               </p>
               <dl>
                 <Def k="dori" />
               </dl>
+            </Section>
+            <Section title="Security items and photos">
+              <p>
+                Choose <b>Security item</b>, pick one from the list (bollards, barriers, gates, readers, keypads, intercoms, locks, sensors, alarms, floodlights, guard posts, safes, signs) and click to place it. Runs such as bollards, vehicle barriers, gates, boom gates and IR beams go from where you click first to where you click second. Motion sensors, glass-break sensors and floodlights show how far they reach. Each item is modelled at real size in 3D.
+              </p>
+              <p>
+                Choose <b>Photo</b> to pin a photo of the site to the plan: pick the image, click where it was taken, then click the way it looks. In 3D it stands at that spot as a framed print; click it to see it full size.
+              </p>
             </Section>
             <Section title="5. Security layers">
               <p>
@@ -340,11 +348,13 @@ export function GuideDrawer() {
                   ["N", "Window"],
                   ["M", "Measure / set scale"],
                   ["C", "Camera"],
+                  ["S", "Security item"],
+                  ["P", "Site photo"],
                   ["Z A E", "Zone, asset, entry point"],
                   ["4.5 Enter", "While drawing: a wall exactly 4.5 m long"],
                   ["Shift", "While drawing: snap to 45°"],
                   ["Esc", "Finish drawing, then back to Select"],
-                  ["Delete", "Remove the selected wall, opening or camera"],
+                  ["Delete", "Remove the selected wall, opening, camera, item or photo"],
                   ["Ctrl Z", "Undo (Ctrl Shift Z to redo)"],
                   ["Ctrl scroll", "Zoom the plan (or pinch)"],
                 ]}
