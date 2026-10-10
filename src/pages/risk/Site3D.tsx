@@ -44,6 +44,8 @@ import { FENCE_HEIGHT, OPENING_HEIGHTS, ceilingOf, frameOf, wallRun, type Frame,
 import type { SiteLevel, TmCamera, TmElement } from "../../../shared/types";
 import type { Hue } from "../../lib/hues";
 import { DoriLegend, ZONE_HUE, paintCoverage, placed } from "./PlanView";
+import type { Photo } from "../../../shared/devices";
+import { buildDevice, deviceFan, deviceMaterials } from "./deviceModels";
 
 /** Palette mid-tones that read on both the day and night backgrounds. */
 const HEX: Record<Hue, number> = {
@@ -68,6 +70,17 @@ function wallBox(ax: number, az: number, dx: number, dz: number, s0: number, s1:
   const mid = (s0 + s1) / 2;
   g.translate(ax + dx * mid, y0 + h / 2, az + dz * mid);
   return g;
+}
+
+/** Where a camera's view sits on the canvas: the inset (top left) or the letterboxed full view. */
+function camRect(w: number, h: number, aspect: number, big: boolean) {
+  if (!big) {
+    const iw = Math.round(Math.min(w * 0.42, 420));
+    return { x: 12, y: 12, w: iw, h: Math.round(iw / aspect) };
+  }
+  const rw = w / h > aspect ? Math.round(h * aspect) : w;
+  const rh = w / h > aspect ? h : Math.round(w / aspect);
+  return { x: Math.round((w - rw) / 2), y: Math.round((h - rh) / 2), w: rw, h: rh };
 }
 
 interface Built {
@@ -141,6 +154,8 @@ export default function Site3D({
   onCamView,
   onPickCamera,
   pickedCamera,
+  onPickItem,
+  pickedItem,
 }: {
   levels: SiteLevel[];
   elements: TmElement[];
@@ -153,6 +168,9 @@ export default function Site3D({
   onCamView: (id: number | null) => void;
   onPickCamera: (id: number) => void;
   pickedCamera: number | null;
+  /** A security item or photo clicked in the model. */
+  onPickItem?: (levelId: number, kind: "device" | "photo", id: string) => void;
+  pickedItem?: { kind: "device" | "photo"; id: string } | null;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const labels = useRef<HTMLDivElement>(null);
@@ -162,6 +180,15 @@ export default function Site3D({
   const [showCov, setShowCov] = useState(true);
   const [planFloor, setPlanFloor] = useState(true);
   const [bigView, setBigView] = useState(false);
+  const [showItems, setShowItems] = useState(true);
+  const [showPhotos, setShowPhotos] = useState(true);
+  const [openPhoto, setOpenPhoto] = useState<Photo | null>(null);
+  // The real camera's still over the modelled view, to check aim and coverage.
+  const [showReal, setShowReal] = useState(true);
+  const [realOpacity, setRealOpacity] = useState(0.5);
+  const [hostSize, setHostSize] = useState({ w: 800, h: 500 });
+  const itemRef = useRef(onPickItem);
+  itemRef.current = onPickItem;
   const [ready, setReady] = useState(false);
   const selectRef = useRef(onSelect);
   selectRef.current = onSelect;
@@ -221,6 +248,9 @@ export default function Site3D({
     const shutterM = mat(new MeshStandardMaterial({ color: 0x9aa1a6, roughness: 0.45, metalness: 0.6 }));
     const fenceM = mat(new MeshStandardMaterial({ color: 0x7d858a, roughness: 0.6, metalness: 0.4, transparent: true, opacity: 0.35, side: DoubleSide, depthWrite: false }));
     const edgeM = mat(new LineBasicMaterial({ color: 0x6f675c, transparent: true, opacity: 0.55 }));
+    const devM = deviceMaterials(mat);
+    const frameM = mat(new MeshStandardMaterial({ color: 0x2c2823, roughness: 0.6 }));
+    const selRingM = mat(new MeshBasicMaterial({ color: HEX.brass, transparent: true, opacity: 0.85, depthWrite: false }));
     let maxW = 20;
     let maxD = 14;
     let top = 0;
@@ -411,6 +441,72 @@ export default function Site3D({
         labelled.push({ id: `c${c.id}`, name: c.name, obj: rig, kind: "camera", lift: 0.45 });
       }
 
+      // Security items: models at real size; sensors and lights also show the floor they reach.
+      if (showItems)
+        for (const d of level.geometry.devices) {
+          const obj = buildDevice(d, f, devM);
+          obj.traverse((o) => {
+            o.userData.deviceId = d.id;
+            o.userData.levelId = level.id;
+            if ((o as Mesh).isMesh) pickable.push(o);
+          });
+          g.add(obj);
+          grow(obj.position.x, obj.position.z);
+          const fan = deviceFan(d, f, devM);
+          if (fan) {
+            // Reach is analysis: shown in the model, not through a camera.
+            fan.layers.set(1);
+            g.add(fan);
+          }
+          if (pickedItem?.kind === "device" && pickedItem.id === d.id) {
+            const ring = new Mesh(new CylinderGeometry(0.55, 0.55, 0.02, 32, 1, true), selRingM);
+            ring.position.set(obj.position.x, 0.03, obj.position.z);
+            ring.layers.set(1);
+            g.add(ring);
+          }
+          if (d.label) labelled.push({ id: `d${d.id}`, name: d.label, obj, kind: "device", lift: 1.6 });
+        }
+
+      // Site photos: a framed picture standing where it was taken, facing back at you, so what you
+      // see past it in the model is what the photo shows.
+      if (showPhotos)
+        for (const ph of level.geometry.photos) {
+          const x = ph.at[0] * W - W / 2;
+          const z = ph.at[1] * D - D / 2;
+          grow(x, z);
+          const yaw = (ph.yaw * Math.PI) / 180;
+          const pw = 1.6;
+          const phh = (pw * ph.h) / Math.max(1, ph.w);
+          const tex = loader.load(`/api/plans/${ph.file}`);
+          tex.colorSpace = SRGBColorSpace;
+          tex.anisotropy = 4;
+          const holder = new Group();
+          holder.position.set(x + Math.cos(yaw) * 1.2, 0, z + Math.sin(yaw) * 1.2);
+          // A plane faces +z; turn it to face back along the view.
+          holder.rotation.y = -yaw - Math.PI / 2;
+          const picture = new Mesh(new PlaneGeometry(pw, phh), mat(new MeshBasicMaterial({ map: tex, side: DoubleSide, toneMapped: false })));
+          picture.position.y = 1.6;
+          const frame = new Mesh(new BoxGeometry(pw + 0.08, phh + 0.08, 0.03), frameM);
+          frame.position.set(0, 1.6, -0.025);
+          const post = new Mesh(new CylinderGeometry(0.02, 0.02, 1.6 - phh / 2, 6), frameM);
+          post.position.set(0, (1.6 - phh / 2) / 2, -0.04);
+          const spot = new Mesh(new SphereGeometry(0.09, 14, 10), mat(new MeshStandardMaterial({ color: HEX.brass, emissive: HEX.brass, emissiveIntensity: 0.4 })));
+          spot.position.set(x, 1.6, z);
+          const on = pickedItem?.kind === "photo" && pickedItem.id === ph.id;
+          if (on) frame.material = mat(new MeshStandardMaterial({ color: HEX.brass, emissive: HEX.brass, emissiveIntensity: 0.5 }));
+          holder.add(frame, picture, post);
+          for (const o of [picture, frame, spot]) {
+            o.userData.photoId = ph.id;
+            o.userData.levelId = level.id;
+            pickable.push(o);
+          }
+          // Photos are references for people, not part of the scene a camera would film.
+          holder.traverse((o) => o.layers.set(1));
+          spot.layers.set(1);
+          g.add(holder, spot);
+          if (ph.caption) labelled.push({ id: `p${ph.id}`, name: ph.caption, obj: picture, kind: "photo", lift: phh / 2 + 0.2 });
+        }
+
       // Zones, assets and entry points.
       const ms = Math.max(1, W / 30);
       for (const e of elements.filter((x) => x.levelId === level.id && x.x != null && x.y != null)) {
@@ -502,6 +598,7 @@ export default function Site3D({
     // Layers: 0 everything, 1 model view only (camera bodies, coverage, cut walls), 2 camera view only (full walls).
     eye.layers.enable(2);
     const size = () => {
+      setHostSize({ w: el.clientWidth, h: el.clientHeight });
       renderer.setSize(el.clientWidth, el.clientHeight, false);
       camera.aspect = el.clientWidth / Math.max(1, el.clientHeight);
       camera.updateProjectionMatrix();
@@ -527,15 +624,21 @@ export default function Site3D({
       renderer.setScissorTest(false);
       renderer.setViewport(0, 0, w, h);
       if (rig && big) {
-        eye.aspect = w / Math.max(1, h);
+        // The camera's own frame, letterboxed, so the real still lines up with it.
+        const r = camRect(w, h, rig.aspect, true);
+        renderer.clear();
+        renderer.setScissorTest(true);
+        renderer.setScissor(r.x, h - r.y - r.h, r.w, r.h);
+        renderer.setViewport(r.x, h - r.y - r.h, r.w, r.h);
+        eye.aspect = rig.aspect;
         eye.updateProjectionMatrix();
         renderer.render(scene, eye);
+        renderer.setScissorTest(false);
       } else {
         renderer.render(scene, camera);
         if (rig) {
           // Inset in the top left at the camera's aspect ratio.
-          const iw = Math.round(Math.min(w * 0.42, 420));
-          const ih = Math.round(iw / rig.aspect);
+          const { w: iw, h: ih } = camRect(w, h, rig.aspect, false);
           renderer.setScissorTest(true);
           renderer.setScissor(12, h - ih - 12, iw, ih);
           renderer.setViewport(12, h - ih - 12, iw, ih);
@@ -554,7 +657,8 @@ export default function Site3D({
           l.obj.getWorldPosition(v);
           v.y += l.lift;
           v.project(rig && big ? eye : camera);
-          const visible = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
+          // Through a camera, the frame is letterboxed: tags stay off rather than drift.
+          const visible = !(rig && big) && v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
           tag.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -100%)`;
           tag.style.opacity = visible ? "1" : "0";
         });
@@ -575,8 +679,14 @@ export default function Site3D({
       ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
       ray.setFromCamera(ndc, camera);
       const hit = ray.intersectObjects(pickable, false)[0];
-      if (hit?.object.userData.cameraId != null) pickCamRef.current(hit.object.userData.cameraId as number);
-      else selectRef.current(hit ? (hit.object.userData.elementId as number) : null);
+      const ud = hit?.object.userData ?? {};
+      if (ud.cameraId != null) pickCamRef.current(ud.cameraId as number);
+      else if (ud.photoId != null) {
+        const ph = sorted.flatMap((l) => l.geometry.photos).find((x) => x.id === ud.photoId);
+        if (ph) setOpenPhoto(ph);
+        itemRef.current?.(ud.levelId as number, "photo", ud.photoId as string);
+      } else if (ud.deviceId != null) itemRef.current?.(ud.levelId as number, "device", ud.deviceId as string);
+      else selectRef.current(hit ? (ud.elementId as number) ?? null : null);
     };
     renderer.domElement.addEventListener("pointerdown", onDown);
     renderer.domElement.addEventListener("pointerup", onUp);
@@ -616,7 +726,7 @@ export default function Site3D({
       markers.current.clear();
       setReady(false);
     };
-  }, [sorted, elements, risk, explode, cameras, cutMode, cutH, showCov, planFloor, pickedCamera, camView]);
+  }, [sorted, elements, risk, explode, cameras, cutMode, cutH, showCov, planFloor, pickedCamera, camView, showItems, showPhotos, pickedItem?.kind, pickedItem?.id]);
 
   useEffect(() => {
     for (const [id, m] of markers.current) {
@@ -631,6 +741,17 @@ export default function Site3D({
     <div className={`pt-risk-3d${viewed && bigView ? " is-camview" : ""}`}>
       <div ref={host} className="pt-risk-3d__canvas" data-testid="site-3d" data-ready={ready ? "1" : "0"} />
       <div ref={labels} className="pt-risk-3d__labels" aria-hidden />
+      {viewed?.snapshotFileId && showReal && (
+        <img
+          className="pt-risk-3d__real"
+          src={`/api/plans/${viewed.snapshotFileId}`}
+          alt={`Still from the real ${viewed.name}`}
+          style={(() => {
+            const r = camRect(hostSize.w, hostSize.h, viewed.resW / viewed.resH, bigView);
+            return { left: r.x, top: r.y, width: r.w, height: r.h, opacity: realOpacity };
+          })()}
+        />
+      )}
       {viewed && (
         <div className={`pt-risk-3d__camview${bigView ? " is-big" : ""}`}>
           <span className="pt-eyebrow">Camera view</span>
@@ -638,6 +759,27 @@ export default function Site3D({
           <span className="pt-meta">
             {isFisheye(viewed) ? "360° fisheye, shown as a wide view" : `${Math.round(viewed.hfov)}° lens`} · {viewed.resW}×{viewed.resH} · {viewed.heightM} m up
           </span>
+          {viewed.snapshotFileId ? (
+            <span className="pt-risk-3d__realctl">
+              <label className="pt-pl-check">
+                <input type="checkbox" checked={showReal} onChange={(e) => setShowReal(e.target.checked)} /> Real camera over model
+              </label>
+              {showReal && (
+                <label>
+                  <span className="pt-meta">Model</span>
+                  <input type="range" min={0} max={1} step={0.05} value={realOpacity} onChange={(e) => setRealOpacity(Number(e.target.value))} aria-label="Real camera opacity" />
+                  <span className="pt-meta">Real</span>
+                </label>
+              )}
+            </span>
+          ) : (
+            <span className="pt-meta">Attach a still from the real camera (in its inspector) to compare it with this view.</span>
+          )}
+          {/^https?:\/\//i.test(viewed.feedUrl) && (
+            <a className="pt-addlink" href={viewed.feedUrl} target="_blank" rel="noopener noreferrer">
+              Open live feed ↗
+            </a>
+          )}
           <span className="pt-risk-3d__camview-actions">
             <button className="sds-btn sds-btn--sm sds-btn--secondary" onClick={() => setBigView((b) => !b)}>
               {bigView ? "Back to model" : "Full view"}
@@ -684,8 +826,31 @@ export default function Site3D({
           </label>
         )}
         {cameras.length > 0 && showCov && <DoriLegend />}
-        <span className="pt-meta pt-risk-3d__help">Drag to orbit · right-drag to pan · scroll to zoom · click a camera or marker</span>
+        {levels.some((l) => l.geometry.devices.length) && (
+          <label className="pt-pl-check">
+            <input type="checkbox" checked={showItems} onChange={(e) => setShowItems(e.target.checked)} /> Security items
+          </label>
+        )}
+        {levels.some((l) => l.geometry.photos.length) && (
+          <label className="pt-pl-check">
+            <input type="checkbox" checked={showPhotos} onChange={(e) => setShowPhotos(e.target.checked)} /> Photos
+          </label>
+        )}
+        <span className="pt-meta pt-risk-3d__help">Drag to orbit · right-drag to pan · scroll to zoom · click a camera, item, photo or marker</span>
       </div>
+      {openPhoto && (
+        <div className="pt-risk-3d__lightbox" role="dialog" aria-label={openPhoto.caption || "Site photo"} onClick={() => setOpenPhoto(null)}>
+          <figure onClick={(e) => e.stopPropagation()}>
+            <img src={`/api/plans/${openPhoto.file}`} alt={openPhoto.caption || "Site photo"} />
+            <figcaption>
+              <span>{openPhoto.caption || "Site photo"}</span>
+              <button className="sds-btn sds-btn--sm sds-btn--ghost" onClick={() => setOpenPhoto(null)}>
+                Close
+              </button>
+            </figcaption>
+          </figure>
+        </div>
+      )}
       {!modelled && (
         <div className="pt-risk-3d__note">
           {levels.some((l) => l.plan)

@@ -276,7 +276,8 @@ export async function cropBlob(canvas: HTMLCanvasElement, box: [number, number, 
 }
 
 /** Detected walls (image pixels) as level geometry: points as fractions of the image, sizes in metres. */
-export function toGeometry(r: DetectResult, w: number, h: number, mPerPx: number, newId: (p: string) => string): LevelGeometry {
+/** Walls and openings only: saving them leaves a level's devices and photos as they are. */
+export function toGeometry(r: DetectResult, w: number, h: number, mPerPx: number, newId: (p: string) => string): Pick<LevelGeometry, "walls" | "openings"> {
   const ids = r.walls.map(() => newId("w"));
   const walls = r.walls.map((x, i) => {
     const tm = Math.max(0.05, Math.min(0.6, x.t * mPerPx));

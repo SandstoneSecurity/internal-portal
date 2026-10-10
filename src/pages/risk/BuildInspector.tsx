@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
-import { Box, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Box, Camera, ExternalLink, ImagePlus, Trash2 } from "lucide-react";
+import { DEVICES, deviceDef, reachOf } from "../../../shared/devices";
 import { CAMERA_KINDS, DORI, LENSES, RESOLUTIONS, blockersOf, coverage, coverageAt, coverageIn, doriLevel, reachFor, vfovOf } from "../../../shared/cameras";
 import {
   OPENING_KINDS,
@@ -169,7 +170,7 @@ export function BuildInspector({ pick, onPick, level, frame, geoApi, cameras, zo
           <button
             className="sds-btn sds-btn--sm sds-btn--ghost pt-danger-link"
             onClick={() => {
-              commit({ walls: geo.walls.filter((w) => w.id !== wall.id), openings: geo.openings.filter((o) => o.wall !== wall.id) });
+              commit({ ...geo, walls: geo.walls.filter((w) => w.id !== wall.id), openings: geo.openings.filter((o) => o.wall !== wall.id) });
               onPick(null);
             }}
           >
@@ -217,6 +218,105 @@ export function BuildInspector({ pick, onPick, level, frame, geoApi, cameras, zo
             }}
           >
             <Trash2 size={13} /> Delete
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (pick.kind === "device") {
+    const d = geo.devices.find((x) => x.id === pick.id);
+    if (!d) return null;
+    const def = deviceDef(d.kind);
+    const reach = reachOf(d);
+    const set = (patch: Partial<typeof d>) => commit({ ...geo, devices: geo.devices.map((x) => (x.id === d.id ? { ...x, ...patch } : x)) });
+    const len = d.b ? Math.hypot((d.b[0] - d.a[0]) * frame.W, (d.b[1] - d.a[1]) * frame.D) : 0;
+    return (
+      <div className="pt-risk-insp pt-bi">
+        <Head eyebrow={`Security item · ${def.group}`} title={d.label || def.label} onClose={() => onPick(null)} />
+        <div className="pt-bi-grid">
+          <SelField
+            label="Type"
+            value={d.kind}
+            options={DEVICES.filter((x) => x.shape === def.shape).map((x) => [x.key, x.label] as const)}
+            onChange={(k: string) => set({ kind: k, range: null })}
+          />
+          <label className="pt-bi-field pt-bi-field--wide">
+            <span>Label</span>
+            <input
+              className="pt-bi-text"
+              defaultValue={d.label}
+              key={d.id + d.label}
+              maxLength={80}
+              placeholder={def.label}
+              onBlur={(e) => e.target.value.trim() !== d.label && set({ label: e.target.value.trim() })}
+              onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+            />
+          </label>
+          {!d.b && <NumField label="Facing" value={Math.round(((d.rot % 360) + 360) % 360)} suffix="°" step={5} min={0} max={359} onSave={(v) => v != null && set({ rot: v })} hint="Degrees clockwise from the right of the plan. Drag the handle on the plan to turn it." />}
+          {reach && <NumField label="Reach" value={reach.range} suffix="m" step={0.5} min={0.5} max={200} onSave={(v) => set({ range: v != null && v !== def.range ? v : null })} hint={`Usual for a ${def.label.toLowerCase()}: ${def.range} m${def.angle && def.angle < 360 ? `, ${def.angle}° wide` : " all round"}.`} />}
+          {d.b && (
+            <label className="pt-bi-field">
+              <span>Length</span>
+              <span className="pt-bi-input">
+                <input value={round(len, 1)} readOnly aria-readonly />
+                <i>m</i>
+              </span>
+            </label>
+          )}
+        </div>
+        <p className="pt-risk-note">{def.hint}</p>
+        <div className="pt-risk-insp__actions">
+          <span style={{ flex: 1 }} />
+          <button
+            className="sds-btn sds-btn--sm sds-btn--ghost pt-danger-link"
+            onClick={() => {
+              commit({ ...geo, devices: geo.devices.filter((x) => x.id !== d.id) });
+              onPick(null);
+            }}
+          >
+            <Trash2 size={13} /> Delete
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (pick.kind === "photo") {
+    const ph = geo.photos.find((x) => x.id === pick.id);
+    if (!ph) return null;
+    const set = (patch: Partial<typeof ph>) => commit({ ...geo, photos: geo.photos.map((x) => (x.id === ph.id ? { ...x, ...patch } : x)) });
+    return (
+      <div className="pt-risk-insp pt-bi">
+        <Head eyebrow="Site photo" title={ph.caption || "Site photo"} onClose={() => onPick(null)} />
+        <a className="pt-bi-photo" href={`/api/plans/${ph.file}`} target="_blank" rel="noopener" title="Open full size">
+          <img src={`/api/plans/${ph.file}`} alt={ph.caption || "Site photo"} />
+        </a>
+        <div className="pt-bi-grid">
+          <label className="pt-bi-field pt-bi-field--wide">
+            <span>Caption</span>
+            <input
+              className="pt-bi-text"
+              defaultValue={ph.caption}
+              key={ph.id + ph.caption}
+              maxLength={200}
+              onBlur={(e) => e.target.value.trim() !== ph.caption && set({ caption: e.target.value.trim() })}
+              onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+            />
+          </label>
+          <NumField label="Looking" value={Math.round(((ph.yaw % 360) + 360) % 360)} suffix="°" step={5} min={0} max={359} onSave={(v) => v != null && set({ yaw: v })} hint="The way the camera faced, clockwise from the right of the plan. Drag the handle on the plan to turn it." />
+        </div>
+        <p className="pt-risk-note">In the 3D model it stands as a framed picture where it was taken, facing back at you, so you can match it to the model.</p>
+        <div className="pt-risk-insp__actions">
+          <span style={{ flex: 1 }} />
+          <button
+            className="sds-btn sds-btn--sm sds-btn--ghost pt-danger-link"
+            onClick={() => {
+              commit({ ...geo, photos: geo.photos.filter((x) => x.id !== ph.id) });
+              onPick(null);
+            }}
+          >
+            <Trash2 size={13} /> Remove photo
           </button>
         </div>
       </div>
@@ -376,12 +476,66 @@ function CameraInspector({ cam, frame, geo, zones, entries, onClose, onView }: {
           ))}
         </ul>
       )}
+      <RealCamera cam={cam} />
       <div className="pt-risk-insp__actions">
         <span style={{ flex: 1 }} />
         <button className="sds-btn sds-btn--sm sds-btn--ghost pt-danger-link" onClick={() => void t.deleteCamera(cam)}>
           <Trash2 size={13} /> Delete camera
         </button>
       </div>
+    </div>
+  );
+}
+
+/** The real camera: a still from it (compared with the modelled view in 3D) and a link to its feed. */
+function RealCamera({ cam }: { cam: TmCamera }) {
+  const t = useThreatActions();
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const pickFile = async (f: File | undefined) => {
+    if (!f) return;
+    setBusy(true);
+    await t.setSnapshot(cam, f);
+    setBusy(false);
+  };
+  return (
+    <div className="pt-bi-real">
+      <SectionHead title="Real camera" />
+      {cam.snapshotFileId ? (
+        <a className="pt-bi-photo" href={`/api/plans/${cam.snapshotFileId}`} target="_blank" rel="noopener" title="Open full size">
+          <img src={`/api/plans/${cam.snapshotFileId}`} alt={`Still from ${cam.name}`} />
+        </a>
+      ) : (
+        <p className="pt-risk-note">Attach a still from the real camera to lay it over the modelled view in 3D and check the aim and coverage.</p>
+      )}
+      <div className="pt-risk-insp__actions">
+        <button className="sds-btn sds-btn--sm sds-btn--secondary" disabled={busy} onClick={() => input.current?.click()}>
+          {cam.snapshotFileId ? <Camera size={13} /> : <ImagePlus size={13} />} {busy ? "Uploading…" : cam.snapshotFileId ? "Replace snapshot" : "Attach snapshot"}
+        </button>
+        {cam.snapshotFileId && (
+          <button className="sds-btn sds-btn--sm sds-btn--ghost" onClick={() => void t.removeSnapshot(cam)}>
+            Remove
+          </button>
+        )}
+        <input ref={input} type="file" accept="image/*" hidden aria-label={`Snapshot from ${cam.name}`} onChange={(e) => (void pickFile(e.target.files?.[0]), (e.target.value = ""))} />
+      </div>
+      <label className="pt-bi-field pt-bi-field--wide">
+        <span>Live feed link</span>
+        <input
+          className="pt-bi-text"
+          defaultValue={cam.feedUrl}
+          key={cam.feedUrl}
+          maxLength={500}
+          placeholder="https://… (VMS or NVR page)"
+          onBlur={(e) => e.target.value.trim() !== cam.feedUrl && void t.updateCamera(cam, { feedUrl: e.target.value.trim() })}
+          onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+        />
+      </label>
+      {/^https?:\/\//i.test(cam.feedUrl) && (
+        <a className="pt-addlink" href={cam.feedUrl} target="_blank" rel="noopener noreferrer">
+          <ExternalLink size={12} /> Open live feed
+        </a>
+      )}
     </div>
   );
 }
@@ -430,6 +584,10 @@ export function ModelSummary({ level, frame, geo, cameras, zones, entries, onMea
         </dd>
         <dt>Cameras</dt>
         <dd>{cameras.length}</dd>
+        <dt>Security items</dt>
+        <dd>{geo.devices.length}</dd>
+        <dt>Site photos</dt>
+        <dd>{geo.photos.length}</dd>
       </dl>
       {stats && (
         <>

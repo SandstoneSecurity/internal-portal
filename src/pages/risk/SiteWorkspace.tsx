@@ -237,6 +237,11 @@ export function SiteWorkspace({ clientId, siteId }: { clientId: number; siteId: 
                   onCamView={(id) => set({ cam: id == null ? null : String(id) })}
                   onPickCamera={pickCamera}
                   pickedCamera={pick?.kind === "camera" ? pick.id : null}
+                  onPickItem={(levelId, kind, id) => {
+                    if (levelId !== level?.id) set({ level: String(levelId) });
+                    setPick({ kind, id });
+                  }}
+                  pickedItem={pick?.kind === "device" || pick?.kind === "photo" ? { kind: pick.kind, id: pick.id } : null}
                 />
               </Suspense>
             )}

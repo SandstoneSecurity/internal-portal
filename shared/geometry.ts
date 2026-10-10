@@ -6,6 +6,8 @@
  * plan's scale later moves nothing. Thicknesses and widths are in metres.
  */
 
+import type { Device, Photo } from "./devices";
+
 export type Pt = [number, number];
 
 export const WALL_KINDS = [
@@ -63,10 +65,14 @@ export interface Opening {
 export interface LevelGeometry {
   walls: Wall[];
   openings: Opening[];
+  /** Physical security items (shared/devices.ts). */
+  devices: Device[];
+  /** Site photos placed where they were taken. */
+  photos: Photo[];
 }
 
-export const EMPTY_GEOMETRY: LevelGeometry = { walls: [], openings: [] };
-export const GEOMETRY_LIMITS = { walls: 4000, openings: 3000 };
+export const EMPTY_GEOMETRY: LevelGeometry = { walls: [], openings: [], devices: [], photos: [] };
+export const GEOMETRY_LIMITS = { walls: 4000, openings: 3000, devices: 3000, photos: 200 };
 
 /** A level's plan in metres: W across, D deep. */
 export interface Frame {
@@ -160,10 +166,15 @@ let seq = 0;
 /** Short ids for walls and openings; unique within a level. */
 export const newId = (prefix: string) => `${prefix}${Date.now().toString(36)}${(seq++).toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
 
-/** Drops openings whose wall is gone and keeps each opening inside its wall. */
-export function tidy(g: LevelGeometry): LevelGeometry {
+/** Drops openings whose wall is gone and keeps each opening inside its wall; devices and photos carry over. */
+export function tidy(g: Partial<LevelGeometry> & Pick<LevelGeometry, "walls" | "openings">): LevelGeometry {
   const ids = new Set(g.walls.map((w) => w.id));
-  return { walls: g.walls, openings: g.openings.filter((o) => ids.has(o.wall)).map((o) => ({ ...o, at: Math.max(0, Math.min(1, o.at)) })) };
+  return {
+    walls: g.walls,
+    openings: g.openings.filter((o) => ids.has(o.wall)).map((o) => ({ ...o, at: Math.max(0, Math.min(1, o.at)) })),
+    devices: Array.isArray(g.devices) ? g.devices : [],
+    photos: Array.isArray(g.photos) ? g.photos : [],
+  };
 }
 
 /** Parses stored geometry, tolerating an empty or damaged value. */
@@ -171,7 +182,7 @@ export function parseGeometry(raw: string | null | undefined): LevelGeometry {
   if (!raw) return EMPTY_GEOMETRY;
   try {
     const g = JSON.parse(raw) as Partial<LevelGeometry>;
-    return tidy({ walls: Array.isArray(g.walls) ? g.walls : [], openings: Array.isArray(g.openings) ? g.openings : [] });
+    return tidy({ walls: Array.isArray(g.walls) ? g.walls : [], openings: Array.isArray(g.openings) ? g.openings : [], devices: g.devices, photos: g.photos });
   } catch {
     return EMPTY_GEOMETRY;
   }

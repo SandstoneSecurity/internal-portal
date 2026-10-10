@@ -336,6 +336,10 @@ export interface TmCamera extends CameraSpec {
   x: number;
   y: number;
   notes: string;
+  /** A still from the real camera (site file id), to compare with the modelled view. */
+  snapshotFileId: number | null;
+  /** Where to watch the real camera; "" if not set. */
+  feedUrl: string;
 }
 
 export interface ClientSite {
