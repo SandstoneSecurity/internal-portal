@@ -406,6 +406,18 @@ Cases with dates also appear on the Operations board (below).
   whoever set the list) can see the case, its evidence or its files. Everyone else gets "not found".
   An empty list means everyone with portal access.
 
+### Case notes
+
+The overview has running notes under the instructions and lawful basis: calls with the client,
+decisions, lines of inquiry, what's next (migration 0018).
+
+- **Signed and dated:** each note shows who wrote it and when, newest first, and is marked
+  "edited" once changed.
+- **Only the author** can edit or remove a note, and only while the case is open.
+- **Audit log:** adding, editing and removing are logged. An edit logs what the note said before,
+  and a removal logs what it said, so notes can't quietly rewrite the record.
+- Notes are as private as their case, and are deleted with it.
+
 ### On the operations board
 
 Once a case has a date (when the client asked, or when the report is due) it gets a task on the
@@ -558,6 +570,7 @@ input returns `400 {error, fields}`.
 | POST · PATCH · DELETE | `/api/checks/:id/items`, `/api/check-items/:id` | Checks on a file (`kind`, `result`, `finding`) |
 | GET · POST · PATCH · DELETE | `/api/investigations[/:id]` | Cases (GET one returns the whole case; access-checked). Creating or changing a case with dates keeps its board task in step |
 | POST | `/api/investigations/:id/evidence`, `…/captures`, `…/entities`, `…/links`, `…/events`, `…/reports` | Add evidence, capture a web page, add to the link chart and timeline, issue a report version |
+| POST · PATCH · DELETE | `/api/investigations/:id/notes`, `/api/inv-notes/:id` | Case notes (changed or removed only by their author, while the case is open) |
 | PATCH · DELETE | `/api/inv-evidence/:id`, `/api/inv-entities/:id`, `/api/inv-links/:id`, `/api/inv-events/:id` | Edit or remove (logged) |
 | PUT | `/api/inv-evidence/:id/file?name=`, `/api/inv-reports/:id/file?name=` | Attach a file (raw body, up to 20 MB; once) |
 | GET | `/api/inv-files/:id[?download=1][&as=text]` | A case file, checked against its SHA-256 and logged |
@@ -634,6 +647,6 @@ src/lib/wallDetect.ts                                    Wall, door and window d
 shared/types.ts Types shared between the Worker and the React app
 src/            React app (pages/, components/, actions/, lib/)
 src/styles/ds/  Sandstone design system tokens + component CSS (ported as-is)
-migrations/     D1 schema (0002: dates, audit log, regions; 0003: three-section board, task fields, subtasks; 0004: milestones, dependencies; 0005: applicant tracking and CRM; 0006: CV tables shared with the careers site; 0007: drops the audit log, as the portal has one user; 0008: threat modelling; 0009: NSW crime statistics and site LGAs; 0010: level geometry, plan scale and cameras; 0011–0013: Intelligence map coordinates, item locations and types; 0014: background checks and intel ageing; 0015: investigations; 0016: real-camera snapshots and live feed links; 0017: board tasks that follow investigations)
+migrations/     D1 schema (0002: dates, audit log, regions; 0003: three-section board, task fields, subtasks; 0004: milestones, dependencies; 0005: applicant tracking and CRM; 0006: CV tables shared with the careers site; 0007: drops the audit log, as the portal has one user; 0008: threat modelling; 0009: NSW crime statistics and site LGAs; 0010: level geometry, plan scale and cameras; 0011–0013: Intelligence map coordinates, item locations and types; 0014: background checks and intel ageing; 0015: investigations; 0016: real-camera snapshots and live feed links; 0017: board tasks that follow investigations; 0018: case notes)
 seed/           Fictional demo data for local development
 ```

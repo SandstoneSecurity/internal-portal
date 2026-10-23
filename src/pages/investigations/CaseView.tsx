@@ -1,6 +1,6 @@
 import { lazy, Suspense, useRef, useState } from "react";
 import { ArrowLeft, Download, Lock, Paperclip, Pencil, Plus, Search } from "lucide-react";
-import { CASE_STATUSES, analyseTimeline, type CaseDetail, type CaseEvent, type Evidence, type Report } from "../../../shared/investigations";
+import { CASE_STATUSES, analyseTimeline, type CaseDetail, type CaseEvent, type CaseNote, type Evidence, type Report } from "../../../shared/investigations";
 import { useActions } from "../../actions/ActionHost";
 import { Badge } from "../../components/ui/Badge";
 import { Empty, RowMenu, Tabs } from "../../components/ui/Bits";
@@ -141,7 +141,7 @@ export function CaseView({ id, tab, onTab, onBack }: { id: number; tab: CaseTab;
 
       <Tabs id="case" tabs={CASE_TABS} value={tab} onChange={onTab} counts={counts} />
 
-      {tab === "Overview" && <Overview d={d} findings={findings.length} onTab={onTab} />}
+      {tab === "Overview" && <Overview d={d} findings={findings.length} onTab={onTab} act={act} readOnly={readOnly} />}
       {tab === "Evidence" && (
         <EvidenceTab
           d={d}
@@ -165,7 +165,123 @@ export function CaseView({ id, tab, onTab, onBack }: { id: number; tab: CaseTab;
   );
 }
 
-function Overview({ d, findings, onTab }: { d: CaseDetail; findings: number; onTab: (t: CaseTab) => void }) {
+type Act = (fn: () => Promise<unknown>, ok?: { title: string; desc?: string }) => Promise<boolean>;
+
+/** One note: its own author can change or remove it while the case is open. */
+function NoteItem({ n, d, act, mine, readOnly }: { n: CaseNote; d: CaseDetail; act: Act; mine: boolean; readOnly: boolean }) {
+  const confirm = useConfirm();
+  const [draft, setDraft] = useState<string | null>(null);
+  const save = async () => {
+    const body = draft?.trim() ?? "";
+    if (!body) return;
+    if (body === n.body) return setDraft(null);
+    if (await act(() => send("PATCH", `/inv-notes/${n.id}`, { body }), { title: "Note updated" })) setDraft(null);
+  };
+  const remove = async () => {
+    if (!(await confirm({ title: "Remove this note?", body: "What it said stays in the case's audit log.", confirmLabel: "Remove", danger: true }))) return;
+    await act(() => send("DELETE", `/inv-notes/${n.id}`), { title: "Note removed", desc: d.ref });
+  };
+  return (
+    <li className="pt-note">
+      <div className="pt-note__meta">
+        <span className="pt-reg__mono">{when(n.createdAt)}</span>
+        <span>{n.createdBy}</span>
+        {n.updatedAt && <span className="pt-dim" title={`Edited ${when(n.updatedAt)}`}>edited</span>}
+        {mine && !readOnly && draft === null && (
+          <span className="pt-note__tools">
+            <button type="button" className="pt-addlink" onClick={() => setDraft(n.body)}>
+              Edit
+            </button>
+            <button type="button" className="pt-addlink pt-danger-link" onClick={() => void remove()}>
+              Remove
+            </button>
+          </span>
+        )}
+      </div>
+      {draft === null ? (
+        <p className="pt-note__body">{n.body}</p>
+      ) : (
+        <div className="pt-note__edit">
+          <textarea
+            className="pt-input pt-textarea"
+            aria-label="Edit note"
+            rows={4}
+            maxLength={8000}
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) void save();
+              else if (e.key === "Escape") (e.stopPropagation(), setDraft(null));
+            }}
+          />
+          <div className="pt-note__actions">
+            <button type="button" className="sds-btn sds-btn--sm sds-btn--primary" disabled={!draft.trim()} onClick={() => void save()}>
+              Save note
+            </button>
+            <button type="button" className="sds-btn sds-btn--sm sds-btn--ghost" onClick={() => setDraft(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </li>
+  );
+}
+
+/** Running notes on the case summary: calls, decisions, lines of inquiry. Each is dated and attributed. */
+function CaseNotes({ d, act, readOnly }: { d: CaseDetail; act: Act; readOnly: boolean }) {
+  const me = usePortal().me.email.toLowerCase();
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const add = async () => {
+    const body = draft.trim();
+    if (!body || busy) return;
+    setBusy(true);
+    if (await act(() => send("POST", `/investigations/${d.id}/notes`, { body }), { title: "Note added", desc: d.ref })) setDraft("");
+    setBusy(false);
+  };
+  return (
+    <section className="pt-case__notes" aria-label="Case notes">
+      <h3 className="pt-meta">
+        Case notes{d.notes.length > 0 && <span className="pt-dim"> · {d.notes.length}</span>}
+      </h3>
+      {!readOnly && (
+        <div className="pt-note__new">
+          <textarea
+            className="pt-input pt-textarea"
+            aria-label="New note"
+            rows={3}
+            maxLength={8000}
+            placeholder="Add a note: a call with the client, a decision, a line of inquiry, what's next…"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) void add();
+            }}
+          />
+          <div className="pt-note__actions">
+            <button type="button" className="sds-btn sds-btn--sm sds-btn--primary" disabled={!draft.trim() || busy} aria-busy={busy} onClick={() => void add()}>
+              Add note
+            </button>
+            <span className="pt-meta pt-hide-sm">Ctrl Enter to add · dated, signed and kept in the audit log</span>
+          </div>
+        </div>
+      )}
+      {d.notes.length === 0 ? (
+        <p className="pt-dim pt-case__nonotes">{readOnly ? "No notes were added to this case." : "No notes yet."}</p>
+      ) : (
+        <ol className="pt-notes">
+          {d.notes.map((n) => (
+            <NoteItem key={n.id} n={n} d={d} act={act} mine={n.createdBy.toLowerCase() === me} readOnly={readOnly} />
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
+function Overview({ d, findings, onTab, act, readOnly }: { d: CaseDetail; findings: number; onTab: (t: CaseTab) => void; act: Act; readOnly: boolean }) {
   const actions = useActions();
   const stats: [CaseTab, number, string][] = [
     ["Evidence", d.evidenceItems.length, `${d.evidenceItems.filter((e) => e.file).length} with files held`],
@@ -191,6 +307,7 @@ function Overview({ d, findings, onTab }: { d: CaseDetail; findings: number; onT
           <h3 className="pt-meta">Lawful basis</h3>
           <p>{d.legalBasis || <span className="pt-dim">Not recorded yet.</span>}</p>
         </section>
+        <CaseNotes d={d} act={act} readOnly={readOnly} />
       </div>
       <aside className="pt-file">
         <div className="pt-file__pad">

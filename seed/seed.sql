@@ -6,6 +6,7 @@
 -- Board tasks that follow a case point at it, so let go of the cases first.
 UPDATE ops_cards SET case_id = NULL;
 DELETE FROM inv_log;
+DELETE FROM inv_notes;
 DELETE FROM inv_links;
 DELETE FROM inv_events;
 DELETE FROM inv_entities;
@@ -388,6 +389,10 @@ INSERT INTO inv_cases (id, client_id, title, kind, instructions, legal_basis, re
  date('now', '-23 days'), 'Tom Ashby, operations manager', 'Active', 'WC', '', date('now', '+12 days'), 4, 'william@sandstonesecurity.com', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-22 days')),
 (2, 1, 'Concierge contractor conduct, Kent Street', 'Workplace misconduct', 'Review complaints about the after-hours concierge contractor.', 'Client instruction under the services agreement.', date('now', '-60 days'), 'Fiona Standish', 'Closed', 'MK', '', date('now', '-30 days'), 0, 'william@sandstonesecurity.com', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-58 days'));
 UPDATE inv_cases SET closed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-29 days') WHERE id = 2;
+
+INSERT INTO inv_notes (case_id, body, created_by, created_at, updated_at) VALUES
+(1, 'Call with Tom Ashby: the client wants a view on the night supervisor before the 30 Oct roster is published. Agreed to brief him on progress weekly, Fridays.', 'william@sandstonesecurity.com', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-18 days'), NULL),
+(1, 'Next: ask the weighbridge vendor for the raw event log for 8 Sep, to rule out the dockets being edited after the fact.', 'william@sandstonesecurity.com', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-4 days'), NULL);
 
 -- Their tasks on the operations board, which follow the cases' dates, lead and status.
 INSERT INTO ops_cards (id, column_id, ref, title, site, line, due_label, is_late, owner_initials, sort_order, description, priority, start_date, due_date, created_at, completed_at, case_id) VALUES

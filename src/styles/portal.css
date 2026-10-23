@@ -2341,6 +2341,18 @@ button.pt-risk-table__row:hover { background: var(--surface-sunken); }
 .pt-case__brief { margin-top: 22px; }
 .pt-case__brief h3 { margin: 18px 0 6px; }
 .pt-case__brief p { margin: 0; font-size: 14px; line-height: 1.6; white-space: pre-line; max-width: 72ch; }
+.pt-case__notes { margin-top: 28px; max-width: 72ch; }
+.pt-case__notes > h3 { margin: 0 0 10px; }
+.pt-case__nonotes { margin: 10px 0 0; font-size: 13px; }
+.pt-note__new, .pt-note__edit { display: flex; flex-direction: column; gap: 8px; }
+.pt-note__new textarea, .pt-note__edit textarea { width: 100%; min-height: 76px; resize: vertical; font: inherit; font-size: 14px; line-height: 1.5; }
+.pt-note__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pt-notes { list-style: none; margin: 16px 0 0; padding: 0; border-top: var(--border-hair) solid var(--border-subtle); }
+.pt-note { padding: 12px 0 14px; border-bottom: var(--border-hair) solid var(--border-subtle); }
+.pt-note__meta { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--text-secondary); }
+.pt-note__tools { margin-left: auto; display: inline-flex; gap: 14px; }
+.pt-note__body { margin: 6px 0 0; font-size: 14px; line-height: 1.6; white-space: pre-line; overflow-wrap: anywhere; }
+.pt-note__edit { margin-top: 8px; }
 @media (max-width: 900px) { .pt-case__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 .pt-ev { margin-top: 16px; grid-template-columns: minmax(0, 1fr) 380px; }

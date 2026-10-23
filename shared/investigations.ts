@@ -162,6 +162,16 @@ export interface Report {
   createdAt: string;
 }
 
+/** A running note on the case's summary, dated and attributed. */
+export interface CaseNote {
+  id: number;
+  body: string;
+  createdBy: string;
+  createdAt: string;
+  /** When it was last changed, if it has been. */
+  updatedAt: string | null;
+}
+
 export interface LogEntry {
   id: number;
   at: string;
@@ -184,6 +194,8 @@ export interface CaseDetail extends CaseSummary {
   links: Link[];
   events: CaseEvent[];
   reports: Report[];
+  /** Newest first. */
+  notes: CaseNote[];
   log: LogEntry[];
 }
 
