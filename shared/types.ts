@@ -165,6 +165,8 @@ export interface OpsCard {
   who: string;
   /** A milestone has one date (its due date) and is drawn as a diamond. */
   milestone: boolean;
+  /** The investigation this task follows: its title, client, dates and assignee come from the case. */
+  case: { id: number; ref: string } | null;
   /** Ids of the tasks this one waits on. */
   blockedBy: number[];
   subtasks: OpsSubtask[];

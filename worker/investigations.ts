@@ -22,6 +22,7 @@ import {
   type EventBasis,
 } from "../shared/investigations";
 import { kindFor } from "../shared/types";
+import { dropCaseCard, syncCaseCard } from "./caseBoard";
 import { nowIso, todaySydney } from "./dates";
 import { findSuburb } from "./geocode";
 import { BadRequest, NotFound, body, handleApiError, id, optDate, optInitials, optText, param, text, type Ctx, type Env } from "./writes";
@@ -235,8 +236,9 @@ const fileOf = (f: FileRow | undefined): CaseFile | null => (f ? { id: f.id, nam
 investigations.get("/investigations/:id", async (c) => {
   const kase = await caseFor(c, param(c));
   const db = c.env.DB;
-  const [client, evidence, files, entities, links, events, reports, log] = await Promise.all([
+  const [client, task, evidence, files, entities, links, events, reports, log] = await Promise.all([
     kase.client_id ? db.prepare(`SELECT org FROM clients WHERE id = ?`).bind(kase.client_id).first<{ org: string }>() : null,
+    db.prepare(`SELECT id, ref FROM ops_cards WHERE case_id = ?`).bind(kase.id).first<{ id: number; ref: string }>(),
     db.prepare(`SELECT * FROM inv_evidence WHERE case_id = ? ORDER BY seq`).bind(kase.id).all<Record<string, unknown>>(),
     db.prepare(`SELECT id, name, mime, size, sha256 FROM inv_files WHERE case_id = ?`).bind(kase.id).all<FileRow>(),
     db.prepare(`SELECT * FROM inv_entities WHERE case_id = ? ORDER BY id`).bind(kase.id).all<Record<string, unknown>>(),
@@ -255,6 +257,7 @@ investigations.get("/investigations/:id", async (c) => {
     requestedBy: kase.requested_by,
     access: accessList(kase.access),
     createdBy: kase.created_by,
+    boardTask: task ?? null,
     evidenceItems: evidence.results.map((e) => ({
       id: e.id as number,
       ref: evidenceRef(e.seq as number),
@@ -343,28 +346,34 @@ const CASE_COLUMNS = {
 /** An access list always includes whoever set it, so nobody locks themselves out. */
 const withMe = (c: Ctx, list: string[]) => (list.length && !list.includes(c.get("userEmail").toLowerCase()) ? [...list, c.get("userEmail").toLowerCase()] : list);
 
+const clientOrg = (c: Ctx, clientId: number | null) =>
+  clientId ? c.env.DB.prepare(`SELECT org FROM clients WHERE id = ?`).bind(clientId).first<string>("org") : Promise.resolve(null);
+
 investigations.post("/investigations", async (c) => {
   const v = await body(c, schemas.case);
-  if (!(await c.env.DB.prepare(`SELECT 1 FROM clients WHERE id = ?`).bind(v.clientId).first())) throw new BadRequest("Some fields need attention.", { clientId: "Choose a client" });
+  const org = await clientOrg(c, v.clientId);
+  if (org === null) throw new BadRequest("Some fields need attention.", { clientId: "Choose a client" });
   const me = c.get("userEmail");
   const db = c.env.DB;
+  const access = withMe(c, v.access).join(",");
   const row = await db
     .prepare(
       `INSERT INTO inv_cases (client_id, title, kind, instructions, legal_basis, requested_at, requested_by, status, lead, access, due_date, created_by, created_at, closed_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
     )
-    .bind(v.clientId, v.title, v.kind, v.instructions, v.legalBasis, v.requestedAt, v.requestedBy, v.status, v.lead, withMe(c, v.access).join(","), v.dueDate, me, nowIso(), v.status === "Closed" ? nowIso() : null)
+    .bind(v.clientId, v.title, v.kind, v.instructions, v.legalBasis, v.requestedAt, v.requestedBy, v.status, v.lead, access, v.dueDate, me, nowIso(), v.status === "Closed" ? nowIso() : null)
     .first<{ id: number }>();
   const caseId = row!.id;
-  await logStmt(c, caseId, "Opened case", `${caseRef(caseId)} · ${v.title}`).run();
+  const board = await syncCaseCard(db, { id: caseId, title: v.title, status: v.status, lead: v.lead, access, requested_at: v.requestedAt, due_date: v.dueDate }, org, true);
+  await db.batch([logStmt(c, caseId, "Opened case", `${caseRef(caseId)} · ${v.title}`), ...board]);
   return c.json({ id: caseId, ref: caseRef(caseId) }, 201);
 });
 
 investigations.patch("/investigations/:id", async (c) => {
   const kase = await caseFor(c, param(c));
   const v = await body(c, schemas.case, true);
-  if (v.clientId !== undefined && !(await c.env.DB.prepare(`SELECT 1 FROM clients WHERE id = ?`).bind(v.clientId).first()))
-    throw new BadRequest("Some fields need attention.", { clientId: "Choose a client" });
+  const org = await clientOrg(c, v.clientId ?? kase.client_id);
+  if (v.clientId !== undefined && org === null) throw new BadRequest("Some fields need attention.", { clientId: "Choose a client" });
   // Only a status change may touch a closed case (to reopen it).
   if (kase.status === "Closed" && Object.keys(v).some((k) => k !== "status")) open(kase);
   const access = v.access === undefined ? undefined : withMe(c, v.access).join(",");
@@ -376,9 +385,21 @@ investigations.patch("/investigations/:id", async (c) => {
   if (access !== undefined && access !== kase.access) changes.push(`access ${access ? access.split(",").join(", ") : "everyone with portal access"}`);
   const other = Object.keys(v).filter((k) => k !== "status" && k !== "access" && (v as Record<string, unknown>)[k] !== (kase as unknown as Record<string, unknown>)[CASE_COLUMNS[k as keyof typeof CASE_COLUMNS]]);
   if (other.length) changes.push(other.join(", "));
+  // The case as it will be, for its task on the operations board.
+  const after = {
+    id: kase.id,
+    title: v.title ?? kase.title,
+    status: v.status ?? kase.status,
+    lead: v.lead ?? kase.lead,
+    access: access ?? kase.access,
+    requested_at: v.requestedAt !== undefined ? v.requestedAt : kase.requested_at,
+    due_date: v.dueDate !== undefined ? v.dueDate : kase.due_date,
+  };
+  const board = await syncCaseCard(c.env.DB, after, org, v.status !== undefined && v.status !== kase.status);
   await c.env.DB.batch([
     c.env.DB.prepare(`UPDATE inv_cases SET ${sql} WHERE id = ?`).bind(...binds, kase.id),
     ...(changes.length ? [logStmt(c, kase.id, v.status === "Closed" && kase.status !== "Closed" ? "Closed case" : v.status && kase.status === "Closed" ? "Reopened case" : "Updated case", changes.join("; "))] : []),
+    ...board,
   ]);
   return c.json({ ok: true });
 });
@@ -387,6 +408,7 @@ investigations.delete("/investigations/:id", async (c) => {
   const kase = await caseFor(c, param(c));
   const db = c.env.DB;
   await db.batch([
+    ...dropCaseCard(db, kase.id),
     db.prepare(`DELETE FROM inv_log WHERE case_id = ?`).bind(kase.id),
     db.prepare(`DELETE FROM inv_links WHERE case_id = ?`).bind(kase.id),
     db.prepare(`DELETE FROM inv_events WHERE case_id = ?`).bind(kase.id),

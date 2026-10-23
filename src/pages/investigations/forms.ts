@@ -31,7 +31,7 @@ export function caseFields(clients: Client[], creating: boolean): FieldSpec[] {
     { name: "lead", label: "Lead investigator (initials)", type: "initials", half: true, placeholder: "WC" },
     { name: "requestedAt", label: "Requested on", type: "date", half: true },
     { name: "requestedBy", label: "Requested by", max: 120, placeholder: "Who at the client asked, and their role" },
-    { name: "dueDate", label: "Report due", type: "date", half: true },
+    { name: "dueDate", label: "Report due", type: "date", half: true, hint: "With a date, the case gets a task on the operations board that follows its dates, lead and status." },
     { name: "instructions", label: "Instructions", type: "textarea", max: 8000, placeholder: "What the client asked for, the questions to answer, and the scope agreed." },
     {
       name: "legalBasis",
@@ -45,7 +45,7 @@ export function caseFields(clients: Client[], creating: boolean): FieldSpec[] {
       label: "Who can see this case",
       max: 2000,
       placeholder: "Leave empty for everyone with portal access, or list emails",
-      hint: "With emails listed, only those people (and you) can see the case or its evidence.",
+      hint: "With emails listed, only those people (and you) can see the case or its evidence. Its task on the operations board then shows only its reference.",
     },
   ];
 }

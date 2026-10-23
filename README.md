@@ -29,7 +29,8 @@ recruitment and background checks), Clients (CRM), Intelligence and Investigatio
   can be edited and deleted from their row menu or file panel.
 - **Operations task board.** Three sections: To do, In progress and Complete.
   - **Cards** show the service line and priority tags, the assignee and the
-    start–due dates. Past-due dates show in clay; dates due today or tomorrow
+    start–due dates. A task that follows an investigation also shows the
+    case's reference (see Investigations). Past-due dates show in clay; dates due today or tomorrow
     show in eucalypt.
   - **Subtask progress** is shown on each card, and the subtasks expand in
     place.
@@ -393,6 +394,7 @@ rates per 100,000 by LGA.
 **Investigations** (`/investigations`) holds cases for private-investigator work, each opened on a
 client's request. The client is chosen from Clients, and their record lists their cases.
 Everything lives in `worker/investigations.ts`, `shared/investigations.ts` and migration 0015.
+Cases with dates also appear on the Operations board (below).
 
 ### The case record
 
@@ -403,6 +405,26 @@ Everything lives in `worker/investigations.ts`, `shared/investigations.ts` and m
 - **Who can see a case:** list emails under "Who can see this case" and only those people (and
   whoever set the list) can see the case, its evidence or its files. Everyone else gets "not found".
   An empty list means everyone with portal access.
+
+### On the operations board
+
+Once a case has a date (when the client asked, or when the report is due) it gets a task on the
+Operations board and timeline (`worker/caseBoard.ts`, migration 0017).
+
+- **What follows the case:** the task's title, client, assignee (the lead) and dates (requested →
+  start, report due → due) are the case's. They're changed in the case; the board and timeline show
+  them read-only and the API refuses edits to them. A request date after the due date isn't used as
+  the start.
+- **Sections:** a change of status moves the task. Intake goes to To do; Active, On hold and
+  Reporting go to In progress; Closed goes to Complete. Otherwise the task can be dragged freely,
+  and stays where it's put until the status next changes.
+- **The board's own:** priority, service line (Advisory to start with), description, subtasks and
+  dependencies.
+- **Restricted cases:** the board is open to everyone, so a case with an access list shows there
+  only as "Restricted investigation" with its reference, without its title or client.
+- **Links both ways:** the card carries the case's reference, the task opens the case, and the case
+  record shows its task. Clearing a case's dates keeps the task, undated. Deleting the case deletes
+  the task; the board can't delete it on its own.
 
 ### Evidence register
 
@@ -534,7 +556,7 @@ input returns `400 {error, fields}`.
 | POST · PATCH · DELETE | `/api/intel[/:id]` | Intelligence feed (a new `place` re-places the pin) |
 | POST · PATCH · DELETE | `/api/checks[/:id]` | Background check files (`package` on create; `consentDate`, `closed` to send or reopen) |
 | POST · PATCH · DELETE | `/api/checks/:id/items`, `/api/check-items/:id` | Checks on a file (`kind`, `result`, `finding`) |
-| GET · POST · PATCH · DELETE | `/api/investigations[/:id]` | Cases (GET one returns the whole case; access-checked) |
+| GET · POST · PATCH · DELETE | `/api/investigations[/:id]` | Cases (GET one returns the whole case; access-checked). Creating or changing a case with dates keeps its board task in step |
 | POST | `/api/investigations/:id/evidence`, `…/captures`, `…/entities`, `…/links`, `…/events`, `…/reports` | Add evidence, capture a web page, add to the link chart and timeline, issue a report version |
 | PATCH · DELETE | `/api/inv-evidence/:id`, `/api/inv-entities/:id`, `/api/inv-links/:id`, `/api/inv-events/:id` | Edit or remove (logged) |
 | PUT | `/api/inv-evidence/:id/file?name=`, `/api/inv-reports/:id/file?name=` | Attach a file (raw body, up to 20 MB; once) |
@@ -612,6 +634,6 @@ src/lib/wallDetect.ts                                    Wall, door and window d
 shared/types.ts Types shared between the Worker and the React app
 src/            React app (pages/, components/, actions/, lib/)
 src/styles/ds/  Sandstone design system tokens + component CSS (ported as-is)
-migrations/     D1 schema (0002: dates, audit log, regions; 0003: three-section board, task fields, subtasks; 0004: milestones, dependencies; 0005: applicant tracking and CRM; 0006: CV tables shared with the careers site; 0007: drops the audit log, as the portal has one user; 0008: threat modelling; 0009: NSW crime statistics and site LGAs; 0010: level geometry, plan scale and cameras; 0011–0013: Intelligence map coordinates, item locations and types; 0014: background checks and intel ageing; 0015: investigations; 0016: real-camera snapshots and live feed links)
+migrations/     D1 schema (0002: dates, audit log, regions; 0003: three-section board, task fields, subtasks; 0004: milestones, dependencies; 0005: applicant tracking and CRM; 0006: CV tables shared with the careers site; 0007: drops the audit log, as the portal has one user; 0008: threat modelling; 0009: NSW crime statistics and site LGAs; 0010: level geometry, plan scale and cameras; 0011–0013: Intelligence map coordinates, item locations and types; 0014: background checks and intel ageing; 0015: investigations; 0016: real-camera snapshots and live feed links; 0017: board tasks that follow investigations)
 seed/           Fictional demo data for local development
 ```

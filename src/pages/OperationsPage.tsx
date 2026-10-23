@@ -1,6 +1,6 @@
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ListTree, Plus, Search } from "lucide-react";
+import { FolderSearch, ListTree, Plus, Search } from "lucide-react";
 import type { OpsCard, OpsColumn } from "../../shared/types";
 import { useActions } from "../actions/ActionHost";
 import { DragCard, type DropPoint } from "../components/DragCard";
@@ -29,6 +29,14 @@ function TaskCard({ card, info, today, flash }: { card: OpsCard; info: CardInfo 
       <div className="pt-tcard__tags">
         <Chip hue={LINE_HUE[card.line] ?? "slate"}>{card.line}</Chip>
         {card.milestone && <Chip hue="slate">Milestone</Chip>}
+        {card.case && (
+          <span title={`Follows investigation ${card.case.ref}: its dates, lead and status come from the case`}>
+            <Chip hue="slate">
+              <FolderSearch size={11} aria-hidden />
+              {card.case.ref}
+            </Chip>
+          </span>
+        )}
         {card.priority !== "None" && (
           <Chip hue={PRIORITY_HUE[card.priority] ?? "slate"} dot>
             {card.priority}

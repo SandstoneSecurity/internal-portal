@@ -166,6 +166,7 @@ export function CaseView({ id, tab, onTab, onBack }: { id: number; tab: CaseTab;
 }
 
 function Overview({ d, findings, onTab }: { d: CaseDetail; findings: number; onTab: (t: CaseTab) => void }) {
+  const actions = useActions();
   const stats: [CaseTab, number, string][] = [
     ["Evidence", d.evidenceItems.length, `${d.evidenceItems.filter((e) => e.file).length} with files held`],
     ["Link chart", d.entities.length, `${d.links.length} links · ${d.links.filter((l) => !l.evidenceId).length} not yet evidenced`],
@@ -212,6 +213,18 @@ function Overview({ d, findings, onTab }: { d: CaseDetail; findings: number; onT
                 <span className="pt-fact__v">{v}</span>
               </div>
             ))}
+            <div className="pt-fact">
+              <span className="pt-fact__k">On the board</span>
+              <span className="pt-fact__v">
+                {d.boardTask ? (
+                  <button type="button" className="pt-addlink" title="Its task on the operations board, which follows this case's dates, lead and status" onClick={() => actions.openTask(d.boardTask!.id)}>
+                    {d.boardTask.ref}
+                  </button>
+                ) : (
+                  "Once it has a date"
+                )}
+              </span>
+            </div>
           </div>
           <div className="pt-file__block">
             <span className="pt-meta">Who can see it</span>
