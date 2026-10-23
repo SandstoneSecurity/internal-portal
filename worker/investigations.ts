@@ -102,6 +102,7 @@ const schemas = {
     entityIds: z.array(id).max(50).default([]),
   }),
   report: z.object({ title: text(200), summary: optText(8000) }),
+  note: z.object({ body: text(8000) }),
 };
 
 // ── Access ──────────────────────────────────────────────────────────────────
@@ -236,7 +237,7 @@ const fileOf = (f: FileRow | undefined): CaseFile | null => (f ? { id: f.id, nam
 investigations.get("/investigations/:id", async (c) => {
   const kase = await caseFor(c, param(c));
   const db = c.env.DB;
-  const [client, task, evidence, files, entities, links, events, reports, log] = await Promise.all([
+  const [client, task, evidence, files, entities, links, events, reports, notes, log] = await Promise.all([
     kase.client_id ? db.prepare(`SELECT org FROM clients WHERE id = ?`).bind(kase.client_id).first<{ org: string }>() : null,
     db.prepare(`SELECT id, ref FROM ops_cards WHERE case_id = ?`).bind(kase.id).first<{ id: number; ref: string }>(),
     db.prepare(`SELECT * FROM inv_evidence WHERE case_id = ? ORDER BY seq`).bind(kase.id).all<Record<string, unknown>>(),
@@ -245,6 +246,10 @@ investigations.get("/investigations/:id", async (c) => {
     db.prepare(`SELECT * FROM inv_links WHERE case_id = ? ORDER BY id`).bind(kase.id).all<Record<string, unknown>>(),
     db.prepare(`SELECT * FROM inv_events WHERE case_id = ? ORDER BY starts_at, id`).bind(kase.id).all<Record<string, unknown>>(),
     db.prepare(`SELECT * FROM inv_reports WHERE case_id = ? ORDER BY version DESC`).bind(kase.id).all<Record<string, unknown>>(),
+    db
+      .prepare(`SELECT id, body, created_by, created_at, updated_at FROM inv_notes WHERE case_id = ? ORDER BY created_at DESC, id DESC`)
+      .bind(kase.id)
+      .all<{ id: number; body: string; created_by: string; created_at: string; updated_at: string | null }>(),
     db.prepare(`SELECT id, at, actor, action, detail FROM inv_log WHERE case_id = ? ORDER BY id DESC LIMIT 500`).bind(kase.id).all<{ id: number; at: string; actor: string; action: string; detail: string }>(),
   ]);
   const fileById = new Map(files.results.map((f) => [f.id, f]));
@@ -321,6 +326,7 @@ investigations.get("/investigations/:id", async (c) => {
       createdBy: r.created_by as string,
       createdAt: r.created_at as string,
     })),
+    notes: notes.results.map((n) => ({ id: n.id, body: n.body, createdBy: n.created_by, createdAt: n.created_at, updatedAt: n.updated_at })),
     log: log.results,
   };
   return c.json(detail);
@@ -410,6 +416,7 @@ investigations.delete("/investigations/:id", async (c) => {
   await db.batch([
     ...dropCaseCard(db, kase.id),
     db.prepare(`DELETE FROM inv_log WHERE case_id = ?`).bind(kase.id),
+    db.prepare(`DELETE FROM inv_notes WHERE case_id = ?`).bind(kase.id),
     db.prepare(`DELETE FROM inv_links WHERE case_id = ?`).bind(kase.id),
     db.prepare(`DELETE FROM inv_events WHERE case_id = ?`).bind(kase.id),
     db.prepare(`DELETE FROM inv_entities WHERE case_id = ?`).bind(kase.id),
@@ -802,6 +809,46 @@ investigations.delete("/inv-events/:id", async (c) => {
     c.env.DB.prepare(`DELETE FROM inv_events WHERE id = ?`).bind(param(c)),
     logStmt(c, kase.id, "Removed event", `${row.starts_at.replace("T", " ")} · ${row.title}`),
   ]);
+  return c.json({ ok: true });
+});
+
+// ── Notes ───────────────────────────────────────────────────────────────────
+
+type NoteRow = { id: number; case_id: number; body: string; created_by: string };
+
+/** A note, which only whoever wrote it may change or remove (in an open case). */
+async function ownNote(c: Ctx, noteId: number) {
+  const { row, kase } = await child<NoteRow>(c, "inv_notes", noteId);
+  open(kase);
+  if (row.created_by.toLowerCase() !== c.get("userEmail").toLowerCase()) throw new BadRequest(`Only ${row.created_by} can change this note.`);
+  return { row, kase };
+}
+
+investigations.post("/investigations/:id/notes", async (c) => {
+  const kase = open(await caseFor(c, param(c)));
+  const v = await body(c, schemas.note);
+  const [ins] = await c.env.DB.batch([
+    c.env.DB.prepare(`INSERT INTO inv_notes (case_id, body, created_by, created_at) VALUES (?, ?, ?, ?) RETURNING id`).bind(kase.id, v.body, c.get("userEmail"), nowIso()),
+    logStmt(c, kase.id, "Added note", short(v.body)),
+  ]);
+  return c.json({ id: (ins!.results[0] as { id: number }).id }, 201);
+});
+
+investigations.patch("/inv-notes/:id", async (c) => {
+  const { row, kase } = await ownNote(c, param(c));
+  const v = await body(c, schemas.note);
+  if (v.body === row.body) return c.json({ ok: true });
+  await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE inv_notes SET body = ?, updated_at = ? WHERE id = ?`).bind(v.body, nowIso(), row.id),
+    // The log keeps what it said before, so a changed note can't quietly rewrite the record.
+    logStmt(c, kase.id, "Edited note", `was: ${short(row.body, 400)}`),
+  ]);
+  return c.json({ ok: true });
+});
+
+investigations.delete("/inv-notes/:id", async (c) => {
+  const { row, kase } = await ownNote(c, param(c));
+  await c.env.DB.batch([c.env.DB.prepare(`DELETE FROM inv_notes WHERE id = ?`).bind(row.id), logStmt(c, kase.id, "Removed note", short(row.body, 400))]);
   return c.json({ ok: true });
 });
 
