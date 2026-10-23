@@ -430,6 +430,7 @@ export function ActionProvider({ children }: { children: ReactNode }) {
           late: false,
           who: "",
           milestone: false,
+          case: null,
           blockedBy: [],
           subtasks: [],
         };

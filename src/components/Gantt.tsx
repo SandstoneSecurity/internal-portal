@@ -6,6 +6,7 @@ import { indexBoard, type CardInfo } from "../lib/board";
 import { addDays, daysBetween, friendlyDate } from "../lib/format";
 import { PROGRESS_HUE, PROGRESS_LABEL, columnHue, hueClass, type ProgressState } from "../lib/hues";
 import { Avatar, CheckCircle } from "./ui/TaskBits";
+import { useToast } from "./ui/Toast";
 
 /** Pixels per day at each zoom. */
 const ZOOMS = [
@@ -81,6 +82,7 @@ interface Arrow {
 
 export function Gantt({ columns, today }: { columns: OpsColumn[]; today: string }) {
   const actions = useActions();
+  const toast = useToast();
   const index = useMemo(() => indexBoard(columns), [columns]);
   const [zoom, setZoom] = useState<ZoomKey>(() => {
     try {
@@ -234,7 +236,8 @@ export function Gantt({ columns, today }: { columns: OpsColumn[]; today: string 
     span: Span,
     mode: "move" | "start" | "end",
     commit: (start: string, due: string, mode: "move" | "start" | "end") => void,
-    open: () => void
+    open: () => void,
+    locked = false
   ) => {
     if (e.button !== 0) return;
     e.stopPropagation();
@@ -246,7 +249,8 @@ export function Gantt({ columns, today }: { columns: OpsColumn[]; today: string 
     const compute = () => {
       const dx = st.lastX - st.x0 + (el.scrollLeft - st.sl0);
       if (Math.abs(dx) > 3) st.moved = true;
-      const dd = Math.round(dx / ppd);
+      // A task that follows a case keeps its dates: it can be clicked open but not dragged.
+      const dd = locked ? 0 : Math.round(dx / ppd);
       let start = span.start;
       let due = span.due;
       if (mode === "move") (start = addDays(span.start, dd)), (due = addDays(span.due, dd));
@@ -283,7 +287,8 @@ export function Gantt({ columns, today }: { columns: OpsColumn[]; today: string 
         open();
         return;
       }
-      if (result.start !== span.start || result.due !== span.due) commit(result.start, result.due, mode);
+      if (locked) commit(span.start, span.due, mode);
+      else if (result.start !== span.start || result.due !== span.due) commit(result.start, result.due, mode);
       setPreview(null);
     };
     window.addEventListener("pointermove", onMove);
@@ -294,6 +299,7 @@ export function Gantt({ columns, today }: { columns: OpsColumn[]; today: string 
 
   const commitTask = (info: CardInfo, span: Span) => (start: string, due: string, mode: "move" | "start" | "end") => {
     const k = info.card;
+    if (k.case) return toast({ title: `Dates follow ${k.case.ref}`, desc: "Change them in the investigation.", kind: "info" });
     if (k.milestone) void actions.patchWork(k, { dueDate: due });
     else if (mode === "end" && !span.explicitStart) void actions.patchWork(k, { dueDate: due });
     else void actions.patchWork(k, { startDate: start, dueDate: due });
@@ -329,7 +335,7 @@ export function Gantt({ columns, today }: { columns: OpsColumn[]; today: string 
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       el.classList.remove("is-panning");
-      if (st.moved || !row || row.kind !== "task" || row.info.card.dueDate) return;
+      if (st.moved || !row || row.kind !== "task" || row.info.card.dueDate || row.info.card.case) return;
       const day = addDays(range.from, Math.floor((ev.clientX - track.getBoundingClientRect().left) / ppd));
       const k = row.info.card;
       void actions.patchWork(k, k.milestone ? { dueDate: day } : { startDate: day, dueDate: addDays(day, 2) });
@@ -491,7 +497,7 @@ export function Gantt({ columns, today }: { columns: OpsColumn[]; today: string 
             tabIndex={0}
             aria-label={`Milestone ${label}`}
             title={`${k.title} · ${friendlyDate(span.due, today)}`}
-            onPointerDown={(e) => beginDrag(e, `t${k.id}`, base, "move", commit, open)}
+            onPointerDown={(e) => beginDrag(e, `t${k.id}`, base, "move", commit, open, !!k.case)}
             onKeyDown={(e) => nudge(e, base, commit, open)}
           >
             <span className="pt-gmile__shape" />
@@ -518,15 +524,19 @@ export function Gantt({ columns, today }: { columns: OpsColumn[]; today: string 
           tabIndex={0}
           aria-label={label}
           title={`${k.title} · ${friendlyDate(span.start, today)} – ${friendlyDate(span.due, today)}`}
-          onPointerDown={(e) => beginDrag(e, `t${k.id}`, base, "move", commit, open)}
+          onPointerDown={(e) => beginDrag(e, `t${k.id}`, base, "move", commit, open, !!k.case)}
           onKeyDown={(e) => nudge(e, base, commit, open)}
         >
           <span className="pt-gbar__body">
             <span className="pt-gbar__fill" style={{ width: `${pct}%` }} />
             {width > 64 && <span className="pt-gbar__label">{k.ref}</span>}
           </span>
-          <span className="pt-gbar__h pt-gbar__h--start" onPointerDown={(e) => beginDrag(e, `t${k.id}`, base, "start", commit, open)} />
-          <span className="pt-gbar__h pt-gbar__h--end" onPointerDown={(e) => beginDrag(e, `t${k.id}`, base, "end", commit, open)} />
+          {!k.case && (
+            <>
+              <span className="pt-gbar__h pt-gbar__h--start" onPointerDown={(e) => beginDrag(e, `t${k.id}`, base, "start", commit, open)} />
+              <span className="pt-gbar__h pt-gbar__h--end" onPointerDown={(e) => beginDrag(e, `t${k.id}`, base, "end", commit, open)} />
+            </>
+          )}
           <span className="pt-gbar__link" title="Drag to another task to make it wait on this" onPointerDown={(e) => beginLink(e, k.id)} />
         </div>
         {/* Clear of the link dot that appears at the bar's end on hover. */}
@@ -699,7 +709,7 @@ export function Gantt({ columns, today }: { columns: OpsColumn[]; today: string 
                     </button>
                     <Avatar initials={k.who} size={18} />
                   </div>
-                  <div className="pt-grow__track" style={{ width: trackW }} onPointerDown={(e) => beginPan(e, row)} title={k.dueDate ? undefined : "Click a day to schedule this task"}>
+                  <div className="pt-grow__track" style={{ width: trackW }} onPointerDown={(e) => beginPan(e, row)} title={k.dueDate || k.case ? undefined : "Click a day to schedule this task"}>
                     {renderTaskBar(row.info)}
                   </div>
                 </div>

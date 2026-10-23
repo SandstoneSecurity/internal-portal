@@ -3,6 +3,8 @@
 -- the business has data to load — the schema in migrations/0001_init.sql
 -- does not need to change to do that.
 
+-- Board tasks that follow a case point at it, so let go of the cases first.
+UPDATE ops_cards SET case_id = NULL;
 DELETE FROM inv_log;
 DELETE FROM inv_links;
 DELETE FROM inv_events;
@@ -386,6 +388,11 @@ INSERT INTO inv_cases (id, client_id, title, kind, instructions, legal_basis, re
  date('now', '-23 days'), 'Tom Ashby, operations manager', 'Active', 'WC', '', date('now', '+12 days'), 4, 'william@sandstonesecurity.com', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-22 days')),
 (2, 1, 'Concierge contractor conduct, Kent Street', 'Workplace misconduct', 'Review complaints about the after-hours concierge contractor.', 'Client instruction under the services agreement.', date('now', '-60 days'), 'Fiona Standish', 'Closed', 'MK', '', date('now', '-30 days'), 0, 'william@sandstonesecurity.com', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-58 days'));
 UPDATE inv_cases SET closed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-29 days') WHERE id = 2;
+
+-- Their tasks on the operations board, which follow the cases' dates, lead and status.
+INSERT INTO ops_cards (id, column_id, ref, title, site, line, due_label, is_late, owner_initials, sort_order, description, priority, start_date, due_date, created_at, completed_at, case_id) VALUES
+(15, 2, 'OP-237', 'Copper stock losses at the Port Kembla yard', 'Port Kembla Logistics', 'Advisory', '', 0, 'WC', 20, 'Follows investigation INV-0001.', 'High', date('now', '-23 days'), date('now', '+12 days'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-22 days'), NULL, 1),
+(16, 3, 'OP-238', 'Concierge contractor conduct, Kent Street', 'Harbourline Property Group', 'Advisory', '', 0, 'MK', 0, 'Follows investigation INV-0002.', 'None', date('now', '-60 days'), date('now', '-30 days'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-58 days'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-29 days'), 2);
 
 INSERT INTO inv_evidence (id, case_id, seq, title, kind, source, source_url, obtained_at, obtained_by, reliability, credibility, notes, created_by, created_at) VALUES
 (1, 1, 1, 'Weighbridge dockets 1–14 Sep', 'Document', 'Client records', '', date('now', '-21 days'), 'WC', 'A', '2', 'Three outbound loads on 8 Sep with no matching sales order.', 'william@sandstonesecurity.com', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-21 days')),

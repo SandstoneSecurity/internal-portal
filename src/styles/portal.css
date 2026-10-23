@@ -861,6 +861,22 @@ input.pt-edit { text-overflow: ellipsis; }
 .pt-task__title { margin-left: -9px; width: calc(100% + 9px); font-family: var(--font-display); font-size: var(--text-xl); line-height: 1.25; }
 .pt-task { display: flex; flex-direction: column; gap: 28px; }
 .pt-task__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.pt-task__title--fixed { display: block; margin-left: 0; width: auto; }
+/* A task that follows an investigation: the case owns its title, client, dates and lead. */
+.pt-task__case {
+  display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px;
+  border: var(--border-hair) solid var(--border-subtle); border-left: 3px solid var(--brass-500); background: var(--surface-sunken);
+  color: var(--text-secondary); font-size: 13px; line-height: 1.5;
+}
+.pt-task__case svg { flex: none; margin-top: 2px; color: var(--brass-500); }
+.pt-task__case p { margin: 0; flex: 1; min-width: 0; }
+.pt-task__case b { font-family: var(--font-mono); font-weight: 600; color: var(--text-primary); }
+.pt-task__caselink {
+  flex: none; align-self: center; font-size: 11px; font-weight: 600; letter-spacing: var(--track-caps); text-transform: uppercase;
+  color: var(--text-brand); text-decoration: none; border-bottom: 1px solid currentColor;
+}
+.pt-task__caselink:hover { color: var(--text-primary); }
+.pt-task__caselink:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .pt-complete {
   display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px; cursor: pointer;
   border: 1px solid var(--border-strong); background: transparent; color: var(--text-secondary);
@@ -881,6 +897,7 @@ input.pt-edit { text-overflow: ellipsis; }
   background: var(--field-bg); border: 1px solid var(--border-default); border-radius: var(--radius-sm);
 }
 .pt-datefield input:focus { outline: none; border-color: var(--brass-500); }
+.pt-datefield input:disabled { background: transparent; border-style: dashed; cursor: default; opacity: 1; }
 .pt-datefield--empty input { color: var(--text-tertiary); }
 .pt-datefield--late input { color: var(--status-breach-fg); border-color: color-mix(in srgb, var(--status-breach-dot) 55%, transparent); }
 .pt-datefield--soon input { color: var(--status-secure-fg); }
@@ -897,6 +914,9 @@ input.pt-edit { text-overflow: ellipsis; }
 .pt-seg__btn:hover { border-color: var(--hue); color: var(--hue-fg); }
 .pt-seg__btn[aria-checked="true"] { background: var(--hue-bg); border-color: var(--hue); color: var(--hue-fg); font-weight: 600; }
 .pt-seg__btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.pt-seg__btn:disabled { cursor: default; opacity: 0.55; }
+.pt-seg__btn:disabled:hover { border-color: var(--border-default); color: var(--text-secondary); }
+.pt-seg__btn[aria-checked="true"]:disabled { opacity: 1; }
 .pt-task__h { margin: 0 0 10px; font-family: var(--font-text); font-size: 11px; font-weight: 600; letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--text-secondary); }
 .pt-task__subhead { display: flex; align-items: baseline; justify-content: space-between; }
 .pt-task__desc { min-height: 84px; padding: 10px 12px; border-color: var(--border-subtle); font-size: 14px; line-height: 1.55; }

@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Diamond, Link2, Plus, Trash2, X } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Check, Diamond, FolderSearch, Link2, Plus, Trash2, X } from "lucide-react";
 import { PRIORITIES, SERVICE_LINES, type OpsCard, type OpsColumn, type OpsSubtask } from "../../shared/types";
 import { useActions } from "../actions/ActionHost";
 import { usePortalData } from "../lib/DataProvider";
@@ -19,12 +20,14 @@ function DateField({
   label,
   tone = "none",
   compact = false,
+  disabled = false,
 }: {
   value: string | null;
   onChange: (v: string | null) => void;
   label: string;
   tone?: "late" | "soon" | "none";
   compact?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <span className={`pt-datefield pt-datefield--${tone}${compact ? " pt-datefield--compact" : ""}${value ? "" : " pt-datefield--empty"}`}>
@@ -32,13 +35,14 @@ function DateField({
         type="date"
         aria-label={label}
         title={label}
+        disabled={disabled}
         value={value ?? ""}
         onChange={(e) => {
           const v = e.target.value;
           if (!v || /^\d{4}-\d{2}-\d{2}$/.test(v)) onChange(v || null);
         }}
       />
-      {value && !compact && (
+      {value && !compact && !disabled && (
         <button type="button" className="pt-datefield__clear" aria-label={`Clear ${label.toLowerCase()}`} onClick={() => onChange(null)}>
           <X size={12} />
         </button>
@@ -237,7 +241,9 @@ export function TaskPane({ id, onClose }: { id: number | null; onClose: () => vo
       width={720}
       eyebrow={card && column ? `${card.ref} · ${column.label}` : ""}
       title={
-        card ? (
+        card?.case ? (
+          <span className="pt-task__title pt-task__title--fixed">{card.title}</span>
+        ) : card ? (
           <EditableText
             wrap
             className="pt-task__title"
@@ -254,9 +260,11 @@ export function TaskPane({ id, onClose }: { id: number | null; onClose: () => vo
       footer={
         card && (
           <>
-            <button type="button" className="sds-btn sds-btn--md sds-btn--ghost pt-danger-link" onClick={() => void actions.deleteWork(card)}>
-              Delete task
-            </button>
+            {!card.case && (
+              <button type="button" className="sds-btn sds-btn--md sds-btn--ghost pt-danger-link" onClick={() => void actions.deleteWork(card)}>
+                Delete task
+              </button>
+            )}
             <span style={{ flex: 1 }} />
             <span className="pt-meta pt-hide-sm">Saved automatically</span>
             <button type="button" className="sds-btn sds-btn--md sds-btn--secondary" onClick={onClose}>
@@ -280,18 +288,34 @@ export function TaskPane({ id, onClose }: { id: number | null; onClose: () => vo
             </span>
           </div>
 
+          {card.case && (
+            <div className="pt-task__case">
+              <FolderSearch size={16} aria-hidden />
+              <p>
+                Follows investigation <b>{card.case.ref}</b>. Its title, client, dates and lead are set in the case, and it moves section when the case's status changes.
+              </p>
+              <Link className="pt-task__caselink" to={`/investigations?case=${card.case.id}`} onClick={onClose}>
+                Open case
+              </Link>
+            </div>
+          )}
+
           <dl className="pt-task__fields">
             <dt>Assignee</dt>
             <dd className="pt-task__who">
               <Avatar initials={card.who} size={26} />
-              <EditableText
-                className="pt-task__initials"
-                value={card.who}
-                maxLength={3}
-                placeholder="Initials"
-                ariaLabel="Assignee initials"
-                onSave={(v) => void actions.patchWork(card, { owner: v.toUpperCase() })}
-              />
+              {card.case ? (
+                <span className="pt-task__initials">{card.who || "—"}</span>
+              ) : (
+                <EditableText
+                  className="pt-task__initials"
+                  value={card.who}
+                  maxLength={3}
+                  placeholder="Initials"
+                  ariaLabel="Assignee initials"
+                  onSave={(v) => void actions.patchWork(card, { owner: v.toUpperCase() })}
+                />
+              )}
             </dd>
 
             <dt>Type</dt>
@@ -302,6 +326,7 @@ export function TaskPane({ id, onClose }: { id: number | null; onClose: () => vo
                   type="button"
                   role="radio"
                   aria-checked={card.milestone === (t === "Milestone")}
+                  disabled={!!card.case}
                   className="pt-seg__btn pt-hue-slate"
                   onClick={() => void actions.patchWork(card, { milestone: t === "Milestone", ...(t === "Milestone" ? { startDate: null } : {}) })}
                 >
@@ -315,12 +340,13 @@ export function TaskPane({ id, onClose }: { id: number | null; onClose: () => vo
             <dd className="pt-task__dates">
               {!card.milestone && (
                 <>
-                  <DateField label="Start date" value={card.startDate} onChange={(v) => void actions.patchWork(card, { startDate: v })} />
+                  <DateField label="Start date" disabled={!!card.case} value={card.startDate} onChange={(v) => void actions.patchWork(card, { startDate: v })} />
                   <span className="pt-dim">to</span>
                 </>
               )}
               <DateField
                 label="Due date"
+                disabled={!!card.case}
                 value={card.dueDate}
                 tone={dueTone(card.dueDate, today, done)}
                 onChange={(v) => void actions.patchWork(card, { dueDate: v })}
@@ -380,14 +406,18 @@ export function TaskPane({ id, onClose }: { id: number | null; onClose: () => vo
 
             <dt>Client / site</dt>
             <dd>
-              <EditableText
-                className="pt-task__site"
-                value={card.site}
-                maxLength={120}
-                placeholder="Add a client or site"
-                ariaLabel="Client or site"
-                onSave={(v) => void actions.patchWork(card, { site: v })}
-              />
+              {card.case ? (
+                <span className="pt-task__site">{card.site || "—"}</span>
+              ) : (
+                <EditableText
+                  className="pt-task__site"
+                  value={card.site}
+                  maxLength={120}
+                  placeholder="Add a client or site"
+                  ariaLabel="Client or site"
+                  onSave={(v) => void actions.patchWork(card, { site: v })}
+                />
+              )}
             </dd>
           </dl>
 

@@ -30,6 +30,7 @@ import type {
   StatusKind,
 } from "../shared/types";
 import { DEAL_STAGES, ENGAGEMENT_KINDS, INTEL_FADE_DAYS, INTEL_KEEP_DAYS, PRIORITIES, STAGES } from "../shared/types";
+import { caseRef } from "../shared/investigations";
 import { checkRef, deriveCheck, type BackgroundCheck, type CheckResult, type CheckSubject } from "../shared/checks";
 import { addDays, dayMonth, daysBetween, shortDate, todaySydney } from "./dates";
 import { getCrime } from "./crime";
@@ -260,7 +261,7 @@ export async function getOpsBoard(db: D1Database, today: string): Promise<OpsCol
     db
       .prepare(
         `SELECT id, column_id, ref, title, site, line, due_label, due_date, start_date, created_at, completed_at,
-                is_late, owner_initials, description, priority, is_milestone
+                is_late, owner_initials, description, priority, is_milestone, case_id
          FROM ops_cards ORDER BY column_id, sort_order, id`
       )
       .all<{
@@ -280,6 +281,7 @@ export async function getOpsBoard(db: D1Database, today: string): Promise<OpsCol
         description: string;
         priority: string;
         is_milestone: number;
+        case_id: number | null;
       }>(),
     db
       .prepare(
@@ -342,6 +344,7 @@ export async function getOpsBoard(db: D1Database, today: string): Promise<OpsCol
       late,
       who: c.owner_initials,
       milestone: c.is_milestone === 1,
+      case: c.case_id ? { id: c.case_id, ref: caseRef(c.case_id) } : null,
       blockedBy: blockedBy.get(c.id) ?? [],
       subtasks: subsByCard.get(c.id) ?? [],
     });

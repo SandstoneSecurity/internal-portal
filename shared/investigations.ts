@@ -177,6 +177,8 @@ export interface CaseDetail extends CaseSummary {
   requestedBy: string;
   access: string[];
   createdBy: string;
+  /** Its task on the operations board, once the case has a date. */
+  boardTask: { id: number; ref: string } | null;
   evidenceItems: Evidence[];
   entities: Entity[];
   links: Link[];

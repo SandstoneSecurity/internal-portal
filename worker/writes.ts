@@ -17,6 +17,7 @@ import {
   STAGES,
   kindFor,
 } from "../shared/types";
+import { caseRef } from "../shared/investigations";
 import type { AuthVariables } from "./auth";
 import { dayMonth, nowIso, shortDate, todaySydney } from "./dates";
 import { deleteThreatModel } from "./threatCleanup";
@@ -375,11 +376,27 @@ async function createCard(c: Ctx, v: z.infer<typeof schemas.work>): Promise<{ id
   return { id: (ins.results[0] as { id: number }).id, ref };
 }
 
+/** A task that follows a case takes its title, client, dates and assignee from the case; they're changed there. */
+const MIRRORED = { title: "title", site: "site", startDate: "start_date", dueDate: "due_date", owner: "owner_initials", milestone: "is_milestone" } as const;
+function refuseMirrored(card: Record<string, unknown>, v: Partial<z.infer<typeof schemas.work>>) {
+  const changed = (Object.keys(MIRRORED) as (keyof typeof MIRRORED)[]).filter((k) => {
+    if (v[k] === undefined) return false;
+    const now = card[MIRRORED[k]];
+    return k === "milestone" ? v[k] !== (now === 1) : (v[k] ?? null) !== (now ?? null);
+  });
+  if (changed.length)
+    throw new BadRequest(
+      `This task follows investigation ${caseRef(card.case_id as number)}. Change its title, client, dates and lead in the case.`,
+      Object.fromEntries(changed.map((k) => [k, "Set in the case"]))
+    );
+}
+
 writes.patch("/work/:id", async (c) => {
   const cardId = param(c);
   const v = await body(c, schemas.work, true);
   const db = c.env.DB;
   const card = await mustExist(c, "ops_cards", cardId);
+  if (card.case_id) refuseMirrored(card, v);
   checkDates(
     v.startDate !== undefined ? v.startDate : (card.start_date as string | null),
     v.dueDate !== undefined ? v.dueDate : (card.due_date as string | null)
@@ -412,7 +429,8 @@ writes.patch("/work/:id", async (c) => {
 
 writes.delete("/work/:id", async (c) => {
   const cardId = param(c);
-  await mustExist(c, "ops_cards", cardId);
+  const card = await mustExist(c, "ops_cards", cardId);
+  if (card.case_id) throw new BadRequest(`This task follows investigation ${caseRef(card.case_id as number)}. It goes when the case is deleted.`);
   await c.env.DB.batch([
     c.env.DB.prepare(`DELETE FROM ops_subtasks WHERE card_id = ?`).bind(cardId),
     c.env.DB.prepare(`DELETE FROM ops_dependencies WHERE card_id = ? OR depends_on_id = ?`).bind(cardId, cardId),
